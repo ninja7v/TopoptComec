@@ -85,9 +85,9 @@ def test_lk_properties_2d(base_config_2d):
 
     # 2. Equilibrium: Sum of rows/cols should be zero (rigid body motion results in 0 force)
     # Summing columns implies applying unit displacement to all DOFs -> Force should be 0
-    assert np.allclose(
-        np.sum(KE, axis=1), 0, atol=1e-10
-    ), "The stiffness matrix should satisfy equilibrium (sum of rows = 0)"
+    assert np.allclose(np.sum(KE, axis=1), 0, atol=1e-10), (
+        "The stiffness matrix should satisfy equilibrium (sum of rows = 0)"
+    )
 
 
 def test_boundary_conditions_parsing(base_config_2d):
@@ -160,9 +160,9 @@ def test_solver_mechanics(base_config_2d):
     assert uo.shape == (fem.ndof, 0)
 
     # The node at force application (x=2, y=0) is Node index 4 -> DOF 8 (X)
-    assert (
-        ui[8, 0] > 0.0
-    ), "The node under force should have positive displacement in X direction"
+    assert ui[8, 0] > 0.0, (
+        "The node under force should have positive displacement in X direction"
+    )
 
 
 def test_sensitivities_calculation(base_config_2d):
@@ -193,13 +193,13 @@ def test_sensitivities_calculation(base_config_2d):
     ui, uo = fem.solve(xPhys)
 
     (dc, dv) = fem.compute_sensitivities(xPhys, ui, uo)
-    assert np.all(
-        dc <= 0
-    ), "Sensitivities should be negative for compliance minimization"
+    assert np.all(dc <= 0), (
+        "Sensitivities should be negative for compliance minimization"
+    )
     assert dc.shape == (fem.nel,), "Sensitivity array should match number of elements"
-    assert dv.shape == (
-        fem.nel,
-    ), "Volume sensitivities should match number of elements"
+    assert dv.shape == (fem.nel,), (
+        "Volume sensitivities should match number of elements"
+    )
 
     obj = fem.compute_objective(xPhys, ui, uo)
     assert obj > 0, "Compliance objective should be positive"
@@ -309,6 +309,6 @@ def test_boundary_conditions_radius(base_config_2d):
         fixed_nodes.add(dof // fem.dim_mul)
 
     expected_nodes = {0, 2, 3, 4}
-    assert (
-        fixed_nodes == expected_nodes
-    ), f"Expected fixed nodes {expected_nodes}, got {fixed_nodes}"
+    assert fixed_nodes == expected_nodes, (
+        f"Expected fixed nodes {expected_nodes}, got {fixed_nodes}"
+    )

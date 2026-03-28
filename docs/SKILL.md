@@ -33,7 +33,7 @@ TopoptComec is a Python topology optimization app with a GUI (`py main.py`) and 
 Useful tests:
 
 ```bash
-black --check .
+ruff format --check .
 ruff check .
 lizard -L 150 -C 30 -w .
 pytest
