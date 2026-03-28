@@ -59,35 +59,37 @@ def test_displacement_with_presets(preset_name, preset_params):
     # Test linear displacement function
     if is_3d:
         X, Y, Z = displacements.single_linear_displacement(u_vec, nelx, nely, nelz, 1.0)
-        assert not (
-            X is None or Y is None or Z is None
-        ), "Displacement function returned None arrays"
+        assert not (X is None or Y is None or Z is None), (
+            "Displacement function returned None arrays"
+        )
     else:
         X, Y = displacements.single_linear_displacement(u_vec, nelx, nely, nelz, 1.0)
-        assert not (
-            X is None or Y is None
-        ), "Displacement function returned None arrays"
+        assert not (X is None or Y is None), (
+            "Displacement function returned None arrays"
+        )
 
     # Test iterative displacement function
     disp_params["Displacement"]["disp_iterations"] = 2
     for frame in displacements.run_iterative_displacement(disp_params, result):
         last_result_displaced = frame
-    assert (
-        last_result_displaced is not None
-    ), "Iterative displacement function returned None"
-    assert (
-        last_result_displaced.shape == np.array(result).shape
-    ), "Iterative displacement function returned different shapes"
+    assert last_result_displaced is not None, (
+        "Iterative displacement function returned None"
+    )
+    assert last_result_displaced.shape == np.array(result).shape, (
+        "Iterative displacement function returned different shapes"
+    )
     assert (
         np.max(last_result_displaced) <= 1.0 and np.min(last_result_displaced) >= 0.0
     ), "Displaced densities should remain within [0, 1]"
     assert np.isclose(
         last_result_displaced.mean(), preset_params["Dimensions"]["volfrac"], atol=0.15
-    ), f"Final volume ({last_result_displaced.mean():.3f}) is far to target ({preset_params['Dimensions']['volfrac']:.3f})"
+    ), (
+        f"Final volume ({last_result_displaced.mean():.3f}) is far to target ({preset_params['Dimensions']['volfrac']:.3f})"
+    )
 
     disp_params["Displacement"]["disp_factor"] = 0.0
     for frame in displacements.run_iterative_displacement(disp_params, result):
         last_result_displaced = frame
-    assert np.array_equal(
-        last_result_displaced, result
-    ), "Iterative displacement with factor 0 should return the same result"
+    assert np.array_equal(last_result_displaced, result), (
+        "Iterative displacement with factor 0 should return the same result"
+    )

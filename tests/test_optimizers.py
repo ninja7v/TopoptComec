@@ -32,9 +32,9 @@ def test_oc_update_rule():
     assert np.all(xnew <= 1.0), "All values should be <= 1.0"
 
     # Check different
-    assert not np.allclose(
-        xnew, x
-    ), "Updated values should differ from original if sensitivities are nonzero"
+    assert not np.allclose(xnew, x), (
+        "Updated values should differ from original if sensitivities are nonzero"
+    )
 
     # gt should be close to zero (KKT condition)
     assert abs(gt) < 1e-3, "KKT condition should be satisfied (gt close to zero)"
@@ -98,15 +98,15 @@ def test_optimizers_with_presets(preset_name, preset_params):
             volfrac = params["Dimensions"]["volfrac"]
             target_vf = volfrac * params["Materials"]["percent"][i] / 100.0
             actual_vf = result[i].mean()
-            assert np.isclose(
-                actual_vf, target_vf, atol=0.15
-            ), f"Material {i} volume ({actual_vf:.3f}) far from target ({target_vf:.3f})"
+            assert np.isclose(actual_vf, target_vf, atol=0.15), (
+                f"Material {i} volume ({actual_vf:.3f}) far from target ({target_vf:.3f})"
+            )
     else:
         assert result.shape == (nel,), f"Result shape is wrong, expected ({nel},)"
         volfrac = preset_params["Dimensions"]["volfrac"]
-        assert np.isclose(
-            result.mean(), volfrac, atol=0.05
-        ), f"Final volume ({result.mean():.3f}) is far to target ({volfrac:.3f})"
+        assert np.isclose(result.mean(), volfrac, atol=0.05), (
+            f"Final volume ({result.mean():.3f}) is far to target ({volfrac:.3f})"
+        )
 
     ndof = (
         (3 if is_3d else 2)
@@ -114,9 +114,9 @@ def test_optimizers_with_presets(preset_name, preset_params):
         * (pd["nelxyz"][1] + 1)
         * ((pd["nelxyz"][2] + 1) if is_3d else 1)
     )
-    assert u_vec.size == ndof * sum(
-        1 for x in pf["fidir"] if x != "-"
-    ), "Displacement vector should be (ndof x nb_active_iforces)"
+    assert u_vec.size == ndof * sum(1 for x in pf["fidir"] if x != "-"), (
+        "Displacement vector should be (ndof x nb_active_iforces)"
+    )
 
     if not is_multi:
         # Check displacement direction at the input forces
@@ -173,17 +173,17 @@ def test_initialize_materials():
 
     # Partition of unity: column sums close to volfrac
     col_sums = rho.sum(axis=0)
-    assert np.allclose(
-        col_sums, volfrac, atol=0.05
-    ), f"Column sums should be ~{volfrac}, min={col_sums.min():.3f} max={col_sums.max():.3f}"
+    assert np.allclose(col_sums, volfrac, atol=0.05), (
+        f"Column sums should be ~{volfrac}, min={col_sums.min():.3f} max={col_sums.max():.3f}"
+    )
 
     # Volume fractions roughly correct
     volfracs = [volfrac * p / 100.0 for p in percents]
     for i, vf in enumerate(volfracs):
         actual = rho[i].mean()
-        assert np.isclose(
-            actual, vf, atol=0.1
-        ), f"Material {i} vol frac ({actual:.3f}) far from target ({vf:.3f})"
+        assert np.isclose(actual, vf, atol=0.1), (
+            f"Material {i} vol frac ({actual:.3f}) far from target ({vf:.3f})"
+        )
 
 
 def test_multimaterial_bridge_2d():

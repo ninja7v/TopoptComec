@@ -313,9 +313,7 @@ class RegionsWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.inputs = (
-            []
-        )  # This list will hold the input widgets so the MainWindow can access them
+        self.inputs = []  # This list will hold the input widgets so the MainWindow can access them
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setSpacing(10)
@@ -667,9 +665,7 @@ class SupportWidget(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.inputs = (
-            []
-        )  # This list will hold the input widgets so the MainWindow can access them
+        self.inputs = []  # This list will hold the input widgets so the MainWindow can access them
 
         self.main_layout = QVBoxLayout(self)
 

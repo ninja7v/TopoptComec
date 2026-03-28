@@ -106,12 +106,12 @@ def test_forces_widget_initialization(qt_app):
     widget = ForcesWidget()
 
     # Should start with 1 input force and 1 output force by default
-    assert (
-        len(widget.input_forces) == 1
-    ), "ForcesWidget should start with exactly 1 input force."
-    assert (
-        len(widget.output_forces) == 1
-    ), "ForcesWidget should start with exactly 1 output force."
+    assert len(widget.input_forces) == 1, (
+        "ForcesWidget should start with exactly 1 input force."
+    )
+    assert len(widget.output_forces) == 1, (
+        "ForcesWidget should start with exactly 1 output force."
+    )
 
     # Check instances
     first_iforce = widget.input_forces[0]
@@ -133,45 +133,45 @@ def test_forces_widget_initialization(qt_app):
     # Test add input force button
     widget.add_if_btn.click()
     qt_app.processEvents()
-    assert (
-        len(widget.input_forces) == 2
-    ), "Clicking on add input force should add an input force."
+    assert len(widget.input_forces) == 2, (
+        "Clicking on add input force should add an input force."
+    )
 
     # Test add output force button
     widget.add_of_btn.click()
     qt_app.processEvents()
-    assert (
-        len(widget.output_forces) == 2
-    ), "Clicking on add output force should add an output force."
+    assert len(widget.output_forces) == 2, (
+        "Clicking on add output force should add an output force."
+    )
 
     # Test remove input force button
     new_iforce = widget.input_forces[-1]
     new_iforce["remove_btn"].click()
     qt_app.processEvents()
-    assert (
-        len(widget.input_forces) == 1
-    ), "Clicking on remove input force should delete an input force."
+    assert len(widget.input_forces) == 1, (
+        "Clicking on remove input force should delete an input force."
+    )
 
     # Test remove output force button
     new_oforce = widget.output_forces[-1]
     new_oforce["remove_btn"].click()
     qt_app.processEvents()
-    assert (
-        len(widget.output_forces) == 1
-    ), "Clicking on remove output force should delete an output force."
+    assert len(widget.output_forces) == 1, (
+        "Clicking on remove output force should delete an output force."
+    )
 
     # Test min limits (1 for input, 0 for output)
     # Remove all input forces
     while len(widget.input_forces) > 1:
         widget.input_forces[-1]["remove_btn"].click()
         qt_app.processEvents()
-    assert (
-        len(widget.input_forces) == 1
-    ), "Should not allow removing the last input force."
+    assert len(widget.input_forces) == 1, (
+        "Should not allow removing the last input force."
+    )
     # Check that remove button is disabled
-    assert not widget.input_forces[0][
-        "remove_btn"
-    ].isEnabled(), "Remove button for last input force should be disabled."
+    assert not widget.input_forces[0]["remove_btn"].isEnabled(), (
+        "Remove button for last input force should be disabled."
+    )
 
     # Remove all output forces
     while len(widget.output_forces) > 0:
@@ -184,9 +184,9 @@ def test_forces_widget_initialization(qt_app):
         widget.add_input_force()
         widget.add_output_force()
     assert len(widget.input_forces) == 10, "Should not allow more than 10 input forces."
-    assert (
-        len(widget.output_forces) == 10
-    ), "Should not allow more than 10 output forces."
+    assert len(widget.output_forces) == 10, (
+        "Should not allow more than 10 output forces."
+    )
 
 
 def test_support_widget_initialization(qt_app):
@@ -216,9 +216,9 @@ def test_support_widget_initialization(qt_app):
     # Test remove button
     new_support["remove_btn"].click()
     qt_app.processEvents()
-    assert (
-        len(widget.inputs) == 0
-    ), "Clicking on remove support should delete a support."
+    assert len(widget.inputs) == 0, (
+        "Clicking on remove support should delete a support."
+    )
 
 
 def test_material_widget_initialization(qt_app):
@@ -226,14 +226,14 @@ def test_material_widget_initialization(qt_app):
     widget = MaterialsWidget()
 
     # Check instances
-    assert isinstance(
-        widget.mat_init_type, QComboBox
-    ), "MaterialsWidget should have a mat_init_type QComboBox."
+    assert isinstance(widget.mat_init_type, QComboBox), (
+        "MaterialsWidget should have a mat_init_type QComboBox."
+    )
 
     # Should contain exactly 1 material by default
-    assert (
-        len(widget.inputs) == 1
-    ), "MaterialsWidget should start with exactly 1 material input set."
+    assert len(widget.inputs) == 1, (
+        "MaterialsWidget should start with exactly 1 material input set."
+    )
 
     # Check instances
     existing_material = widget.inputs[0]
@@ -275,9 +275,9 @@ def test_material_widget_initialization(qt_app):
     # Test remove button
     new_support["remove_btn"].click()
     qt_app.processEvents()
-    assert (
-        len(widget.inputs) == 1
-    ), "Clicking on remove material should delete a material."
+    assert len(widget.inputs) == 1, (
+        "Clicking on remove material should delete a material."
+    )
 
 
 def test_optimizer_widget_initialization(qt_app):

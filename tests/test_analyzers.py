@@ -83,13 +83,13 @@ def test_checkerboard():
     x[3, 3] = 1
     assert analyzers._checkerboard(x) is True, "Checkerboard should have been detected"
     x = np.ones((5, 5))
-    assert (
-        analyzers._checkerboard(x) is False
-    ), "Checkerboard shouldn't have been detected"
+    assert analyzers._checkerboard(x) is False, (
+        "Checkerboard shouldn't have been detected"
+    )
     x = np.ones((4, 4, 4))
-    assert (
-        analyzers._checkerboard(x) is False
-    ), "Checkerboard shouldn't have been detected"
+    assert analyzers._checkerboard(x) is False, (
+        "Checkerboard shouldn't have been detected"
+    )
 
 
 def test_watertight():

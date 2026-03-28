@@ -45,7 +45,6 @@ def test_exporters():
         (result_2d_multi, (nelx_2d, nely_2d, nelz_2d), True),
         (result_3d_multi, (nelx_3d, nely_3d, nelz_3d), True),
     ]:
-
         args = (res, dims, png_path) if not is_multi else (res, dims, png_path, colors)
         success, error_msg = exporters.save_as_png(*args)
         assert success, f"PNG export failed: {error_msg}"

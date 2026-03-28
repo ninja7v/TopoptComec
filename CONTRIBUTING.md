@@ -19,7 +19,7 @@ Create an [issues](https://github.com/ninja7v/topoptcomec/issues).
 
 1. Create a branch for a single, focused change.
 2. Implement and add tests where appropriate.
-3. Run formatting `black .` and checks `black --check . && ruff check . && lizard -L 150 -C 30 -w . && pytest`.
+3. Run formatting `ruff format .` and checks `ruff format --check . && ruff check . && lizard -L 150 -C 30 -w . && pytest`.
 4. Open a pull request describing what you changed and why.
 
 Vibe coders are welcome, just make sure to read and understand every line!

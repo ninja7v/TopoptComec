@@ -449,7 +449,7 @@ class ParameterManagerMixin:
                 pr["ry"][i],
                 pr["rz"][i],
             ),
-            lambda a, b: f"Regions {a+1} and {b+1} are identical.",
+            lambda a, b: f"Regions {a + 1} and {b + 1} are identical.",
         )
 
     def _check_supports(self, params):
@@ -462,7 +462,7 @@ class ParameterManagerMixin:
         return self._check_duplicates(
             idx,
             lambda i: (ps["sx"][i], ps["sy"][i], ps["sz"][i], ps["sdim"][i]),
-            lambda a, b: f"Supports {a+1} and {b+1} are identical.",
+            lambda a, b: f"Supports {a + 1} and {b + 1} are identical.",
         )
 
     def _check_force_duplicates(self, params):
@@ -471,7 +471,7 @@ class ParameterManagerMixin:
         err = self._check_duplicates(
             [i for i, d in enumerate(pf["fidir"]) if d != "-"],
             lambda i: (pf["fix"][i], pf["fiy"][i], pf["fiz"][i], pf["fidir"][i]),
-            lambda a, b: f"Input forces {a+1} and {b+1} are identical.",
+            lambda a, b: f"Input forces {a + 1} and {b + 1} are identical.",
         )
         if err:
             return err
@@ -479,7 +479,7 @@ class ParameterManagerMixin:
         return self._check_duplicates(
             [i for i, d in enumerate(pf["fodir"]) if d != "-"],
             lambda i: (pf["fox"][i], pf["foy"][i], pf["foz"][i], pf["fodir"][i]),
-            lambda a, b: f"Output forces {a+1} and {b+1} are identical.",
+            lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
         )
 
     def _check_materials(self, params):
@@ -488,7 +488,7 @@ class ParameterManagerMixin:
         err = self._check_duplicates(
             range(len(pm["E"])),
             lambda i: (pm["E"][i], pm["nu"][i], pm.get("percent", [100])[i]),
-            lambda a, b: f"Materials {a+1} and {b+1} are identical.",
+            lambda a, b: f"Materials {a + 1} and {b + 1} are identical.",
         )
         if err:
             return err
