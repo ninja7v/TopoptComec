@@ -6,8 +6,12 @@ import mcubes
 import matplotlib.pyplot as plt
 import numpy as np
 import vtk
-import lib3mf
 import ctypes
+import warnings
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=DeprecationWarning, module="lib3mf")
+    import lib3mf
 from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from stl import mesh
 from vtk.util.numpy_support import get_vtk_array_type, numpy_to_vtk
