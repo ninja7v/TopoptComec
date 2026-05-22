@@ -6,26 +6,26 @@
     "configurations": [
         {
             "name": "Debug TrafficFlow",
-            "type": "cppvsdbg",
+            "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/TrafficFlow.exe",
+            "program": "${workspaceFolder}/build/TrafficFlow",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "externalTerminal",
+            "externalConsole": false,
             "preLaunchTask": "CMake Build"
         },
         {
             "name": "Debug Unit Tests",
-            "type": "cppvsdbg",
+            "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/unit_tests.exe",
+            "program": "${workspaceFolder}/build/unit_tests",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "externalTerminal",
+            "externalConsole": false,
             "preLaunchTask": "CMake Build"
         }
     ]

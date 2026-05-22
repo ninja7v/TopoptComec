@@ -11,9 +11,8 @@
                 "-B",
                 "build",
                 "-G",
-                "Visual Studio 18 2026",
-                "-A",
-                "x64"
+                "Unix Makefiles",
+                "-DCMAKE_BUILD_TYPE=Debug"
             ],
             "group": "build",
             "problemMatcher": []
@@ -24,15 +23,13 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "build",
-                "--config",
-                "Debug"
+                "build"
             ],
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": "$msCompile",
+            "problemMatcher": "$gcc",
             "dependsOn": "CMake Configure"
         }
     ]
