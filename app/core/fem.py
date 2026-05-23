@@ -204,26 +204,15 @@ class FEM:
         ce_total = np.zeros(self.nel)
 
         if nb_out == 0:  # Rigid Mechanism (Minimize Compliance)
-            for i_in in self.fi_indices:
+            for i_in in range(len(self.fi_indices)):
                 Ue = ui[self.edofMat, i_in]
-                if self.is_3d:
-                    ce_total += np.sum(np.dot(Ue, self.KE) * Ue, axis=1)
-                else:
-                    ce_total += np.einsum("ij,jk,ik->i", Ue, self.KE, Ue)
+                ce_total += np.sum((Ue @ self.KE) * Ue, axis=1)
         else:  # Compliant Mechanism
-            if self.is_3d:
-                for el in range(self.nel):
-                    for i_in in self.fi_indices:
-                        Ue_in = ui[self.edofMat[el, :], [i_in]]
-                        for i_out in self.fo_indices:
-                            Ue_out = uo[self.edofMat[el, :], [i_out]]
-                            ce_total[el] += (Ue_in.T @ self.KE @ Ue_out).item()
-            else:
-                for i_in in self.fi_indices:
-                    Ue_in = ui[self.edofMat, i_in]
-                    for i_out in self.fo_indices:
-                        Ue_out = uo[self.edofMat, i_out]
-                        ce_total += np.einsum("ij,jk,ik->i", Ue_in, self.KE, Ue_out)
+            for i_in in range(len(self.fi_indices)):
+                Ue_in = ui[self.edofMat, i_in]
+                for i_out in range(len(self.fo_indices)):
+                    Ue_out = uo[self.edofMat, i_out]
+                    ce_total += np.sum((Ue_in @ self.KE) * Ue_out, axis=1)
 
         return ce_total
 
@@ -285,7 +274,8 @@ class FEM:
         kdir: str,
         knorm: str,
     ):
-        fx, fy = Forces.get(kx, []), Forces.get(ky, [])
+        fx = Forces.get(kx, [])
+        fy = Forces.get(ky, [])
         fz = Forces.get(kz, []) if self.is_3d else []
         fdir = Forces.get(kdir, [])
 

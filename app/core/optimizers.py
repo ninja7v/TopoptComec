@@ -227,7 +227,8 @@ def optimize_multimaterial(
     g = np.zeros(n_mat)
 
     # Optimization Params
-    eta, max_change = Optimizer.get("eta", 1.0), Optimizer.get("max_change", 0.1)
+    eta = Optimizer.get("eta", 1.0)
+    max_change = Optimizer.get("max_change", 0.1)
     n_it = Optimizer.get("n_it", 30)
 
     if verbose:
@@ -246,7 +247,7 @@ def optimize_multimaterial(
         ui, uo = fem.solve(xPhys)
 
         # Optional: Compute Objective Value for Console Output (can also be computed inside compute_sensitivities for efficiency)
-        obj_val = fem.compute_objective(xPhys[i], ui, uo)
+        obj_val = fem.compute_objective(xPhys, ui, uo)
 
         # Per-material sensitivity & OC update
         for i in range(n_mat):

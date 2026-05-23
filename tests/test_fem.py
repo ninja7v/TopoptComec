@@ -106,7 +106,7 @@ def test_boundary_conditions_parsing(base_config_2d):
         "fix": [2],
         "fiy": [1],
         "fiz": [],
-        "fidir": ["Y"],
+        "fidir": ["Y:\u2191"],
         "finorm": [1.0],
         # Output forces (required by parse logic even if empty)
         "fox": [],
@@ -135,16 +135,16 @@ def test_solver_mechanics(base_config_2d):
     Supports = {"sx": [0, 0], "sy": [0, 1], "sz": [], "sdim": ["XY", "XY"]}
     # Pull right edge (x=2, y=0) to the right (X)
     Forces = {
-        "fix": [2],
-        "fiy": [0],
+        "fix": [0, 2],
+        "fiy": [0, 0],
         "fiz": [],
-        "fidir": ["X"],
-        "finorm": [1.0],
-        "fox": [],
-        "foy": [],
+        "fidir": ["-", "X:\u2192"],
+        "finorm": [1.0, 1.0],
+        "fox": [0, 1],
+        "foy": [0, 1],
         "foz": [],
-        "fodir": [],
-        "fonorm": [],
+        "fodir": ["-", "Y:\u2191"],
+        "fonorm": [1.0, 1.0],
     }
 
     fem.setup_boundary_conditions(Forces, Supports)
@@ -157,7 +157,7 @@ def test_solver_mechanics(base_config_2d):
 
     # Check dimensions
     assert ui.shape == (fem.ndof, 1)
-    assert uo.shape == (fem.ndof, 0)
+    assert uo.shape == (fem.ndof, 1)
 
     # The node at force application (x=2, y=0) is Node index 4 -> DOF 8 (X)
     assert ui[8, 0] > 0.0, (
@@ -176,11 +176,11 @@ def test_sensitivities_calculation(base_config_2d):
     # Minimal BCs to ensure stability
     Supports = {"sx": [0], "sy": [0], "sz": [], "sdim": ["XY"]}
     Forces = {
-        "fix": [2],
-        "fiy": [0],
+        "fix": [2, 0],
+        "fiy": [0, 0],
         "fiz": [],
-        "fidir": ["X"],
-        "finorm": [1.0],
+        "fidir": ["X:\u2192", "-"],
+        "finorm": [1.0, 1.0],
         "fox": [],
         "foy": [],
         "foz": [],
@@ -215,12 +215,12 @@ def test_regions_void(base_config_2d):
 
     # Define a void region at x=0, y=0
     Regions = {
-        "rx": [0],
-        "ry": [0],
+        "rx": [0, 0],
+        "ry": [0, 0],
         "rz": [],
-        "rradius": [1],  # Small radius covering the element center
-        "rshape": ["□"],  # Square
-        "rstate": ["Void"],
+        "rradius": [1, 1],  # Small radius covering the element center
+        "rshape": ["-", "□"],  # Square
+        "rstate": ["Void", "Void"],
     }
 
     x = np.ones(fem.nel)  # Start fully solid
