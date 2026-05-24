@@ -319,9 +319,11 @@ class FEM:
         )
 
         if use_direct:
-            for i in range(len(active_indices)):
-                if np.any(F[self.free_dofs, i]):
-                    U_full[self.free_dofs, i] = spsolve(K_free, F[self.free_dofs, i])
+            sol = spsolve(K_free, F[self.free_dofs, :])
+            if sol.ndim == 1:
+                U_full[self.free_dofs, 0] = sol
+            else:
+                U_full[self.free_dofs, :] = sol
         else:
             # Iterative Solver (CG with Jacobi Preconditioner)
             D_inv = 1.0 / K_free.diagonal()
