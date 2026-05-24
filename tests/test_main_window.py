@@ -306,7 +306,7 @@ p_different = {
         (p_base_2d, p_different, False),  # Should be different
     ],
 )
-def test_are_parameters_equivalent(qt_app, p1, p2, expected):
+def test_are_parameters_equivalent(qt_app, p1: dict, p2: dict, expected: bool):
     """Unit Test: Tests the intelligent parameter comparison function."""
     # We need a MainWindow instance to get access to the method
     window = MainWindow()

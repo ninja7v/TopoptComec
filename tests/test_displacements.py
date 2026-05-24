@@ -24,7 +24,7 @@ def _load_presets():
 
 
 @pytest.mark.parametrize("preset_name, preset_params", _load_presets())
-def test_displacement_with_presets(preset_name, preset_params):
+def test_displacement_with_presets(preset_name: str, preset_params: dict):
     """Unit Test: Runs the 2D/3D optimizer with a given preset."""
     # Prepare the parameters for the optimizer function
     disp_params = preset_params.copy()

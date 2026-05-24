@@ -2,7 +2,14 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Tests for the widgets.
 
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QPushButton, QSpinBox, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDoubleSpinBox,
+    QPushButton,
+    QSpinBox,
+    QWidget,
+    QApplication,
+)
 
 from app.ui.widgets import (
     CollapsibleSection,
@@ -23,7 +30,7 @@ from app.ui.widgets import (
 # --- Tests for CollapsibleSection ---
 
 
-def test_collapsible_section_toggle_logic(qt_app):
+def test_collapsible_section_toggle_logic(qt_app: QApplication):
     """Unit Test: Verifies the core expand/collapse logic of the CollapsibleSection."""
     content = QWidget()
     section = CollapsibleSection("Test", content)
@@ -47,7 +54,7 @@ def test_collapsible_section_toggle_logic(qt_app):
 # --- Tests for Static Data Widgets ---
 
 
-def test_dimensions_widget_initialization(qt_app):
+def test_dimensions_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies that the DimensionsWidget initializes with correct defaults."""
     widget = DimensionsWidget()
 
@@ -65,7 +72,7 @@ def test_dimensions_widget_initialization(qt_app):
     assert widget.scale.value() == 1.0
 
 
-def test_regions_widget_initialization(qt_app):
+def test_regions_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies the RegionsWidget initializes correctly."""
     widget = RegionsWidget()
 
@@ -101,7 +108,7 @@ def test_regions_widget_initialization(qt_app):
     assert len(widget.inputs) == 10
 
 
-def test_forces_widget_initialization(qt_app):
+def test_forces_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies the ForcesWidget initializes correctly and can add/remove forces."""
     widget = ForcesWidget()
 
@@ -189,7 +196,7 @@ def test_forces_widget_initialization(qt_app):
     )
 
 
-def test_support_widget_initialization(qt_app):
+def test_support_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies that the static SupportWidget works well."""
     widget = SupportWidget()
 
@@ -221,7 +228,7 @@ def test_support_widget_initialization(qt_app):
     )
 
 
-def test_material_widget_initialization(qt_app):
+def test_material_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies the MaterialsWidget initializes correctly."""
     widget = MaterialsWidget()
 
@@ -280,7 +287,7 @@ def test_material_widget_initialization(qt_app):
     )
 
 
-def test_optimizer_widget_initialization(qt_app):
+def test_optimizer_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies the OptimizerWidget initializes correctly."""
     widget = OptimizerWidget()
 
@@ -302,7 +309,7 @@ def test_optimizer_widget_initialization(qt_app):
     assert widget.opt_solver.currentText() == "Auto"
 
 
-def test_analyze_widget_initialization(qt_app):
+def test_analyze_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies the AnalyzeWidget initializes correctly."""
     widget = AnalysisWidget()
     assert hasattr(widget, "run_analysis_button") and isinstance(
@@ -310,7 +317,7 @@ def test_analyze_widget_initialization(qt_app):
     )
 
 
-def test_displacement_widget_initialization(qt_app):
+def test_displacement_widget_initialization(qt_app: QApplication):
     """Unit Test: Verifies the DisplacementWidget initializes correctly."""
     widget = DisplacementWidget()
 
@@ -329,7 +336,7 @@ def test_displacement_widget_initialization(qt_app):
 # --- Tests for Container Widgets (Header, Footer, Preset) ---
 
 
-def test_header_widget_structure(qt_app):
+def test_header_widget_structure(qt_app: QApplication):
     """Unit Test: Ensures the HeaderWidget contains the correct child widgets."""
     widget = HeaderWidget()
 
@@ -362,7 +369,7 @@ def test_header_widget_structure(qt_app):
     assert icon_before != widget.theme_button.icon()
 
 
-def test_preset_widget_structure(qt_app):
+def test_preset_widget_structure(qt_app: QApplication):
     """Unit Test: Ensures the PresetWidget contains the correct child widgets."""
     widget = PresetWidget()
 
@@ -374,7 +381,7 @@ def test_preset_widget_structure(qt_app):
     assert hasattr(widget, "delete_preset_button")
 
 
-def test_footer_widget_structure(qt_app):
+def test_footer_widget_structure(qt_app: QApplication):
     """Unit Test: Ensures the FooterWidget contains the correct child widgets."""
     widget = FooterWidget()
 

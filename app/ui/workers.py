@@ -60,7 +60,9 @@ class OptimizerWorker(QThread, Worker):
                 if not is_multimaterial:
                     optimizer_params["Materials"].pop("percent", None)
 
-            def _progress_callback(iteration, objective, change, xPhys_frame):
+            def _progress_callback(
+                iteration: int, objective: float, change: float, xPhys_frame: np.ndarray
+            ) -> bool:
                 self.progress.emit(iteration, objective, change)
                 self.frameReady.emit(xPhys_frame)
                 return self.stop_requested
@@ -112,7 +114,7 @@ class DisplacementWorker(QThread, Worker):
         """Executes the analysis based on provided parameters."""
         try:
 
-            def _progress_callback(iteration):
+            def _progress_callback(iteration: int) -> bool:
                 self.progress.emit(iteration)
                 return self._stop_requested
 
@@ -179,7 +181,7 @@ class AnalysisWorker(QThread, Worker):
             if "Regions" in analysis_params:
                 analysis_params.pop("Regions", None)
 
-            def _progress_callback(iteration):
+            def _progress_callback(iteration: int) -> bool:
                 self.progress.emit(iteration)
                 return self._stop_requested
 

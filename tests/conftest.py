@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QApplication
 
 
 @pytest.fixture(scope="session")
-def qt_app():
+def qt_app() -> QApplication:
     """Fixture to create a QApplication instance for the test session."""
     # Force Qt to use offscreen platform to avoid crashes in CI
     if "QT_QPA_PLATFORM" not in os.environ:

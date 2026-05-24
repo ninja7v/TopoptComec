@@ -10,7 +10,7 @@ from app.core.fem import FEM
 
 def single_linear_displacement(
     u: np.ndarray, nelx: int, nely: int, nelz: int, disp_factor: float
-):
+) -> tuple[np.ndarray, ...]:
     """
     Computes the deformed mesh grid for a single-frame plot.
     Returns X, Y, Z meshgrid arrays for plotting.
@@ -62,7 +62,18 @@ def single_linear_displacement(
         return X, Y
 
 
-def _embed_material(xPhys_initial, is_multi, is_3d, nelx, nely, nelz, mx, my, mz, fem):
+def _embed_material(
+    xPhys_initial: np.ndarray,
+    is_multi: bool,
+    is_3d: bool,
+    nelx: int,
+    nely: int,
+    nelz: int,
+    mx: int,
+    my: int,
+    mz: int,
+    fem: FEM,
+) -> tuple[np.ndarray, int, float]:
     """Embed initial density into the expanded domain."""
     _x_init = xPhys_initial if is_multi else xPhys_initial[np.newaxis, :]
     n_mat = _x_init.shape[0]
@@ -85,7 +96,9 @@ def _embed_material(xPhys_initial, is_multi, is_3d, nelx, nely, nelz, mx, my, mz
     return xPhys, n_mat, volfrac
 
 
-def _reposition_forces(fem, sim_params, u_curr, delta_disp, is_3d):
+def _reposition_forces(
+    fem: FEM, sim_params: dict, u_curr: np.ndarray, delta_disp: float, is_3d: bool
+):
     """Move force application points following the full nodal displacement."""
     snelx, snely, snelz = sim_params["Dimensions"]["nelxyz"]
     forces_moved = False
@@ -123,7 +136,16 @@ def _reposition_forces(fem, sim_params, u_curr, delta_disp, is_3d):
 
 
 def _warp_density(
-    xPhys, n_mat, volfrac, points, points_interp, is_multi, fem, k, nominator, c_val
+    xPhys: np.ndarray,
+    n_mat: int,
+    volfrac: np.ndarray,
+    points: np.ndarray,
+    points_interp: np.ndarray,
+    is_multi: bool,
+    fem: FEM,
+    k: float,
+    nominator: float,
+    c_val: float,
 ):
     """Interpolate density onto the warped grid and renormalize."""
     for i in range(n_mat):
@@ -147,7 +169,18 @@ def _warp_density(
             xPhys[:, excess] /= col_sums[excess]
 
 
-def _crop_density(xPhys, n_mat, is_3d, fem, nelx, nely, nelz, mx, my, mz):
+def _crop_density(
+    xPhys: np.ndarray,
+    n_mat: int,
+    is_3d: bool,
+    fem: FEM,
+    nelx: int,
+    nely: int,
+    nelz: int,
+    mx: int,
+    my: int,
+    mz: int,
+) -> np.ndarray:
     """Crop the expanded density field back to the original domain size."""
     cropped = np.zeros((n_mat, nelx * nely * (nelz if is_3d else 1)))
     for i in range(n_mat):
@@ -163,7 +196,9 @@ def _crop_density(xPhys, n_mat, is_3d, fem, nelx, nely, nelz, mx, my, mz):
     return cropped
 
 
-def run_iterative_displacement(params, xPhys_initial, progress_callback=None):
+def run_iterative_displacement(
+    params: dict, xPhys_initial: np.ndarray, progress_callback=None
+) -> np.ndarray:
     """
     Performs iterative FE analysis to simulate displacement.
     Yields the cropped density field for each iteration.
@@ -179,7 +214,7 @@ def run_iterative_displacement(params, xPhys_initial, progress_callback=None):
     sim_params["Dimensions"]["nelxyz"] = [nelx + 2 * mx, nely + 2 * my, nelz + 2 * mz]
 
     # Offset Supports and Forces coordinates to center the part in the new domain
-    def offset_coords(container, keys):
+    def offset_coords(container: dict, keys: list):
         for k, o in zip(keys, [mx, my, mz]):
             if k in container:
                 container[k] = [val + o for val in container[k]]

@@ -28,7 +28,9 @@ from .icons import icons
 
 
 # Make spinbox functions to avoid code repetition
-def _make_spin(min_v, max_v, val, tip="", width=60):
+def _make_spin(
+    min_v: int, max_v: int, val: int, tip: str = "", width: int = 60
+) -> QSpinBox:
     s = QSpinBox()
     s.setRange(min_v, max_v)
     s.setValue(val)
@@ -38,7 +40,14 @@ def _make_spin(min_v, max_v, val, tip="", width=60):
     return s
 
 
-def _make_dspin(min_v, max_v, val, step=0.01, tip="", width=60):
+def _make_dspin(
+    min_v: float,
+    max_v: float,
+    val: float,
+    step: float = 0.01,
+    tip: str = "",
+    width: int = 60,
+) -> QDoubleSpinBox:
     s = QDoubleSpinBox()
     s.setRange(min_v, max_v)
     s.setValue(val)
@@ -49,7 +58,7 @@ def _make_dspin(min_v, max_v, val, step=0.01, tip="", width=60):
     return s
 
 
-def _make_combo(items=[], index=0, tip=""):
+def _make_combo(items: list = [], index: int = 0, tip: str = "") -> QComboBox:
     c = QComboBox()
     c.addItems(items)
     c.setCurrentIndex(index)
@@ -120,7 +129,7 @@ class CollapsibleSection(QWidget):
     def set_visibility_toggle(self, visible: bool):
         self.visibility_button.setVisible(visible)
 
-    def toggle_collapse(self, checked):
+    def toggle_collapse(self, checked: bool):
         self.is_collapsed = not checked
         self.content_widget.setVisible(not self.is_collapsed)
         self.toggle_button.setIcon(
@@ -154,7 +163,7 @@ class ColorPickerButton(QPushButton):
 
     colorChanged = Signal(QColor)
 
-    def __init__(self, initial_color=QColor("black")):
+    def __init__(self, initial_color: QColor = QColor("black")):
         super().__init__()
         self.setObjectName("ColorPickerButton")
         if isinstance(initial_color, str):
@@ -177,7 +186,7 @@ class ColorPickerButton(QPushButton):
             f"QPushButton#ColorPickerButton {{ background-color: {self.color.name()}; }}"
         )
 
-    def get_color(self):
+    def get_color(self) -> str:
         return self.color.name()
 
     def set_color(self, color: str | QColor):
@@ -331,7 +340,12 @@ class RegionsWidget(QWidget):
         self.main_layout.addStretch()
 
     def add_region(
-        self, rshape="□", rstate="Void", rradius=5, pos=None, emit_signal=True
+        self,
+        rshape: str = "□",
+        rstate: str = "Void",
+        rradius: int = 5,
+        pos: list = None,
+        emit_signal: bool = True,
     ):
         row = len(self.inputs)
         if row >= 10:  # safety
@@ -405,7 +419,7 @@ class RegionsWidget(QWidget):
             self.nbRegionsChanged.emit()
         self.update_remove_buttons()
 
-    def remove_region_by_widget(self, container_widget):
+    def remove_region_by_widget(self, container_widget: QWidget):
         # Find index
         idx = -1
         for i, region in enumerate(self.inputs):
@@ -416,7 +430,7 @@ class RegionsWidget(QWidget):
         if idx != -1:
             self.remove_region(idx)
 
-    def remove_region(self, row, emit_signal=True):
+    def remove_region(self, row: int, emit_signal: bool = True):
         if row < 0 or row >= len(self.inputs):
             return
 
@@ -495,10 +509,16 @@ class ForcesWidget(QWidget):
         self.add_output_force([30, 40, 0], 4, 0.01, emit_signal=False)
 
     @property
-    def inputs(self):
+    def inputs(self) -> list:
         return self.input_forces + self.output_forces
 
-    def add_input_force(self, pos=None, arrow_idx=1, norm=0.01, emit_signal=True):
+    def add_input_force(
+        self,
+        pos: list = None,
+        arrow_idx: int = 1,
+        norm: float = 0.01,
+        emit_signal: bool = True,
+    ):
         if len(self.input_forces) >= 10:
             return
 
@@ -557,7 +577,13 @@ class ForcesWidget(QWidget):
             self.nbForcesChanged.emit()
         self.update_ui_state()
 
-    def add_output_force(self, pos=None, arrow_idx=1, norm=0.01, emit_signal=True):
+    def add_output_force(
+        self,
+        pos: list = None,
+        arrow_idx: int = 1,
+        norm: float = 0.01,
+        emit_signal: bool = True,
+    ):
         if len(self.output_forces) >= 10:
             return
 
@@ -618,7 +644,7 @@ class ForcesWidget(QWidget):
             self.nbForcesChanged.emit()
         self.update_ui_state()
 
-    def remove_force_by_widget(self, container, is_input):
+    def remove_force_by_widget(self, container: QWidget, is_input: bool):
         target_list = self.input_forces if is_input else self.output_forces
         idx = -1
         for i, force in enumerate(target_list):
@@ -629,7 +655,7 @@ class ForcesWidget(QWidget):
         if idx != -1:
             self.remove_force(idx, is_input)
 
-    def remove_force(self, row, is_input, emit_signal=True):
+    def remove_force(self, row: int, is_input: bool, emit_signal: bool = True):
         target_list = self.input_forces if is_input else self.output_forces
         if row < 0 or row >= len(target_list):
             return
@@ -684,7 +710,13 @@ class SupportWidget(QWidget):
 
         self.dims = ["-", "X", "Y", "Z", "XY", "XZ", "YZ", "XYZ"]
 
-    def add_support(self, pos=None, dim="XYZ", radius=0, emit_signal=True):
+    def add_support(
+        self,
+        pos: list = None,
+        dim: str = "XYZ",
+        radius: int = 0,
+        emit_signal: bool = True,
+    ):
         row = len(self.inputs)
         if row >= 10:  # safety
             return
@@ -746,7 +778,7 @@ class SupportWidget(QWidget):
             self.nbSupportsChanged.emit()
         self.update_remove_buttons()
 
-    def remove_support_by_widget(self, container_widget):
+    def remove_support_by_widget(self, container_widget: QWidget):
         # Find index
         idx = -1
         for i, support in enumerate(self.inputs):
@@ -757,7 +789,7 @@ class SupportWidget(QWidget):
         if idx != -1:
             self.remove_support(idx)
 
-    def remove_support(self, row, emit_signal=True):
+    def remove_support(self, row: int, emit_signal: bool = True):
         if row < 0 or row >= len(self.inputs):
             return
 
@@ -817,7 +849,14 @@ class MaterialsWidget(QWidget):
         # Add default material
         self.add_material(E=1.0, nu=0.3, percent=100, color="#000000")
 
-    def add_material(self, E=1.0, nu=0.3, percent=0, color="#000000", emit_signal=True):
+    def add_material(
+        self,
+        E: float = 1.0,
+        nu: float = 0.3,
+        percent: int = 0,
+        color: str = "#000000",
+        emit_signal: bool = True,
+    ):
         if len(self.inputs) > 1:
             return
 
@@ -888,7 +927,7 @@ class MaterialsWidget(QWidget):
             self.nbMaterialsChanged.emit()
         self.update_ui_state()
 
-    def remove_material_by_widget(self, container):
+    def remove_material_by_widget(self, container: QWidget):
         idx = -1
         for i, mat in enumerate(self.inputs):
             if mat["container"] == container:
@@ -897,7 +936,7 @@ class MaterialsWidget(QWidget):
         if idx != -1:
             self.remove_material(idx)
 
-    def remove_material(self, row, emit_signal=True):
+    def remove_material(self, row: int, emit_signal: bool = True):
         if row < 0 or row >= len(self.inputs):
             return
 
@@ -913,7 +952,7 @@ class MaterialsWidget(QWidget):
             self.nbMaterialsChanged.emit()
         self.update_ui_state()
 
-    def _on_percent_changed(self, value):
+    def _on_percent_changed(self, value: int):
         """When there are exactly 2 materials, auto-adjust the other to keep sum = 100."""
         if len(self.inputs) == 1:
             self.inputs[0]["percent"].setValue(100)
@@ -1174,7 +1213,7 @@ class FooterWidget(QWidget):
 
         action_layout.addWidget(self.save_button)
 
-    def start_create_button_effect(self, color_hex="#F97316"):
+    def start_create_button_effect(self, color_hex: str = "#F97316"):
         # Shadow effect for glow
         create_button_effect = QGraphicsDropShadowEffect(self.create_button)
         create_button_effect.setBlurRadius(20)

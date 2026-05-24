@@ -16,14 +16,14 @@ from app.ui import exporters
 
 
 def _run_single_preset(
-    preset_name,
-    params,
-    fmt,
-    threshold,
-    verbose=False,
-    run_disp=False,
-    save_frames=False,
-):
+    preset_name: str,
+    params: dict,
+    format: str,
+    threshold: bool,
+    verbose: bool = False,
+    run_disp: bool = False,
+    save_frames: bool = False,
+) -> tuple[str, str | None]:
     """Run optimization and export for a single preset. Returns (preset_name, error)."""
     if verbose:
         print(f"Running optimization for preset: {preset_name}")
@@ -57,7 +57,9 @@ def _run_single_preset(
 
         if save_frames:
 
-            def progress_callback(iteration, objective, change, xPhys_frame):
+            def progress_callback(
+                iteration: int, objective: float, change: float, xPhys_frame: np.ndarray
+            ):
                 folder = Path("results") / preset_name / f"{preset_name}_creation"
                 folder.mkdir(parents=True, exist_ok=True)
                 filename = folder / f"{preset_name}_creation_{iteration}.png"
@@ -97,7 +99,7 @@ def _run_single_preset(
         try:
             disp_iter = 0
 
-            def disp_callback(iteration):
+            def disp_callback(iteration: int):
                 nonlocal disp_iter
                 disp_iter = iteration
                 return False
@@ -137,7 +139,7 @@ def _run_single_preset(
 
     # Export
     nelxyz = params["Dimensions"]["nelxyz"]
-    formats = ["png", "stl", "vti", "3mf"] if fmt == "all" else [fmt]
+    formats = ["png", "stl", "vti", "3mf"] if format == "all" else [format]
     for f in formats:
         filename = str(base_filename.with_suffix(f".{f}"))
         if verbose:
@@ -155,17 +157,19 @@ def _run_single_preset(
     return preset_name, None
 
 
-def _export(xPhys, nelxyz, filename, fmt):
+def _export(
+    xPhys: np.ndarray, nelxyz: list, filename: str, format: str
+) -> tuple[bool, str | None]:
     """Dispatch export to the correct exporter."""
-    if fmt == "png":
+    if format == "png":
         return exporters.save_as_png(xPhys, nelxyz, filename)
-    elif fmt == "vti":
+    elif format == "vti":
         return exporters.save_as_vti(xPhys, nelxyz, filename)
-    elif fmt == "stl":
+    elif format == "stl":
         return exporters.save_as_stl(xPhys, nelxyz, filename)
-    elif fmt == "3mf":
+    elif format == "3mf":
         return exporters.save_as_3mf(xPhys, nelxyz, filename)
-    return False, f"Unknown format: {fmt}"
+    return False, f"Unknown format: {format}"
 
 
 def run_cli():

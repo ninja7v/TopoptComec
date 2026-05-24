@@ -10,7 +10,7 @@ import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.colors import to_rgb
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from trimesh.typed import Tuple
 
 # import mcubes
 from app.ui import exporters
@@ -311,7 +312,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         return section
 
-    def _on_visibility_toggled(self, checked):
+    def _on_visibility_toggled(self, checked: bool):
         """Handles the toggling of any visibility button."""
         button = self.sender()  # method gives the specific button that was clicked.
         if not button:
@@ -394,7 +395,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             f"It: {iteration}, Obj: {objective:.4f}, Change: {change:.4f}"
         )
 
-    def _update_optimization_plot(self, xPhys_frame):
+    def _update_optimization_plot(self, xPhys_frame: np.ndarray):
         """Updates the plot with an intermediate frame from the optimizer."""
         # Ensure a plot exist to update
         if not self.figure.get_axes():
@@ -435,7 +436,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 )
                 self.figure.savefig(filename, dpi=300, bbox_inches="tight")
 
-    def _handle_optimization_results(self, result):
+    def _handle_optimization_results(self, result: Tuple[np.ndarray, np.ndarray]):
         """Handles the results after optimization finishes successfully."""
         self.xPhys, self.u = result
         self.last_displayed_frame_data = None
@@ -465,7 +466,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.replot()
 
-    def _handle_optimization_error(self, error_msg):
+    def _handle_optimization_error(self, error_msg: str):
         """Handles any errors that occur during optimization."""
         self.status_bar.showMessage("Optimization failed.", 5000)
         self.preset.setEnabled(True)
@@ -559,14 +560,14 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.displacement_widget.run_disp_button
         )
 
-    def _update_displacement_progress(self, iteration):
+    def _update_displacement_progress(self, iteration: int):
         """Updates the progress bar and status message during displacement computation."""
         self.progress_bar.setValue(iteration)
         self.status_bar.showMessage(
             f"Running non-linear displacement: step {iteration}..."
         )
 
-    def _update_animation_frame(self, frame_data):
+    def _update_animation_frame(self, frame_data: np.ndarray):
         """Updates the plot with a new frame from the displacement animation."""
         # Safety checks to ensure a plot exists and parameters are available
         if not self.figure.get_axes() or not self.last_params:
@@ -635,7 +636,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         if self.sections["Displacement"].visibility_button.isChecked():
             self.replot()
 
-    def _handle_displacement_finished(self, message):
+    def _handle_displacement_finished(self, message: str):
         """Handles the results after displacement computation finishes successfully."""
         self.status_bar.showMessage(message, 5000)
         self.progress_bar.setVisible(False)
@@ -650,7 +651,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.displacement_widget.stop_disp_button.setEnabled(True)
         self.is_displaying_deformation = True
 
-    def _handle_displacement_error(self, error_msg):
+    def _handle_displacement_error(self, error_msg: str):
         """Handles any errors that occur during displacement computation."""
         self.status_bar.showMessage("Displacements failed.", 5000)
         self.progress_bar.setVisible(False)
@@ -695,12 +696,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.analysis_widget.stop_analysis_button.setEnabled(False)
             self.analysis_worker.request_stop()
 
-    def _update_analysis_progress(self, iteration):
+    def _update_analysis_progress(self, iteration: int):
         """Updates the progress bar and status message during analysis."""
         self.progress_bar.setValue(iteration)
         self.status_bar.showMessage(f"Running analysis: step {iteration}...")
 
-    def _handle_analysis_finished(self, results):
+    def _handle_analysis_finished(self, results: Tuple[bool, bool, bool, bool]):
         """Handles the results after analysis finishes successfully."""
         aw = self.analysis_widget
         aw.checkerboard_result.setText("yes" if results[0] else "no")
@@ -729,7 +730,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.displacement_widget.run_disp_button.setEnabled(True)
         self.footer.create_button.setEnabled(True)
 
-    def _handle_analysis_error(self, error_msg):
+    def _handle_analysis_error(self, error_msg: str):
         """Handles any errors that occur during analysis."""
         self.status_bar.showMessage("Analysis failed.", 5000)
         self.progress_bar.setVisible(False)
@@ -741,7 +742,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # Save #
     ########
 
-    def _save_result_as(self, file_type):
+    def _save_result_as(self, file_type: str):
         """
         Save the current result as file_type in a result folder.
         The result folder is created if it does not exist.
@@ -926,7 +927,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         else:
             self.preset.delete_preset_button.setEnabled(False)
 
-    def _apply_parameters(self, params):
+    def _apply_parameters(self, params: dict):
         """Sets all UI widgets to the values from a given parameter dictionary."""
         self._block_all_parameter_signals(True)
 
@@ -948,7 +949,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             f"Loaded preset: {self.preset.presets_combo.currentText()}", 3000
         )
 
-    def _apply_dimensions_param(self, params):
+    def _apply_dimensions_param(self, params: dict):
         """Applies dimension parameters from a preset dictionary."""
         Dimensions = params.get("Dimensions", {})
         self.dim_widget.nx.setValue(Dimensions.get("nelxyz", [1, 1, 1])[0])
@@ -957,7 +958,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.dim_widget.volfrac.setValue(Dimensions.get("volfrac", 0.3))
         self._update_position_ranges()
 
-    def _apply_regions_param(self, params):
+    def _apply_regions_param(self, params: dict):
         """Applies region parameters from a preset dictionary."""
         pr = params.get("Regions", {})
         num_regions_in_preset = len(pr.get("rshape", []))
@@ -982,7 +983,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             rw["rz"].setValue(pr["rz"][i])
         self._connect_region_signals()
 
-    def _apply_forces_param(self, params):
+    def _apply_forces_param(self, params: dict):
         """Applies force parameters from a preset dictionary."""
         pf = params.get("Forces", {})
 
@@ -1034,7 +1035,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self._connect_forces_signals()
 
-    def _apply_supports_param(self, params):
+    def _apply_supports_param(self, params: dict):
         """Applies support parameters from a preset dictionary."""
         ps = params.get("Supports", {})
         num_supports_in_preset = len(ps.get("sx", []))
@@ -1059,7 +1060,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             sw["sr"].setValue(ps["sr"][i])
         self._connect_support_signals()
 
-    def _apply_materials_param(self, params):
+    def _apply_materials_param(self, params: dict):
         """Applies material parameters from a preset dictionary."""
         pm = params.get("Materials", {})
         num_material_in_preset = len(pm.get("E", []))
@@ -1089,7 +1090,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.materials_widget.mat_init_type.setCurrentIndex(pm.get("init_type", 0))
         self._connect_material_signals()
 
-    def _apply_optimizer_param(self, params):
+    def _apply_optimizer_param(self, params: dict):
         """Applies optimizer parameters from a preset dictionary."""
         po = params.get("Optimizer", {})
         self.optimizer_widget.opt_ft.setCurrentIndex(
@@ -1107,7 +1108,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.optimizer_widget.opt_solver.setCurrentText(po.get("solver", "Auto"))
         self.optimizer_widget.save_frames_cb.setChecked(po.get("save_frames", False))
 
-    def _apply_displacement_param(self, params):
+    def _apply_displacement_param(self, params: dict):
         """Applies displacement parameters from a preset dictionary."""
         Displacement = params.get("Displacement", {})
         self.displacement_widget.mov_disp.setValue(Displacement.get("disp_factor", 1.0))
@@ -1182,7 +1183,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # THEME #
     #########
 
-    def _set_theme(self, theme_name, initial_setup=False):
+    def _set_theme(self, theme_name: str, initial_setup=False):
         """Applies a theme stylesheet to the application GUI only."""
         stylesheet = (
             LIGHT_THEME_STYLESHEET if theme_name == "light" else DARK_THEME_STYLESHEET
@@ -1253,7 +1254,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         url = QUrl("https://github.com/ninja7v/TopoptComec/issues")
         QDesktopServices.openUrl(url)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent):
         """Close figure when the app is closed"""
         # Needed for the tests
         if self.figure:

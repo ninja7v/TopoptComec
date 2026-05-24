@@ -25,7 +25,9 @@ class PlottingMixin:
                 spine.set_edgecolor("black")
         self.canvas.draw()
 
-    def _plot_deformation(self, ax, is_3d, nelx, nely, nelz):
+    def _plot_deformation(
+        self, ax: plt.Axes, is_3d: bool, nelx: int, nely: int, nelz: int
+    ):
         if (
             self.last_params["Displacement"]["disp_iterations"] == 1
         ):  # Single-frame grid plot
@@ -144,7 +146,7 @@ class PlottingMixin:
                 )
         # Multi-iteration displacement handled in _update_animation_frame
 
-    def _initialize_xphys(self, nelx, nely, nelz, is_3d):
+    def _initialize_xphys(self, nelx: int, nely: int, nelz: int, is_3d: bool):
         """Initializes material settings and regions locally if starting out or restarted."""
         from app.core import initializers  # Import here to avoid circular
 
@@ -212,7 +214,7 @@ class PlottingMixin:
         if self.xPhys is not None and "Regions" in self.last_params:
             self._apply_regions(nelx, nely, nelz, is_3d)
 
-    def _apply_regions(self, nelx, nely, nelz, is_3d):
+    def _apply_regions(self, nelx: int, nely: int, nelz: int, is_3d: bool):
         """Applies solid/void overrides per customized region."""
         pr = self.last_params["Regions"]
         for i, shape in enumerate(pr["rshape"]):
@@ -270,7 +272,7 @@ class PlottingMixin:
                 else:
                     self.xPhys[:, flat_idx] = value
 
-    def _show_initial_message(self, ax, is_3d):
+    def _show_initial_message(self, ax: plt.Axes, is_3d: bool):
         """Displays initial placeholder message onto canvas before optimization results exist."""
         if self.footer.create_button.graphicsEffect() is not None:
             init_message = 'Configure parameters and press "Create"'
@@ -332,7 +334,7 @@ class PlottingMixin:
         ax.autoscale(tight=True)
         self.canvas.draw()
 
-    def _plot_material(self, ax, is_3d, xPhys_data=None):
+    def _plot_material(self, ax: plt.Axes, is_3d: bool, xPhys_data=None):
         """Plot the material."""
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
         data_to_plot = self.xPhys if xPhys_data is None else xPhys_data
@@ -348,7 +350,9 @@ class PlottingMixin:
         else:
             self._plot_material_2d(ax, data_to_plot, nelx, nely, is_multi)
 
-    def _plot_material_2d(self, ax, data, nelx, nely, is_multi):
+    def _plot_material_2d(
+        self, ax: plt.Axes, data: np.ndarray, nelx: int, nely: int, is_multi: bool
+    ):
         """2D material plot — single or multi-material."""
         if is_multi:
             n_mat, nel = data.shape
@@ -382,7 +386,15 @@ class PlottingMixin:
                 extent=[0, nelx, 0, nely],
             )
 
-    def _plot_material_3d(self, ax, data, nelx, nely, nelz, is_multi):
+    def _plot_material_3d(
+        self,
+        ax: plt.Axes,
+        data: np.ndarray,
+        nelx: int,
+        nely: int,
+        nelz: int,
+        is_multi: bool,
+    ):
         """3D material plot — single or multi-material."""
         if is_multi:
             # Effective density for visibility
@@ -435,7 +447,7 @@ class PlottingMixin:
         )
         ax.set_box_aspect([nelx, nely, nelz])
 
-    def _redraw_non_material_layers(self, ax, is_3d):
+    def _redraw_non_material_layers(self, ax: plt.Axes, is_3d: bool):
         """Helper to draw all the plot layers that are NOT the main result."""
         # Layer 2: Overlays
         self._plot_forces(ax, is_3d=is_3d)
@@ -444,7 +456,7 @@ class PlottingMixin:
         self._plot_dimensions_frame(ax, is_3d=is_3d)
         self._plot_displacement_preview(ax, is_3d=is_3d)
 
-    def _plot_dimensions_frame(self, ax, is_3d):
+    def _plot_dimensions_frame(self, ax: plt.Axes, is_3d: bool):
         """Draws a dotted frame around the design space, controlled by the Dimensions section's visibility button."""
         if not self.sections["Dimensions"].visibility_button.isChecked():
             ax.set_xlabel("")
@@ -517,7 +529,7 @@ class PlottingMixin:
             spine.set_visible(True)
             spine.set_edgecolor("black")
 
-    def _plot_forces(self, ax, is_3d):
+    def _plot_forces(self, ax: plt.Axes, is_3d: bool):
         if not self.sections["Forces"].visibility_button.isChecked():
             return
         if not self.last_params or "Forces" not in self.last_params:
@@ -536,7 +548,7 @@ class PlottingMixin:
         else:
             self._plot_initial_forces(ax, is_3d, pf, length)
 
-    def _arrow_vectors(self, dirs, length, is_3d):
+    def _arrow_vectors(self, dirs: list, length: float, is_3d: bool):
         dx = np.zeros(len(dirs))
         dy = np.zeros(len(dirs))
         dz = np.zeros(len(dirs)) if is_3d else None
@@ -558,7 +570,7 @@ class PlottingMixin:
 
         return dx, dy, dz
 
-    def _plot_initial_forces(self, ax, is_3d, pf, length):
+    def _plot_initial_forces(self, ax: plt.Axes, is_3d: bool, pf: dict, length: float):
         for prefix, color in [("fi", "r"), ("fo", "b")]:
             dirs = np.array(pf[f"{prefix}dir"])
             active = dirs != "-"
@@ -587,7 +599,7 @@ class PlottingMixin:
             else:
                 ax.quiver(x, y, dx, dy, color=color, units="xy", scale=1, width=0.5)
 
-    def _plot_deformed_forces(self, ax, is_3d, pd, length):
+    def _plot_deformed_forces(self, ax: plt.Axes, is_3d: bool, pd: dict, length: float):
         nely = pd["nelxyz"][1]
         disp_factor = self.displacement_widget.mov_disp.value()
 
@@ -642,7 +654,7 @@ class PlottingMixin:
             else:
                 ax.quiver(fx, fy, dx, dy, color=color, units="xy", scale=1, width=0.5)
 
-    def _plot_supports(self, ax, is_3d):
+    def _plot_supports(self, ax: plt.Axes, is_3d: bool):
         """Plots the supports as triangles."""
         if not self.sections["Supports"].visibility_button.isChecked():
             return
@@ -668,7 +680,7 @@ class PlottingMixin:
             else:
                 ax.scatter(pos[0], pos[1], s=size, marker="^", c="black")
 
-    def _plot_regions(self, ax, is_3d):
+    def _plot_regions(self, ax: plt.Axes, is_3d: bool):
         """Plots the regions outline (square/cube or circle/sphere) in 2D or 3D."""
         if not self.sections["Regions"].visibility_button.isChecked():
             return
@@ -753,7 +765,7 @@ class PlottingMixin:
                     )
                     ax.add_patch(circ)
 
-    def _plot_displacement_preview(self, ax, is_3d):
+    def _plot_displacement_preview(self, ax: plt.Axes, is_3d: bool):
         """Overlays displacement vectors (quivers) on the plot if the preview is active."""
         if not self.sections["Displacement"].visibility_button.isChecked():
             return
