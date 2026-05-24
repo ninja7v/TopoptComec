@@ -124,7 +124,7 @@ class ParameterManagerMixin:
 
         return params
 
-    def _get_time_estimation_indicators(self, params):
+    def _get_time_estimation_indicators(self, params: dict):
         """Calculate the optimization time estimation and turn it into indicators"""
         dims = self.last_params.get("Dimensions", {}).get("nelxyz", [1, 1, 1])
         nelx, nely, nelz = dims[0], dims[1], dims[2]
@@ -196,7 +196,7 @@ class ParameterManagerMixin:
         # Get nbSolves
         nbSolves = self.last_params.get("Optimizer", {}).get("n_it", 50)
 
-        def time_estimated(nbIter, nbSolves, sMatrix) -> float:
+        def time_estimated(nbIter: int, nbSolves: int, sMatrix: int) -> float:
             # 1.1 to add 10% of the time to consider filtering, ...
             # NbIteration is the number of force (both input and output)
             # NbIteration+1 to consider preparation time (which is roughly as long as an iteration)
@@ -281,7 +281,7 @@ class ParameterManagerMixin:
                 self.preset.presets_combo.blockSignals(False)
                 self.preset.delete_preset_button.setEnabled(False)
 
-    def _are_parameters_equivalent(self, params1, params2):
+    def _are_parameters_equivalent(self, params1: dict, params2: dict):
         """Compares two parameter dictionaries, ignoring irrelevant data."""
         # Create deep copies to avoid modifying the original dictionaries
         p1 = copy.deepcopy(params1)
@@ -292,7 +292,7 @@ class ParameterManagerMixin:
 
         return p1 == p2
 
-    def _normalize_params(self, p):
+    def _normalize_params(self, p: dict):
         """Helper to normalize parameters for comparison."""
         pd = p["Dimensions"]
         if "nelxyz" in pd:
@@ -309,7 +309,7 @@ class ParameterManagerMixin:
         p.pop("Displacement", None)
         p.pop("Optimizer", None)
 
-    def _normalize_regions(self, p, is_2d):
+    def _normalize_regions(self, p: dict, is_2d: bool):
         if "Regions" in p:
             pr = p["Regions"]
             if "rshape" in pr:
@@ -338,7 +338,7 @@ class ParameterManagerMixin:
                 if is_2d and "rz" in pr:
                     pr.pop("rz")
 
-    def _normalize_supports(self, p, is_2d):
+    def _normalize_supports(self, p: dict, is_2d: bool):
         if "Supports" in p:
             ps = p["Supports"]
             if "sdim" in ps:
@@ -359,7 +359,7 @@ class ParameterManagerMixin:
                 if is_2d and "sz" in ps:
                     ps.pop("sz")
 
-    def _normalize_forces(self, p, is_2d):
+    def _normalize_forces(self, p: dict, is_2d: bool):
         pf = p["Forces"]
         for prefix in ["fi", "fo"]:
             dir_key = f"{prefix}dir"
@@ -388,7 +388,7 @@ class ParameterManagerMixin:
                 if is_2d and f"{prefix}z" in pf:
                     pf.pop(f"{prefix}z")
 
-    def _normalize_materials(self, p):
+    def _normalize_materials(self, p: dict):
         if "Materials" in p:
             pm = p["Materials"]
             if len(pm["E"]) == 1:
@@ -399,7 +399,7 @@ class ParameterManagerMixin:
                 if "init_type" not in pm:
                     pm["init_type"] = 0
 
-    def _validate_parameters(self, params):
+    def _validate_parameters(self, params: dict) -> str | None:
         nelx, nely, nelz = params["Dimensions"]["nelxyz"]
         if nelx <= 0 or nely <= 0 or nelz < 0:
             return "Nx, Ny, Nz must be positive."
@@ -413,7 +413,7 @@ class ParameterManagerMixin:
         )
         return err
 
-    def _check_duplicates(self, indices, keyfunc, msg):
+    def _check_duplicates(self, indices: list, keyfunc: callable, msg: callable):
         seen = {}
         for i in indices:
             k = keyfunc(i)
@@ -421,7 +421,7 @@ class ParameterManagerMixin:
                 return msg(seen[k], i)
             seen[k] = i
 
-    def _check_forces(self, params):
+    def _check_forces(self, params: dict):
         pf = params["Forces"]
         ps = params.get("Supports", {})
 
@@ -433,7 +433,7 @@ class ParameterManagerMixin:
         ):
             return "At least one output force (for compliant mechanisms) or support (for rigid mechanisms) must be active"
 
-    def _check_regions(self, params):
+    def _check_regions(self, params: dict):
         pr = params.get("Region")
         if not pr:
             return
@@ -452,7 +452,7 @@ class ParameterManagerMixin:
             lambda a, b: f"Regions {a + 1} and {b + 1} are identical.",
         )
 
-    def _check_supports(self, params):
+    def _check_supports(self, params: dict):
         ps = params.get("Supports")
         if not ps:
             return
@@ -465,7 +465,7 @@ class ParameterManagerMixin:
             lambda a, b: f"Supports {a + 1} and {b + 1} are identical.",
         )
 
-    def _check_force_duplicates(self, params):
+    def _check_force_duplicates(self, params: dict):
         pf = params["Forces"]
 
         err = self._check_duplicates(
@@ -482,7 +482,7 @@ class ParameterManagerMixin:
             lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
         )
 
-    def _check_materials(self, params):
+    def _check_materials(self, params: dict):
         pm = params["Materials"]
 
         err = self._check_duplicates(
@@ -546,7 +546,7 @@ class ParameterManagerMixin:
         pos_to_validate = []
         pos_to_scale = []
 
-        def register(widget, active, is_radius=False):
+        def register(widget, active: bool, is_radius=False):
             if active:
                 pos_to_validate.append(widget)
             pos_to_scale.append((widget, is_radius))

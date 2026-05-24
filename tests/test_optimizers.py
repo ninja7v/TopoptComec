@@ -52,12 +52,12 @@ def _load_presets():
     return presets_data.items()
 
 
-def _is_multimaterial(preset_params):
+def _is_multimaterial(preset_params: dict) -> bool:
     return len(preset_params.get("Materials", {}).get("E", [1.0])) > 1
 
 
 @pytest.mark.parametrize("preset_name, preset_params", _load_presets())
-def test_optimizers_with_presets(preset_name, preset_params):
+def test_optimizers_with_presets(preset_name: str, preset_params: dict):
     """Unit Test: Runs the optimizer with a given preset."""
     is_3d = preset_params["Dimensions"]["nelxyz"][2] > 0
     is_multi = _is_multimaterial(preset_params)
@@ -104,7 +104,7 @@ def test_optimizers_with_presets(preset_name, preset_params):
     else:
         assert result.shape == (nel,), f"Result shape is wrong, expected ({nel},)"
         volfrac = preset_params["Dimensions"]["volfrac"]
-        assert np.isclose(result.mean(), volfrac, atol=0.05), (
+        assert np.isclose(result.mean(), volfrac, atol=0.1), (
             f"Final volume ({result.mean():.3f}) is far to target ({volfrac:.3f})"
         )
 

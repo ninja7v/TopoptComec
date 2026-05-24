@@ -2,6 +2,8 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Export result to various file formats.
 
+from typing import Tuple
+
 import mcubes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,7 +19,9 @@ from stl import mesh
 from vtk.util.numpy_support import get_vtk_array_type, numpy_to_vtk
 
 
-def save_as_png(xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = None):
+def save_as_png(
+    xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = None
+) -> Tuple[bool, str | None]:
     """Saves the density field as a .png image."""
     try:
         nelx, nely, nelz = nelxyz
@@ -116,7 +120,9 @@ def save_as_png(xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = N
         return False, str(e)
 
 
-def save_as_vti(xPhys: np.ndarray, nelxyz: list, filename: str):
+def save_as_vti(
+    xPhys: np.ndarray, nelxyz: list, filename: str
+) -> Tuple[bool, str | None]:
     """Saves the density field as a .vti file for ParaView."""
     try:
         nx, ny, nz = nelxyz
@@ -170,7 +176,9 @@ def save_as_vti(xPhys: np.ndarray, nelxyz: list, filename: str):
         return False, str(e)
 
 
-def save_as_stl(xPhys: np.ndarray, nelxyz: list, filename: str):
+def save_as_stl(
+    xPhys: np.ndarray, nelxyz: list, filename: str
+) -> Tuple[bool, str | None]:
     """Saves the result as a .stl file."""
     try:
         nx, ny, nz = nelxyz
@@ -199,7 +207,9 @@ def save_as_stl(xPhys: np.ndarray, nelxyz: list, filename: str):
         return False, str(e)
 
 
-def save_as_3mf(xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = None):
+def save_as_3mf(
+    xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = None
+) -> Tuple[bool, str | None]:
     """Saves the result as a .3mf file using Lib3MF."""
     try:
         nx, ny, nz = nelxyz

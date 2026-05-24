@@ -150,7 +150,9 @@ def optimize(
     return xPhys, ui
 
 
-def _get_active_coords(Supports, Forces, is_3d):
+def _get_active_coords(
+    Supports: Dict, Forces: Dict, is_3d: bool
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Helper to extract active coordinates for material initialization."""
 
     # This extracts the logic previously doing np.concatenate on active indices

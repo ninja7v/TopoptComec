@@ -75,7 +75,7 @@ def _efficient(u: np.ndarray, Dimensions: Dict, Forces: Dict) -> bool:
     if nbInputForces == 0:
         return False
 
-    def get_disp(x, y, z, fdir, col_idx):
+    def get_disp(x: int, y: int, z: int, fdir: str, col_idx: int) -> float:
         node = (z * (nelx + 1) * (nely + 1) if is_3d else 0) + x * (nely + 1) + y
         dof_base = node * dim_mul
         if "X" in fdir:

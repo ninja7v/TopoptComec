@@ -51,10 +51,10 @@ class FEM:
         """Parses Forces and Supports dicts to create force vectors and fixed DOFs."""
         # Forces
         self.forces_i, self.fi_indices, di = self._parse_forces(
-            Forces, "fi", "fix", "fiy", "fiz", "fidir", "finorm"
+            Forces, "fix", "fiy", "fiz", "fidir", "finorm"
         )
         self.forces_o, self.fo_indices, do = self._parse_forces(
-            Forces, "fo", "fox", "foy", "foz", "fodir", "fonorm"
+            Forces, "fox", "foy", "foz", "fodir", "fonorm"
         )
 
         self.di_indices = di  # For artificial stiffness addition
@@ -257,7 +257,7 @@ class FEM:
 
     # --- Internal Helper Methods ---
 
-    def _get_node_idx(self, x, y, z):
+    def _get_node_idx(self, x: int, y: int, z: int) -> int:
         return (
             (z * (self.nelx + 1) * (self.nely + 1) if self.is_3d else 0)
             + x * (self.nely + 1)
@@ -267,7 +267,6 @@ class FEM:
     def _parse_forces(
         self,
         Forces: Dict,
-        prefix: str,
         kx: str,
         ky: str,
         kz: str,
@@ -278,6 +277,7 @@ class FEM:
         fy = Forces.get(ky, [])
         fz = Forces.get(kz, []) if self.is_3d else []
         fdir = Forces.get(kdir, [])
+        fnorm = Forces.get(knorm, [])
 
         active_indices = [i for i, val in enumerate(fdir) if val != "-"]
         f_vec = np.zeros((self.ndof, len(active_indices)))
@@ -285,7 +285,7 @@ class FEM:
 
         for mat_idx, i in enumerate(active_indices):
             node = self._get_node_idx(fx[i], fy[i], fz[i] if self.is_3d else 0)
-            val = 4 / 100.0  # Artificial stiffness value for force application points
+            val = fnorm[i]
             dof = self.dim_mul * node
             if "X" in fdir[i]:
                 if "←" in fdir[i]:
@@ -304,13 +304,21 @@ class FEM:
 
         return f_vec, active_indices, dof_indices
 
-    def _add_artificial_springs(self, K, dofs, active_indices, norms):
+    def _add_artificial_springs(
+        self, K: np.ndarray, dofs: list, active_indices: list, norms: list
+    ):
         for i, dof in enumerate(dofs):
             original_idx = active_indices[i]
             if original_idx < len(norms) and norms[original_idx] > 0:
                 K[dof, dof] += norms[original_idx]
 
-    def _solve_linear_system(self, K_free, F, active_indices, U_full):
+    def _solve_linear_system(
+        self,
+        K_free: np.ndarray,
+        F: np.ndarray,
+        active_indices: list,
+        U_full: np.ndarray,
+    ):
         if not active_indices:
             return
 
@@ -351,7 +359,9 @@ class FEM:
                     else:
                         U_full[self.free_dofs, i] = u_sol
 
-    def _apply_filter(self, x, dc, dv):
+    def _apply_filter(
+        self, x: np.ndarray, dc: np.ndarray, dv: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
         if self.filter_type == "Sensitivity":
             # H * (x * dc) / Hs / max(x, 0.001)
             dc = np.asarray((self.H @ (x * dc)) / self.Hs.flatten()) / np.maximum(
@@ -362,7 +372,7 @@ class FEM:
             dv = np.asarray(self.H * (dv[np.newaxis].T / self.Hs))[:, 0]
         return dc, dv
 
-    def update_xPhys(self, x) -> np.ndarray:
+    def update_xPhys(self, x: np.ndarray) -> np.ndarray:
         """Calculates physical density based on design variable and filter."""
         if self.filter_type == "Density":
             return (self.H @ x).ravel() / np.asarray(self.Hs).ravel()
@@ -411,7 +421,7 @@ class FEM:
                 )
             )
 
-    def _build_3d_blocks(self, k) -> np.ndarray:
+    def _build_3d_blocks(self, k: np.ndarray) -> np.ndarray:
         K1 = np.array(
             [
                 [k[0], k[1], k[1], k[2], k[4], k[4]],

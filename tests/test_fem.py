@@ -40,7 +40,7 @@ def base_config_3d():
 # --- Tests ---
 
 
-def test_initialization_2d(base_config_2d):
+def test_initialization_2d(base_config_2d: dict):
     """Test if 2D FEM initializes dimensions and degrees of freedom correctly."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -55,7 +55,7 @@ def test_initialization_2d(base_config_2d):
     assert fem.KE.shape == (8, 8)
 
 
-def test_initialization_3d(base_config_3d):
+def test_initialization_3d(base_config_3d: dict):
     """Test if 3D FEM initializes dimensions correctly."""
     fem = FEM(
         base_config_3d["Dimensions"],
@@ -70,7 +70,7 @@ def test_initialization_3d(base_config_3d):
     assert fem.KE.shape == (24, 24)
 
 
-def test_lk_properties_2d(base_config_2d):
+def test_lk_properties_2d(base_config_2d: dict):
     """Test physical properties of the element stiffness matrix (Symmetry & Equilibrium)."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -90,7 +90,7 @@ def test_lk_properties_2d(base_config_2d):
     )
 
 
-def test_boundary_conditions_parsing(base_config_2d):
+def test_boundary_conditions_parsing(base_config_2d: dict):
     """Test if Supports and Forces are parsed into correct DOF indices."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -122,7 +122,7 @@ def test_boundary_conditions_parsing(base_config_2d):
     assert len(fem.fi_indices) == 1, "Should have 1 input force DOF for (2,1) in Y"
 
 
-def test_solver_mechanics(base_config_2d):
+def test_solver_mechanics(base_config_2d: dict):
     """Test that the solver produces a non-zero displacement in the direction of force."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -165,7 +165,7 @@ def test_solver_mechanics(base_config_2d):
     )
 
 
-def test_sensitivities_calculation(base_config_2d):
+def test_sensitivities_calculation(base_config_2d: dict):
     """Test calculation of objective and sensitivities."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -205,7 +205,7 @@ def test_sensitivities_calculation(base_config_2d):
     assert obj > 0, "Compliance objective should be positive"
 
 
-def test_regions_void(base_config_2d):
+def test_regions_void(base_config_2d: dict):
     """Test that applying a Void region forces density to near-zero."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -230,7 +230,7 @@ def test_regions_void(base_config_2d):
     assert x_new[1] == 1.0, "Element outside Void region should remain unchanged"
 
 
-def test_filter_construction(base_config_2d):
+def test_filter_construction(base_config_2d: dict):
     """Test that the filter matrix H is constructed properly."""
     fem = FEM(
         base_config_2d["Dimensions"],
@@ -254,7 +254,7 @@ def test_filter_construction(base_config_2d):
     assert row0[1] > 0, "Element 0 should be connected to neighbor element 1"
 
 
-def test_boundary_conditions_radius(base_config_2d):
+def test_boundary_conditions_radius(base_config_2d: dict):
     """Test if a support with radius fixes multiple nodes."""
     fem = FEM(
         base_config_2d["Dimensions"],
