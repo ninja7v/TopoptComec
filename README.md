@@ -14,7 +14,6 @@ None of the existing competing solutions combine all of these features in a sing
 - 🧊 **2D *and* 3D support** — Real engineering isn’t flat.
 - 🚀 **Fast, like really fast** — Designed for performance, not academic demos.
 - 🧪 **Flexible** — Tons of parameters to tweak → infinite design possibilities.
-- 🛡️ **Reliable** — Bugs fear this program.
 - 🍰 **Easy to use** — Intuitive GUI *and* CLI, piece of cake to use.
 - 🔓 **Open source** — Transparent, extensible. No black boxes.
 
@@ -25,16 +24,34 @@ git clone https://github.com/ninja7V/topoptcomec.git
 cd topoptcomec
 ```
 ### Install dependencies
+```bash
+python -m venv .venv
+```
+Then activate the virtual environment:
+- macOS / Linux:
+```bash
+source .venv/bin/activate
+```
+- Windows PowerShell:
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+- Windows CMD:
 ```cmd
-pip install -r requirements.txt
+.\.venv\Scripts\activate.bat
+```
+Install requirements:
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 ### Run
 GUI:
-```cmd
+```bash
 python main.py
 ```
 CLI:
-```cmd
+```bash
 python main.py -p ForceInverter_2Sup_2D
 ```
 ### Create
