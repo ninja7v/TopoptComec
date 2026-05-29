@@ -25,7 +25,25 @@ FloatArray = npt.NDArray[np.float64]
 def save_as_png(
     xPhys: FloatArray, nelxyz: list[int], filename: str, colors: list[str] | None = None
 ) -> tuple[bool, str | None]:
-    """Saves the density field as a .png image."""
+    """
+    Saves the density field as a .png image.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Element densities, shape (nel,) or (n_mat, nel).
+    nelxyz : list[int]
+        Number of elements in [x, y, z] directions.
+    filename : str
+        Output file path.
+    colors : list[str] | None
+        Optional color list for multi-material visualization.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        (success, error_message) - True if successful, error string otherwise.
+    """
     try:
         nelx, nely, nelz = nelxyz
         is_3d = nelz > 0
@@ -126,7 +144,23 @@ def save_as_png(
 def save_as_vti(
     xPhys: FloatArray, nelxyz: list[int], filename: str
 ) -> tuple[bool, str | None]:
-    """Saves the density field as a .vti file for ParaView."""
+    """
+    Saves the density field as a .vti file for ParaView.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Element densities, shape (nel,) or (n_mat, nel).
+    nelxyz : list[int]
+        Number of elements in [x, y, z] directions.
+    filename : str
+        Output file path.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        (success, error_message) - True if successful, error string otherwise.
+    """
     try:
         nx, ny, nz = nelxyz
         is_multi = xPhys.ndim == 2
@@ -182,7 +216,23 @@ def save_as_vti(
 def save_as_stl(
     xPhys: FloatArray, nelxyz: list[int], filename: str
 ) -> tuple[bool, str | None]:
-    """Saves the result as a .stl file."""
+    """
+    Saves the result as a .stl file using marching cubes.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Element densities, shape (nel,) or (n_mat, nel).
+    nelxyz : list[int]
+        Number of elements in [x, y, z] directions.
+    filename : str
+        Output file path.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        (success, error_message) - True if successful, error string otherwise.
+    """
     try:
         nx, ny, nz = nelxyz
         is_multi = xPhys.ndim == 2
@@ -213,7 +263,25 @@ def save_as_stl(
 def save_as_3mf(
     xPhys: FloatArray, nelxyz: list[int], filename: str, colors: list[str] | None = None
 ) -> tuple[bool, str | None]:
-    """Saves the result as a .3mf file using Lib3MF."""
+    """
+    Saves the result as a .3mf file using Lib3MF.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Element densities, shape (nel,) or (n_mat, nel).
+    nelxyz : list[int]
+        Number of elements in [x, y, z] directions.
+    filename : str
+        Output file path.
+    colors : list[str] | None
+        Optional color list for multi-material visualization.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        (success, error_message) - True if successful, error string otherwise.
+    """
     try:
         nx, ny, nz = nelxyz
         is_multi = xPhys.ndim == 2

@@ -12,7 +12,11 @@ class PlottingMixin:
     """Mixin for MainWindow to handle all plotting operations."""
 
     def _style_plot_default(self):
-        """Sets the plot to a fixed white theme. Called only once."""
+        """
+        Apply the default white theme styling to the plot.
+
+        Sets figure and axes background to white with black labels and spines.
+        """
         self.figure.patch.set_facecolor("white")
         if self.figure.get_axes():
             ax = self.figure.get_axes()[0]
@@ -28,6 +32,18 @@ class PlottingMixin:
     def _plot_deformation(
         self, ax: plt.Axes, is_3d: bool, nelx: int, nely: int, nelz: int
     ):
+        """
+        Plot the deformed shape based on displacement results.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D problem.
+        nelx, nely, nelz : int
+            Number of elements in each dimension.
+        """
         if (
             self.last_params["Displacement"]["disp_iterations"] == 1
         ):  # Single-frame grid plot
@@ -147,7 +163,16 @@ class PlottingMixin:
         # Multi-iteration displacement handled in _update_animation_frame
 
     def _initialize_xphys(self, nelx: int, nely: int, nelz: int, is_3d: bool):
-        """Initializes material settings and regions locally if starting out or restarted."""
+        """
+        Initialize the material density field based on current parameters.
+
+        Parameters
+        ----------
+        nelx, nely, nelz : int
+            Number of elements in each dimension.
+        is_3d : bool
+            Whether this is a 3D problem.
+        """
         from app.core import initializers  # Import here to avoid circular
 
         pm = self.last_params["Materials"]
@@ -215,7 +240,16 @@ class PlottingMixin:
             self._apply_regions(nelx, nely, nelz, is_3d)
 
     def _apply_regions(self, nelx: int, nely: int, nelz: int, is_3d: bool):
-        """Applies solid/void overrides per customized region."""
+        """
+        Apply solid/void region overrides to the current density field.
+
+        Parameters
+        ----------
+        nelx, nely, nelz : int
+            Number of elements in each dimension.
+        is_3d : bool
+            Whether this is a 3D problem.
+        """
         pr = self.last_params["Regions"]
         for i, shape in enumerate(pr["rshape"]):
             if shape == "-":
@@ -273,7 +307,16 @@ class PlottingMixin:
                     self.xPhys[:, flat_idx] = value
 
     def _show_initial_message(self, ax: plt.Axes, is_3d: bool):
-        """Displays initial placeholder message onto canvas before optimization results exist."""
+        """
+        Display placeholder message on the plot before optimization results exist.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        """
         if self.footer.create_button.graphicsEffect() is not None:
             init_message = 'Configure parameters and press "Create"'
             if is_3d:
@@ -302,7 +345,12 @@ class PlottingMixin:
                 )
 
     def replot(self):
-        """Redraws the plot canvas, intelligently showing or hiding each layer based on the state of the visibility buttons."""
+        """
+        Redraw the entire plot including all visible layers.
+
+        Determines which layers to show based on visibility button states
+        and whether displaying deformation or static results.
+        """
         if not self.last_params:
             return  # Do nothing if triggerd in sections initialization
         self.figure.clear()
@@ -335,7 +383,18 @@ class PlottingMixin:
         self.canvas.draw()
 
     def _plot_material(self, ax: plt.Axes, is_3d: bool, xPhys_data=None):
-        """Plot the material."""
+        """
+        Plot the material density field.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        xPhys_data : np.ndarray, optional
+            Density data to plot. Uses self.xPhys if None.
+        """
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
         data_to_plot = self.xPhys if xPhys_data is None else xPhys_data
         if data_to_plot is None:
@@ -353,7 +412,20 @@ class PlottingMixin:
     def _plot_material_2d(
         self, ax: plt.Axes, data: np.ndarray, nelx: int, nely: int, is_multi: bool
     ):
-        """2D material plot — single or multi-material."""
+        """
+        Plot 2D material density field.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        data : np.ndarray
+            Density data of shape (nel,) or (n_mat, nel).
+        nelx, nely : int
+            Number of elements in x and y dimensions.
+        is_multi : bool
+            Whether this is multi-material data.
+        """
         if is_multi:
             n_mat, nel = data.shape
             rgb_image = np.ones((nel, 3))  # Start white
@@ -395,7 +467,20 @@ class PlottingMixin:
         nelz: int,
         is_multi: bool,
     ):
-        """3D material plot — single or multi-material."""
+        """
+        Plot 3D material density field as a scatter plot.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib 3D axes object.
+        data : np.ndarray
+            Density data of shape (nel,) or (n_mat, nel).
+        nelx, nely, nelz : int
+            Number of elements in each dimension.
+        is_multi : bool
+            Whether this is multi-material data.
+        """
         if is_multi:
             # Effective density for visibility
             eff_density = data.sum(axis=0)
@@ -448,7 +533,16 @@ class PlottingMixin:
         ax.set_box_aspect([nelx, nely, nelz])
 
     def _redraw_non_material_layers(self, ax: plt.Axes, is_3d: bool):
-        """Helper to draw all the plot layers that are NOT the main result."""
+        """
+        Redraw overlay layers (forces, supports, regions, dimensions, displacement preview).
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        """
         # Layer 2: Overlays
         self._plot_forces(ax, is_3d=is_3d)
         self._plot_supports(ax, is_3d=is_3d)
@@ -457,7 +551,17 @@ class PlottingMixin:
         self._plot_displacement_preview(ax, is_3d=is_3d)
 
     def _plot_dimensions_frame(self, ax: plt.Axes, is_3d: bool):
-        """Draws a dotted frame around the design space, controlled by the Dimensions section's visibility button."""
+        """
+        Draw a dotted frame around the design space.
+        Controlled by the Dimensions section's visibility button.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        """
         if not self.sections["Dimensions"].visibility_button.isChecked():
             ax.set_xlabel("")
             ax.set_ylabel("")
@@ -530,6 +634,16 @@ class PlottingMixin:
             spine.set_edgecolor("black")
 
     def _plot_forces(self, ax: plt.Axes, is_3d: bool):
+        """
+        Plot force vectors on the axes.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        """
         if not self.sections["Forces"].visibility_button.isChecked():
             return
         if not self.last_params or "Forces" not in self.last_params:
@@ -549,6 +663,23 @@ class PlottingMixin:
             self._plot_initial_forces(ax, is_3d, pf, length)
 
     def _arrow_vectors(self, dirs: list, length: float, is_3d: bool):
+        """
+        Convert force direction strings to direction vectors.
+
+        Parameters
+        ----------
+        dirs : list
+            List of direction strings (e.g., "X:→", "Y:↑").
+        length : float
+            Length scaling factor.
+        is_3d : bool
+            Whether this is a 3D problem.
+
+        Returns
+        -------
+        tuple
+            (dx, dy, dz) - Direction vector components.
+        """
         dx = np.zeros(len(dirs))
         dy = np.zeros(len(dirs))
         dz = np.zeros(len(dirs)) if is_3d else None
@@ -571,6 +702,20 @@ class PlottingMixin:
         return dx, dy, dz
 
     def _plot_initial_forces(self, ax: plt.Axes, is_3d: bool, pf: dict, length: float):
+        """
+        Plot force vectors at their initial positions.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        pf : dict
+            Forces parameter dictionary.
+        length : float
+            Arrow length scaling factor.
+        """
         for prefix, color in [("fi", "r"), ("fo", "b")]:
             dirs = np.array(pf[f"{prefix}dir"])
             active = dirs != "-"
@@ -600,6 +745,20 @@ class PlottingMixin:
                 ax.quiver(x, y, dx, dy, color=color, units="xy", scale=1, width=0.5)
 
     def _plot_deformed_forces(self, ax: plt.Axes, is_3d: bool, pd: dict, length: float):
+        """
+        Plot force vectors at their displaced positions.
+
+        Parameters
+        ----------
+        ax : plt.Axes
+            Matplotlib axes object.
+        is_3d : bool
+            Whether this is a 3D plot.
+        pd : dict
+            Dimensions parameter dictionary.
+        length : float
+            Arrow length scaling factor.
+        """
         nely = pd["nelxyz"][1]
         disp_factor = self.displacement_widget.mov_disp.value()
 

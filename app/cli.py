@@ -175,6 +175,25 @@ def _run_single_preset(
 def _export(
     xPhys: FloatArray, nelxyz: list[int], filename: str, format: str
 ) -> tuple[bool, str | None]:
+    """
+    Dispatch export to the correct exporter function.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Element densities.
+    nelxyz : list[int]
+        Number of elements in [x, y, z] directions.
+    filename : str
+        Output file path.
+    format : str
+        Export format ("png", "vti", "stl", or "3mf").
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        (success, error_message) - True if successful, error string otherwise.
+    """
     """Dispatch export to the correct exporter."""
     if format == "png":
         return exporters.save_as_png(xPhys, nelxyz, filename)

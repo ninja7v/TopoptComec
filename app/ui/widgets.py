@@ -31,6 +31,27 @@ from .icons import icons
 def _make_spin(
     min_v: int, max_v: int, val: int, tip: str = "", width: int = 60
 ) -> QSpinBox:
+    """
+    Create a configured QSpinBox.
+
+    Parameters
+    ----------
+    min_v : int
+        Minimum value.
+    max_v : int
+        Maximum value.
+    val : int
+        Initial value.
+    tip : str
+        Tooltip text.
+    width : int
+        Maximum width in pixels.
+
+    Returns
+    -------
+    QSpinBox
+        Configured spin box widget.
+    """
     s = QSpinBox()
     s.setRange(min_v, max_v)
     s.setValue(val)
@@ -48,6 +69,29 @@ def _make_dspin(
     tip: str = "",
     width: int = 60,
 ) -> QDoubleSpinBox:
+    """
+    Create a configured QDoubleSpinBox.
+
+    Parameters
+    ----------
+    min_v : float
+        Minimum value.
+    max_v : float
+        Maximum value.
+    val : float
+        Initial value.
+    step : float
+        Step increment.
+    tip : str
+        Tooltip text.
+    width : int
+        Maximum width in pixels.
+
+    Returns
+    -------
+    QDoubleSpinBox
+        Configured double spin box widget.
+    """
     s = QDoubleSpinBox()
     s.setRange(min_v, max_v)
     s.setValue(val)
@@ -59,6 +103,23 @@ def _make_dspin(
 
 
 def _make_combo(items: list = [], index: int = 0, tip: str = "") -> QComboBox:
+    """
+    Create a configured QComboBox.
+
+    Parameters
+    ----------
+    items : list
+        List of string items to add.
+    index : int
+        Initial selected index.
+    tip : str
+        Tooltip text.
+
+    Returns
+    -------
+    QComboBox
+        Configured combo box widget.
+    """
     c = QComboBox()
     c.addItems(items)
     c.setCurrentIndex(index)
@@ -70,6 +131,18 @@ class CollapsibleSection(QWidget):
     """A collapsible widget section with a title bar and a content area."""
 
     def __init__(self, title="Section", content_widget=None, parent=None):
+        """
+        Initialize the collapsible section.
+
+        Parameters
+        ----------
+        title : str
+            Title text for the section header.
+        content_widget : QWidget, optional
+            Widget to display in the content area.
+        parent : QWidget, optional
+            Parent widget.
+        """
         super().__init__(parent)
         self.setSizePolicy(
             QSizePolicy.Policy.MinimumExpanding, QSizePolicy.Policy.Fixed
@@ -127,9 +200,25 @@ class CollapsibleSection(QWidget):
         self.title_bar.mousePressEvent = lambda event: self.toggle_button.toggle()
 
     def set_visibility_toggle(self, visible: bool):
+        """
+        Set the visibility of the visibility toggle button.
+
+        Parameters
+        ----------
+        visible : bool
+            Whether to show the visibility button.
+        """
         self.visibility_button.setVisible(visible)
 
     def toggle_collapse(self, checked: bool):
+        """
+        Toggle the collapsed/expanded state of the section.
+
+        Parameters
+        ----------
+        checked : bool
+            Whether the toggle button is checked (expanded).
+        """
         self.is_collapsed = not checked
         self.content_widget.setVisible(not self.is_collapsed)
         self.toggle_button.setIcon(
@@ -137,9 +226,11 @@ class CollapsibleSection(QWidget):
         )
 
     def collapse(self):
+        """Collapse the section content."""
         self.toggle_button.setChecked(False)
 
     def expand(self):
+        """Expand the section content."""
         self.toggle_button.setChecked(True)
 
     def update_all_icons(self):
@@ -175,6 +266,11 @@ class ColorPickerButton(QPushButton):
         self.setToolTip("Select material color")
 
     def pick_color(self):
+        """
+        Open a color dialog and update the selected color.
+
+        Emits colorChanged signal if a valid color is selected.
+        """
         new_color = QColorDialog.getColor(self.color, self, "Choose a color")
         if new_color.isValid():
             self.color = new_color
@@ -182,14 +278,31 @@ class ColorPickerButton(QPushButton):
             self.colorChanged.emit(self.color)
 
     def update_color(self):
+        """Update the button's background color to reflect the current color."""
         self.setStyleSheet(
             f"QPushButton#ColorPickerButton {{ background-color: {self.color.name()}; }}"
         )
 
     def get_color(self) -> str:
+        """
+        Get the current color as a hex string.
+
+        Returns
+        -------
+        str
+            Color in "#RRGGBB" format.
+        """
         return self.color.name()
 
     def set_color(self, color: str | QColor):
+        """
+        Set the button's color.
+
+        Parameters
+        ----------
+        color : str | QColor
+            Color as hex string or QColor object.
+        """
         if isinstance(color, str):
             color = QColor(color)
 
@@ -200,9 +313,14 @@ class ColorPickerButton(QPushButton):
 
 
 class HeaderWidget(QWidget):
-    """Custom Widget for the control panel's header, including title and action buttons."""
+    """
+    Header widget for the control panel with title and action buttons.
+
+    Includes info, help, issue buttons and theme toggle.
+    """
 
     def __init__(self):
+        """Initialize the header widget with title and navigation buttons."""
         super().__init__()
         title_layout = QHBoxLayout(self)
         title_layout.setContentsMargins(0, 0, 0, 0)
@@ -248,9 +366,14 @@ class HeaderWidget(QWidget):
 
 
 class PresetWidget(QFrame):
-    """Custom widget for dimension inputs with a 3D axis visual."""
+    """
+    Widget for managing saved parameter presets.
+
+    Provides UI for loading, saving, and deleting presets.
+    """
 
     def __init__(self):
+        """Initialize the preset widget."""
         super().__init__()
         # Frame
         self.setObjectName("presetFrame")
@@ -274,9 +397,14 @@ class PresetWidget(QFrame):
 
 
 class DimensionsWidget(QWidget):
-    """Custom widget for dimension inputs with a 3D axis visual."""
+    """
+    Widget for specifying problem dimensions and volume fraction.
+
+    Includes size inputs (nx, ny, nz), volume fraction, and scaling controls.
+    """
 
     def __init__(self):
+        """Initialize the dimensions widget."""
         super().__init__()
         layout = QVBoxLayout(self)
         # Line 1: "Size:" [X] x [Y] x [Z]
@@ -316,11 +444,16 @@ class DimensionsWidget(QWidget):
 
 
 class RegionsWidget(QWidget):
-    """Custom widget for regions inputs."""
+    """
+    Widget for defining void/filled regions in the design domain.
+
+    Supports adding and removing regions with shape, state, radius, and position.
+    """
 
     nbRegionsChanged = Signal()
 
     def __init__(self):
+        """Initialize the regions widget."""
         super().__init__()
         self.inputs = []  # This list will hold the input widgets so the MainWindow can access them
 
@@ -347,6 +480,22 @@ class RegionsWidget(QWidget):
         pos: list = None,
         emit_signal: bool = True,
     ):
+        """
+        Add a new region to the widget.
+
+        Parameters
+        ----------
+        rshape : str
+            Shape type ("□" or "◯").
+        rstate : str
+            State ("Void" or "Filled").
+        rradius : int
+            Radius of the region.
+        pos : list
+            Position [x, y, z].
+        emit_signal : bool
+            Whether to emit nbRegionsChanged signal.
+        """
         row = len(self.inputs)
         if row >= 10:  # safety
             return
@@ -420,6 +569,14 @@ class RegionsWidget(QWidget):
         self.update_remove_buttons()
 
     def remove_region_by_widget(self, container_widget: QWidget):
+        """
+        Remove a region by its container widget.
+
+        Parameters
+        ----------
+        container_widget : QWidget
+            The container widget of the region to remove.
+        """
         # Find index
         idx = -1
         for i, region in enumerate(self.inputs):
@@ -431,6 +588,16 @@ class RegionsWidget(QWidget):
             self.remove_region(idx)
 
     def remove_region(self, row: int, emit_signal: bool = True):
+        """
+        Remove a region by its row index.
+
+        Parameters
+        ----------
+        row : int
+            Index of the region to remove.
+        emit_signal : bool
+            Whether to emit nbRegionsChanged signal.
+        """
         if row < 0 or row >= len(self.inputs):
             return
 
@@ -445,10 +612,6 @@ class RegionsWidget(QWidget):
             self.nbRegionsChanged.emit()
         self.update_remove_buttons()
 
-    def rebuild_grid(self):
-        pass  # No longer needed, but keeping for compatibility if tests call it?
-        # Actually tests don't call it directly.
-
     def update_remove_buttons(self):
         enabled = len(self.inputs) > 0
         for region in self.inputs:
@@ -456,11 +619,16 @@ class RegionsWidget(QWidget):
 
 
 class ForcesWidget(QWidget):
-    """Custom widget for defining the input and output forces."""
+    """
+    Widget for defining input and output forces.
+
+    Supports adding/removing forces with position, direction, and magnitude.
+    """
 
     nbForcesChanged = Signal()
 
     def __init__(self):
+        """Initialize the forces widget."""
         super().__init__()
         self.input_forces = []
         self.output_forces = []
@@ -510,6 +678,14 @@ class ForcesWidget(QWidget):
 
     @property
     def inputs(self) -> list:
+        """
+        Get all force widgets (input + output combined).
+
+        Returns
+        -------
+        list
+            Combined list of input and output force dictionaries.
+        """
         return self.input_forces + self.output_forces
 
     def add_input_force(
@@ -519,6 +695,20 @@ class ForcesWidget(QWidget):
         norm: float = 0.01,
         emit_signal: bool = True,
     ):
+        """
+        Add a new input force.
+
+        Parameters
+        ----------
+        pos : list
+            Position [x, y, z].
+        arrow_idx : int
+            Index of the direction arrow.
+        norm : float
+            Force magnitude.
+        emit_signal : bool
+            Whether to emit nbForcesChanged signal.
+        """
         if len(self.input_forces) >= 10:
             return
 
@@ -584,6 +774,20 @@ class ForcesWidget(QWidget):
         norm: float = 0.01,
         emit_signal: bool = True,
     ):
+        """
+        Add a new output force (spring).
+
+        Parameters
+        ----------
+        pos : list
+            Position [x, y, z].
+        arrow_idx : int
+            Index of the direction arrow.
+        norm : float
+            Spring stiffness magnitude.
+        emit_signal : bool
+            Whether to emit nbForcesChanged signal.
+        """
         if len(self.output_forces) >= 10:
             return
 
@@ -645,6 +849,16 @@ class ForcesWidget(QWidget):
         self.update_ui_state()
 
     def remove_force_by_widget(self, container: QWidget, is_input: bool):
+        """
+        Remove a force by its container widget.
+
+        Parameters
+        ----------
+        container : QWidget
+            The container widget of the force to remove.
+        is_input : bool
+            Whether this is an input force (True) or output force (False).
+        """
         target_list = self.input_forces if is_input else self.output_forces
         idx = -1
         for i, force in enumerate(target_list):
@@ -656,6 +870,18 @@ class ForcesWidget(QWidget):
             self.remove_force(idx, is_input)
 
     def remove_force(self, row: int, is_input: bool, emit_signal: bool = True):
+        """
+        Remove a force by its row index.
+
+        Parameters
+        ----------
+        row : int
+            Index of the force to remove.
+        is_input : bool
+            Whether this is an input force (True) or output force (False).
+        emit_signal : bool
+            Whether to emit nbForcesChanged signal.
+        """
         target_list = self.input_forces if is_input else self.output_forces
         if row < 0 or row >= len(target_list):
             return
@@ -669,6 +895,11 @@ class ForcesWidget(QWidget):
         self.update_ui_state()
 
     def update_ui_state(self):
+        """
+        Update the enabled/disabled state of add and remove buttons.
+
+        Ensures constraints are met: 1-10 input forces, 0-10 output forces.
+        """
         can_add_input = len(self.input_forces) < 10
         can_remove_input = len(self.input_forces) > 1
         self.add_if_btn.setEnabled(can_add_input)
@@ -683,13 +914,18 @@ class ForcesWidget(QWidget):
 
 
 class SupportWidget(QWidget):
-    """Custom widget for defining up to four supports."""
+    """
+    Widget for defining support boundary conditions.
+
+    Supports adding/removing supports with position, fixed dimensions, and radius.
+    """
 
     nbSupportsChanged = (
         Signal()
     )  # Signal to update the parameters when the number of supports changes
 
     def __init__(self):
+        """Initialize the support widget."""
         super().__init__()
         self.inputs = []  # This list will hold the input widgets so the MainWindow can access them
 
@@ -717,6 +953,20 @@ class SupportWidget(QWidget):
         radius: int = 0,
         emit_signal: bool = True,
     ):
+        """
+        Add a new support.
+
+        Parameters
+        ----------
+        pos : list
+            Position [x, y, z].
+        dim : str
+            Fixed dimensions ("X", "Y", "Z", "XY", etc.).
+        radius : int
+            Support radius (0 for single node).
+        emit_signal : bool
+            Whether to emit nbSupportsChanged signal.
+        """
         row = len(self.inputs)
         if row >= 10:  # safety
             return
@@ -779,6 +1029,14 @@ class SupportWidget(QWidget):
         self.update_remove_buttons()
 
     def remove_support_by_widget(self, container_widget: QWidget):
+        """
+        Remove a support by its container widget.
+
+        Parameters
+        ----------
+        container_widget : QWidget
+            The container widget of the support to remove.
+        """
         # Find index
         idx = -1
         for i, support in enumerate(self.inputs):
@@ -790,6 +1048,16 @@ class SupportWidget(QWidget):
             self.remove_support(idx)
 
     def remove_support(self, row: int, emit_signal: bool = True):
+        """
+        Remove a support by its row index.
+
+        Parameters
+        ----------
+        row : int
+            Index of the support to remove.
+        emit_signal : bool
+            Whether to emit nbSupportsChanged signal.
+        """
         if row < 0 or row >= len(self.inputs):
             return
 
@@ -809,13 +1077,19 @@ class SupportWidget(QWidget):
 
 
 class MaterialsWidget(QWidget):
-    """Custom widget for defining the materials."""
+    """
+    Widget for defining material properties.
+
+    Supports adding/removing materials with E, nu, percentage, and color.
+    Maximum 2 materials supported.
+    """
 
     nbMaterialsChanged = (
         Signal()
     )  # Signal to update the parameters when the number of material changes
 
     def __init__(self):
+        """Initialize the materials widget."""
         super().__init__()
         self.inputs = []
 
@@ -857,6 +1131,22 @@ class MaterialsWidget(QWidget):
         color: str = "#000000",
         emit_signal: bool = True,
     ):
+        """
+        Add a new material.
+
+        Parameters
+        ----------
+        E : float
+            Young's modulus.
+        nu : float
+            Poisson's ratio.
+        percent : int
+            Volume fraction percentage.
+        color : str
+            Hex color string.
+        emit_signal : bool
+            Whether to emit nbMaterialsChanged signal.
+        """
         if len(self.inputs) > 1:
             return
 
@@ -928,6 +1218,14 @@ class MaterialsWidget(QWidget):
         self.update_ui_state()
 
     def remove_material_by_widget(self, container: QWidget):
+        """
+        Remove a material by its container widget.
+
+        Parameters
+        ----------
+        container : QWidget
+            The container widget of the material to remove.
+        """
         idx = -1
         for i, mat in enumerate(self.inputs):
             if mat["container"] == container:
@@ -937,6 +1235,16 @@ class MaterialsWidget(QWidget):
             self.remove_material(idx)
 
     def remove_material(self, row: int, emit_signal: bool = True):
+        """
+        Remove a material by its row index.
+
+        Parameters
+        ----------
+        row : int
+            Index of the material to remove.
+        emit_signal : bool
+            Whether to emit nbMaterialsChanged signal.
+        """
         if row < 0 or row >= len(self.inputs):
             return
 
@@ -969,6 +1277,11 @@ class MaterialsWidget(QWidget):
             other.blockSignals(False)
 
     def update_ui_state(self):
+        """
+        Update the enabled/disabled state of add and remove buttons.
+
+        Ensures constraints are met: 1-2 materials maximum.
+        """
         # Update Add/Remove buttons state
         can_add = len(self.inputs) < 2
         can_remove = len(self.inputs) > 1
@@ -979,9 +1292,14 @@ class MaterialsWidget(QWidget):
 
 
 class OptimizerWidget(QWidget):
-    """Custom widget for optimizer inputs."""
+    """
+    Widget for specifying optimizer parameters.
+
+    Includes filter type, penalization, convergence criteria, and solver options.
+    """
 
     def __init__(self):
+        """Initialize the optimizer widget."""
         super().__init__()
         layout = QGridLayout(self)
         # Filter type
@@ -1056,9 +1374,14 @@ class OptimizerWidget(QWidget):
 
 
 class AnalysisWidget(QWidget):
-    """Custom widget for analysis."""
+    """
+    Widget for displaying mechanism analysis results.
+
+    Shows checkerboard pattern detection, watertightness, thresholding, and efficiency.
+    """
 
     def __init__(self):
+        """Initialize the analysis widget."""
         super().__init__()
         layout = QGridLayout(self)
         # Checkerboard
@@ -1103,9 +1426,14 @@ class AnalysisWidget(QWidget):
 
 
 class DisplacementWidget(QWidget):
-    """Custom widget for displacement inputs."""
+    """
+    Widget for displacement animation parameters.
+
+    Includes displacement factor, iterations, and animation controls.
+    """
 
     def __init__(self):
+        """Initialize the displacement widget."""
         super().__init__()
         layout = QGridLayout(self)
         # Displacement
@@ -1161,9 +1489,14 @@ class DisplacementWidget(QWidget):
 
 
 class FooterWidget(QWidget):
-    """Custom widget for the footer."""
+    """
+    Footer widget with create, stop, binarize, and save buttons.
+
+    Provides the main action controls for optimization.
+    """
 
     def __init__(self):
+        """Initialize the footer widget."""
         super().__init__()
         # Create button
         action_layout = QHBoxLayout(self)
@@ -1214,6 +1547,14 @@ class FooterWidget(QWidget):
         action_layout.addWidget(self.save_button)
 
     def start_create_button_effect(self, color_hex: str = "#F97316"):
+        """
+        Start the glow animation effect on the create button.
+
+        Parameters
+        ----------
+        color_hex : str
+            Hex color code for the glow effect.
+        """
         # Shadow effect for glow
         create_button_effect = QGraphicsDropShadowEffect(self.create_button)
         create_button_effect.setBlurRadius(20)
@@ -1230,4 +1571,5 @@ class FooterWidget(QWidget):
         anim.start()
 
     def stop_create_button_effect(self):
+        """Stop the glow animation effect on the create button."""
         self.create_button.setGraphicsEffect(None)

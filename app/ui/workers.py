@@ -2,6 +2,11 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # QThread worker for running optimizers and displacements in the background.
 
+"""
+Workers for running topology optimization, displacement simulation,
+and mechanism analysis in background threads.
+"""
+
 from __future__ import annotations
 import numpy as np
 import numpy.typing as npt
@@ -19,37 +24,42 @@ class Worker:
 
     @abstractmethod
     def request_stop(self) -> None:
+        """Request the worker to stop."""
         pass
 
     @abstractmethod
     def run(self) -> None:
+        """Execute the worker's main task."""
         pass
 
 
 class OptimizerWorker(QThread, Worker):
     """Runs the topology optimization in a separate thread."""
 
-    # Signal arguments: iteration, objective, change
     progress = Signal(int, float, float)
-    # Signal arguments: xPhys_frame
     frameReady = Signal(object)
-    # Signal argument: result array
     finished = Signal(np.ndarray)
-    # Signal argument: error message string
     error = Signal(str)
 
     def __init__(self, params: dict) -> None:
+        """Initialize the optimizer worker.
+
+        Parameters
+        ----------
+        params : dict
+            Optimization parameters dictionary.
+        """
         super().__init__()
         self.params: dict = params
         self.stop_requested: bool = False
 
     def request_stop(self) -> None:
-        """Public method for the main thread to request a stop."""
+        """Request the worker to stop."""
         print("Stop request received by worker.")
         self.stop_requested = True
 
     def run(self) -> None:
-        """Executes the optimization based on the provided parameters."""
+        """Execute the optimization based on the provided parameters."""
         try:
             optimizer_params: dict = copy.deepcopy(self.params)
             # Remove unneeded parameters for the optimizer
@@ -92,20 +102,26 @@ class OptimizerWorker(QThread, Worker):
 
 
 class DisplacementWorker(QThread, Worker):
-    """Runs the displacement in a separate thread."""
+    """Runs the displacement simulation in a separate thread."""
 
-    # Signal arguments: (current_iteration)
     progress = Signal(int)
-    # Signal arguments: (xPhys_frame_data)
     frameReady = Signal(np.ndarray)
-    # Signal arguments: ()
     linearResultReady = Signal(object)
-    # Signal arguments: (result_message)
     finished = Signal(str, bool)
-    # Signal arguments: (error_message)
     error = Signal(str)
 
     def __init__(self, params: dict, xPhys: FloatArray, u: FloatArray) -> None:
+        """Initialize the displacement worker.
+
+        Parameters
+        ----------
+        params : dict
+            Simulation parameters.
+        xPhys : FloatArray
+            Density field from optimization.
+        u : FloatArray
+            Displacement vector from optimization.
+        """
         super().__init__()
         self.params: dict = params
         self.xPhys: FloatArray = xPhys
@@ -113,12 +129,12 @@ class DisplacementWorker(QThread, Worker):
         self._stop_requested: bool = False
 
     def request_stop(self) -> None:
-        """Public method for the main thread to request a stop."""
+        """Request the worker to stop."""
         print("Stop request received by worker.")
         self._stop_requested = True
 
     def run(self) -> None:
-        """Executes the analysis based on provided parameters."""
+        """Execute the displacement simulation based on provided parameters."""
         try:
 
             def _progress_callback(iteration: int) -> bool:
@@ -143,20 +159,26 @@ class DisplacementWorker(QThread, Worker):
 
 
 class AnalysisWorker(QThread, Worker):
-    """Runs the analysis in a separate thread."""
+    """Runs the mechanism analysis in a separate thread."""
 
-    # Signal arguments: (current_iteration)
     progress = Signal(int)
-    # Signal arguments: (xPhys_frame_data)
     frameReady = Signal(np.ndarray)
-    # Signal arguments: ()
     analysis_finished = Signal(object)
-    # Signal arguments: (result_message)
     finished = Signal(np.ndarray)
-    # Signal arguments: (error_message)
     error = Signal(str)
 
     def __init__(self, params: dict, xPhys: FloatArray, u: FloatArray) -> None:
+        """Initialize the analysis worker.
+
+        Parameters
+        ----------
+        params : dict
+            Analysis parameters.
+        xPhys : FloatArray
+            Density field from optimization.
+        u : FloatArray
+            Displacement vector from optimization.
+        """
         super().__init__()
         self.params: dict = params
         self.xPhys: FloatArray = xPhys
@@ -164,12 +186,12 @@ class AnalysisWorker(QThread, Worker):
         self._stop_requested: bool = False
 
     def request_stop(self) -> None:
-        """Public method for the main thread to request a stop."""
+        """Request the worker to stop."""
         print("Stop request received by worker.")
         self._stop_requested = True
 
     def run(self) -> None:
-        """Executes the analysis based on provided parameters."""
+        """Execute the mechanism analysis based on provided parameters."""
         try:
             analysis_params: dict = self.params.copy()
             analysis_params["xPhys"] = self.xPhys

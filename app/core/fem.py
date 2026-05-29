@@ -15,7 +15,37 @@ IntArray = npt.NDArray[np.int64]
 
 
 class FEM:
+    """
+    Finite Element Method solver for topology optimization.
+
+    Supports 2D (Q4) and 3D (H8) continuum elements with multiple load cases,
+    SIMP-based material interpolation, and sensitivity filtering.
+
+    Parameters
+    ----------
+    Dimensions : Dict
+        Mesh configuration with 'nelxyz' key specifying [nx, ny, nz].
+    Materials : Dict
+        Material properties: 'E' (Young's modulus list), 'nu' (Poisson's ratio list).
+    Optimizer : Dict
+        Optimization settings: 'penal' (SIMP exponent), 'solver',
+        'filter_type', 'filter_radius_min'.
+    """
+
     def __init__(self, Dimensions: dict, Materials: dict, Optimizer: dict) -> None:
+        """
+        Initialize the FEM solver.
+
+        Parameters
+        ----------
+        Dimensions : dict
+            Mesh configuration with 'nelxyz' key specifying [nx, ny, nz].
+        Materials : dict
+            Material properties: 'E' (Young's modulus list), 'nu' (Poisson's ratio list).
+        Optimizer : dict
+            Optimization settings: 'penal' (SIMP exponent), 'solver',
+            'filter_type', 'filter_radius_min'.
+        """
         # Geometry and Grid Setup
         self.nelxyz: Sequence[int] = Dimensions.get("nelxyz", [1, 1, 1])
         self.nelx, self.nely, self.nelz = (int(v) for v in self.nelxyz)
@@ -65,7 +95,17 @@ class FEM:
     def setup_boundary_conditions(
         self, forces: dict, supports: dict | None = None
     ) -> None:
-        """Parses Forces and Supports dicts to create force vectors and fixed DOFs."""
+        """
+        Parse Forces and Supports dicts to create force vectors and fixed DOFs.
+
+        Parameters
+        ----------
+        Forces : Dict
+            Input forces: 'fix', 'fiy', 'fiz', 'fidir', 'finorm'
+            Output forces: 'fox', 'foy', 'foz', 'fodir', 'fonorm'
+        Supports : Dict, optional
+            Support conditions: 'sx', 'sy', 'sz', 'sr' (radius), 'sdim'
+        """
         # Forces
         di: list[int]
         do: list[int]
@@ -147,7 +187,21 @@ class FEM:
         )
 
     def apply_regions(self, x: FloatArray, regions: dict) -> FloatArray:
-        """Applies geometric constraints (Regions) to the density field."""
+        """
+        Apply geometric constraints (Regions) to the density field.
+
+        Parameters
+        ----------
+        x : FloatArray
+            Current design variable vector.
+        Regions : Dict
+            Region definitions with 'rshape', 'rx', 'ry', 'rz', 'rradius', 'rstate'.
+
+        Returns
+        -------
+        FloatArray
+            Modified density field with regions applied.
+        """
         xPhys = x.copy()
         rshape: list[str] = regions.get("rshape", [])
         if not rshape:
@@ -193,7 +247,19 @@ class FEM:
         return xPhys
 
     def solve(self, xPhys: FloatArray) -> tuple[FloatArray, FloatArray]:
-        """Assembles K and solves for Input and Output forces."""
+        """
+        Assemble stiffness matrix and solve for displacements.
+
+        Parameters
+        ----------
+        xPhys : FloatArray
+            Physical (filtered) element densities. Shape (nel,) or (nb_mat, nel).
+
+        Returns
+        -------
+        Tuple[FloatArray, FloatArray]
+            (ui, uo) - Displacement arrays for input and output forces.
+        """
         # Assembly
         E_eff = (
             self.E_min[:, None] + xPhys**self.penal * (self.E_max - self.E_min)[:, None]
@@ -217,10 +283,23 @@ class FEM:
         return ui, uo
 
     def compute_ce(self, ui: FloatArray, uo: FloatArray) -> FloatArray:
-        """Compute element compliance ce = u^T KE u for all elements.
+        """
+        Compute element-wise compliance contribution ce = u^T * KE * u.
 
-        For rigid mechanisms (no output forces): ce = sum_i u_i^T KE u_i
-        For compliant mechanisms: ce = sum_i sum_o u_in^T KE u_out
+        For rigid mechanisms: ce = sum_i u_i^T * KE * u_i
+        For compliant mechanisms: ce = sum_i sum_o u_in^T * KE * u_out
+
+        Parameters
+        ----------
+        ui : FloatArray
+            Displacements due to input forces, shape (ndof, n_inputs).
+        uo : FloatArray
+            Displacements due to output forces, shape (ndof, n_outputs).
+
+        Returns
+        -------
+        FloatArray
+            Element compliance values, shape (nel,).
         """
         nb_out = len(self.fo_indices)
         ce_total = np.zeros(self.nel, dtype=np.float64)
@@ -241,7 +320,21 @@ class FEM:
     def compute_sensitivities(
         self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray
     ) -> tuple[FloatArray, FloatArray]:
-        """Calculates Sensitivity (dc) and Volume Sensitivity (dv)."""
+        """
+        Calculate sensitivity derivatives for optimization.
+
+        Parameters
+        ----------
+        xPhys : FloatArray
+            Physical element densities.
+        ui, uo : FloatArray
+            Displacement solutions.
+
+        Returns
+        -------
+        Tuple[FloatArray, FloatArray]
+            (dc, dv) - Compliance sensitivity and volume sensitivity.
+        """
         nb_out = len(self.fo_indices)
         ce_total = self.compute_ce(ui, uo)
 
@@ -260,7 +353,22 @@ class FEM:
     def compute_objective(
         self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray
     ) -> float:
-        """Compute objective value based on current displacements."""
+        """
+        Compute objective function value.
+
+        For rigid mechanisms: total compliance
+        For compliant mechanisms: sum of output displacements
+
+        Parameters
+        ----------
+        xPhys, ui, uo : FloatArray
+            As per solve() and compute_ce().
+
+        Returns
+        -------
+        float
+            Objective function value.
+        """
         nb_out = len(self.fo_indices)
         obj_val = 0.0
 
@@ -280,6 +388,19 @@ class FEM:
     # --- Internal Helper Methods ---
 
     def _get_node_idx(self, x: int, y: int, z: int) -> int:
+        """
+        Convert 3D element coordinates to a single node index.
+
+        Parameters
+        ----------
+        x, y, z : int
+            Element coordinates in each dimension.
+
+        Returns
+        -------
+        int
+            The flattened node index.
+        """
         return (
             (z * (self.nelx + 1) * (self.nely + 1) if self.is_3d else 0)
             + x * (self.nely + 1)
@@ -295,6 +416,26 @@ class FEM:
         kdir: str,
         knorm: str,
     ) -> tuple[FloatArray, list[int], list[int]]:
+        """
+        Parse force parameters and build force vectors.
+
+        Parameters
+        ----------
+        Forces : dict
+            Force parameters dictionary.
+        kx, ky, kz : str
+            Dictionary keys for x, y, z coordinates.
+        kdir : str
+            Dictionary key for force direction.
+        knorm : str
+            Dictionary key for force magnitude.
+
+        Returns
+        -------
+        tuple[FloatArray, list[int], list[int]]
+            (force_vector, active_indices, dof_indices) - The assembled force
+            vector, indices of active forces, and corresponding DOF indices.
+        """
         fx = Forces.get(kx, [])
         fy = Forces.get(ky, [])
         fz = Forces.get(kz, []) if self.is_3d else []
@@ -333,6 +474,20 @@ class FEM:
         active_indices: list[int],
         norms: list[float],
     ) -> None:
+        """
+        Add artificial spring stiffness at force locations.
+
+        Parameters
+        ----------
+        K : csc_matrix
+            Global stiffness matrix (modified in place).
+        dofs : list[int]
+            List of DOF indices where springs are added.
+        active_indices : list[int]
+            Indices mapping to the norms array.
+        norms : list[float]
+            Spring stiffness values.
+        """
         for i, dof in enumerate(dofs):
             original_idx = active_indices[i]
             if original_idx < len(norms) and norms[original_idx] > 0:
@@ -345,6 +500,20 @@ class FEM:
         active_indices: list[int],
         U_full: FloatArray,
     ) -> None:
+        """
+        Solve the linear system Ku = F using direct or iterative methods.
+
+        Parameters
+        ----------
+        K_free : csc_matrix
+            Reduced stiffness matrix (free DOFs only).
+        F : FloatArray | None
+            Force vector.
+        active_indices : list[int]
+            Indices of active forces.
+        U_full : FloatArray
+            Displacement vector to fill (modified in place).
+        """
         if not active_indices or F is None:
             return
 
@@ -388,6 +557,23 @@ class FEM:
     def _apply_filter(
         self, x: FloatArray, dc: FloatArray, dv: FloatArray
     ) -> tuple[FloatArray, FloatArray]:
+        """
+        Apply sensitivity or density filtering to sensitivities.
+
+        Parameters
+        ----------
+        x : FloatArray
+            Design variables.
+        dc : FloatArray
+            Compliance sensitivities.
+        dv : FloatArray
+            Volume sensitivities.
+
+        Returns
+        -------
+        tuple[FloatArray, FloatArray]
+            (filtered_dc, filtered_dv) - Filtered sensitivity arrays.
+        """
         if self.filter_type == "Sensitivity":
             # H * (x * dc) / Hs / max(x, 0.001)
             dc = np.asarray((self.H @ (x * dc)) / self.Hs.flatten()) / np.maximum(
@@ -399,13 +585,32 @@ class FEM:
         return dc, dv
 
     def update_xPhys(self, x: FloatArray) -> FloatArray:
-        """Calculates physical density based on design variable and filter."""
+        """
+        Calculate physical density from design variables using filter.
+
+        Parameters
+        ----------
+        x : FloatArray
+            Design variable vector.
+
+        Returns
+        -------
+        FloatArray
+            Filtered physical density.
+        """
         if self.filter_type == "Density":
             return (self.H @ x).ravel() / np.asarray(self.Hs).ravel()
         return x
 
     def _get_lk_stiffness(self) -> FloatArray:
-        """Get element stiffness matrix."""
+        """
+        Compute the element stiffness matrix for Q4 (2D) or H8 (3D) elements.
+
+        Returns
+        -------
+        FloatArray
+            Element stiffness matrix, shape (8, 8) for 2D or (24, 24) for 3D.
+        """
         E, nu = 1.0, float(self.nu[0])  # Normalized E for KE
         if self.is_3d:
             A = np.array(
@@ -451,6 +656,19 @@ class FEM:
             )
 
     def _build_3d_blocks(self, k: FloatArray) -> FloatArray:
+        """
+        Build the 3D stiffness matrix blocks from coefficients.
+
+        Parameters
+        ----------
+        k : FloatArray
+            Stiffness coefficients vector.
+
+        Returns
+        -------
+        FloatArray
+            Assembled 3D element stiffness matrix (24x24).
+        """
         K1 = np.array(
             [
                 [k[0], k[1], k[1], k[2], k[4], k[4]],
@@ -527,6 +745,14 @@ class FEM:
         )
 
     def _build_dof_map(self) -> tuple[IntArray, IntArray, IntArray]:
+        """
+        Build the DOF mapping arrays for element connectivity.
+
+        Returns
+        -------
+        tuple[IntArray, IntArray, IntArray]
+            (edofMat, iK, jK) - Element DOF matrix and sparse matrix indices.
+        """
         size = 8 * (self.elemndof if self.is_3d else 1)
         el = np.arange(self.nel)
 
@@ -577,6 +803,14 @@ class FEM:
         return edofMat, iK, jK
 
     def _build_filter(self):
+        """
+        Build the sensitivity/density filter matrix.
+
+        Returns
+        -------
+        tuple
+            (H, Hs) - Sparse filter matrix and row sums for normalization.
+        """
         el = np.arange(self.nel)
 
         # Map 1D element arrays to 2D/3D indices
