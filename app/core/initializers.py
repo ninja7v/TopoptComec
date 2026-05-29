@@ -2,28 +2,34 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Material initializers.
 
+from __future__ import annotations
 import numpy as np
+import numpy.typing as npt
 from scipy.spatial.distance import cdist
 
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
 
-def _rescale_densities(d: np.ndarray, volfrac: float) -> np.ndarray:
+
+def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     """
     Smoothly rescale densities so their mean equals volfrac,
     while keeping values in [0,1] and reducing movement near 0/1.
     """
-    tol = 1e-4
-    current = np.mean(d)
+    tol: float = 1e-4
+    current: float = np.mean(d)
     if abs(current - volfrac) < tol:
         return np.clip(d, 0, 1)
 
     # Binary search for scaling parameter alpha
-    lo, hi = -2.0, 2.0
+    lo: float = -2.0
+    hi: float = 2.0
     for _ in range(50):
-        alpha = 0.5 * (lo + hi)
-        d_new = (
+        alpha: float = 0.5 * (lo + hi)
+        d_new: FloatArray = (
             d + (-4 * d**2 + 4 * d) * alpha
         )  # current + 2nd degree polynomial: p(0) = 0, p(1) = 0, p(0.5) = alpha
-        mean_new = np.mean(d_new)
+        mean_new: float = np.mean(d_new)
         if mean_new < volfrac:
             lo = alpha
         else:
@@ -40,50 +46,54 @@ def initialize_material(
     nelx: int,
     nely: int,
     nelz: int,
-    all_x: np.ndarray,
-    all_y: np.ndarray,
-    all_z: np.ndarray,
-) -> np.ndarray:
+    all_x: FloatArray,
+    all_y: FloatArray,
+    all_z: FloatArray,
+) -> FloatArray:
     """Initialize the material distribution based on the selected type."""
-    is_3d = nelz > 0
-    nel = nelx * nely * (nelz if is_3d else 1)
+    is_3d: bool = nelz > 0
+    nel: int = nelx * nely * (nelz if is_3d else 1)
 
     # 0. Uniform Distribution
     if init_type == 0:
-        return np.full(nel, volfrac)
+        return np.full(nel, volfrac, dtype=np.float64)
 
     # 1. Distance Field (Seeded at active points)
     elif init_type == 1:
-        points = np.column_stack([all_x, all_y, all_z] if is_3d else [all_x, all_y])
+        points: FloatArray = np.column_stack(
+            [all_x, all_y, all_z] if is_3d else [all_x, all_y]
+        )
         if len(points) == 0:
-            return np.full(nel, volfrac)
+            return np.full(nel, volfrac, dtype=np.float64)
 
         # Generate element center coordinates matching FEM loop order:
         # Loop order is: for ez... for ex... for ey...
         if is_3d:
-            Z = np.repeat(np.arange(nelz), nelx * nely)
-            X = np.tile(np.repeat(np.arange(nelx), nely), nelz)
-            Y = np.tile(np.arange(nely), nelx * nelz)
-            coords = np.column_stack((X, Y, Z))
+            Z: FloatArray = np.repeat(np.arange(nelz), nelx * nely)
+            X: FloatArray = np.tile(np.repeat(np.arange(nelx), nely), nelz)
+            Y: FloatArray = np.tile(np.arange(nely), nelx * nelz)
+            coords: FloatArray = np.column_stack((X, Y, Z))
         else:
             X = np.repeat(np.arange(nelx), nely)
             Y = np.tile(np.arange(nely), nelx)
             coords = np.column_stack((X, Y))
 
         # Vectorized distance calculation
-        dists = cdist(coords, points, metric="euclidean")  # Shape: (nel, n_points)
-        min_dist = dists.min(axis=1)
+        dists: FloatArray = cdist(
+            coords, points, metric="euclidean"
+        )  # Shape: (nel, n_points)
+        min_dist: FloatArray = dists.min(axis=1)
 
         # Invert distance: Near = 1.0, Far = 0.0
-        distance_max = np.sqrt(nelx**2 + nely**2 + (nelz**2 if is_3d else 0))
-        raw = (distance_max - min_dist) / distance_max
+        distance_max: float = np.sqrt(nelx**2 + nely**2 + (nelz**2 if is_3d else 0))
+        raw: FloatArray = (distance_max - min_dist) / distance_max
 
         return _rescale_densities(raw, volfrac)
 
     # 2. Random Distribution
     elif init_type == 2:
         np.random.seed(42)
-        raw = np.random.rand(nel)
+        raw: FloatArray = np.random.rand(nel)
         return _rescale_densities(raw, volfrac)
 
     else:
@@ -92,15 +102,15 @@ def initialize_material(
 
 def initialize_materials(
     init_type: int,
-    materials_percentage: list,
+    materials_percentage: list[int],
     volfrac: float,
     nelx: int,
     nely: int,
     nelz: int,
-    all_x: np.ndarray,
-    all_y: np.ndarray,
-    all_z: np.ndarray,
-) -> np.ndarray:
+    all_x: FloatArray,
+    all_y: FloatArray,
+    all_z: FloatArray,
+) -> FloatArray | None:
     """Initialize multi-material density fields.
 
     Args:
@@ -116,18 +126,20 @@ def initialize_materials(
         approximates the corresponding volume fraction.
     """
     if sum(materials_percentage) != 100:
-        return
+        return None
 
-    n_mat = len(materials_percentage)
-    materials_frac = volfrac * np.array(materials_percentage) / 100
-    nel = nelx * nely * (nelz if nelz > 0 else 1)
+    n_mat: int = len(materials_percentage)
+    materials_frac: FloatArray = (
+        volfrac * np.array(materials_percentage, dtype=np.float64) / 100
+    )
+    nel: int = nelx * nely * (nelz if nelz > 0 else 1)
 
     # Start from the single-material spatial pattern for material 0
-    base = initialize_material(
+    base: FloatArray = initialize_material(
         init_type, materials_frac[0], nelx, nely, nelz, all_x, all_y, all_z
     )
 
-    rho = np.zeros((n_mat, nel))
+    rho: FloatArray = np.zeros((n_mat, nel), dtype=np.float64)
     rho[0] = base
 
     # Material 1 gets the complement
@@ -135,7 +147,7 @@ def initialize_materials(
         rho[1] = _rescale_densities(volfrac - base, materials_frac[1])
 
     # Normalize columns so sum = volfrac (partition of unity)
-    col_sums = rho.sum(axis=0)
+    col_sums: FloatArray = rho.sum(axis=0)
     col_sums[col_sums == 0] = volfrac  # avoid division by zero
     rho *= volfrac / col_sums
 

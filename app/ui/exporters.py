@@ -2,26 +2,29 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Export result to various file formats.
 
-from typing import Tuple
-
+from __future__ import annotations
+import ctypes
+import warnings
 import mcubes
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import vtk
-import ctypes
-import warnings
-
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=DeprecationWarning, module="lib3mf")
-    import lib3mf
 from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from stl import mesh
 from vtk.util.numpy_support import get_vtk_array_type, numpy_to_vtk
 
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=DeprecationWarning, module="lib3mf")
+    import lib3mf
+
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
+
 
 def save_as_png(
-    xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = None
-) -> Tuple[bool, str | None]:
+    xPhys: FloatArray, nelxyz: list[int], filename: str, colors: list[str] | None = None
+) -> tuple[bool, str | None]:
     """Saves the density field as a .png image."""
     try:
         nelx, nely, nelz = nelxyz
@@ -121,8 +124,8 @@ def save_as_png(
 
 
 def save_as_vti(
-    xPhys: np.ndarray, nelxyz: list, filename: str
-) -> Tuple[bool, str | None]:
+    xPhys: FloatArray, nelxyz: list[int], filename: str
+) -> tuple[bool, str | None]:
     """Saves the density field as a .vti file for ParaView."""
     try:
         nx, ny, nz = nelxyz
@@ -177,8 +180,8 @@ def save_as_vti(
 
 
 def save_as_stl(
-    xPhys: np.ndarray, nelxyz: list, filename: str
-) -> Tuple[bool, str | None]:
+    xPhys: FloatArray, nelxyz: list[int], filename: str
+) -> tuple[bool, str | None]:
     """Saves the result as a .stl file."""
     try:
         nx, ny, nz = nelxyz
@@ -208,8 +211,8 @@ def save_as_stl(
 
 
 def save_as_3mf(
-    xPhys: np.ndarray, nelxyz: list, filename: str, colors: list = None
-) -> Tuple[bool, str | None]:
+    xPhys: FloatArray, nelxyz: list[int], filename: str, colors: list[str] | None = None
+) -> tuple[bool, str | None]:
     """Saves the result as a .3mf file using Lib3MF."""
     try:
         nx, ny, nz = nelxyz

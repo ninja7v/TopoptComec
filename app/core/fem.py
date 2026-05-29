@@ -2,22 +2,29 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Finite Element Method (FEM) class for topology optimization.
 
-from typing import Dict, Tuple
+from __future__ import annotations
+from collections.abc import Sequence
 import numpy as np
-from scipy.sparse import coo_matrix
+import numpy.typing as npt
+from scipy.sparse import coo_matrix, csc_matrix
 from scipy.sparse.linalg import spsolve, cg, LinearOperator
+
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
+IntArray = npt.NDArray[np.int64]
 
 
 class FEM:
-    def __init__(self, Dimensions: Dict, Materials: Dict, Optimizer: Dict):
+    def __init__(self, Dimensions: dict, Materials: dict, Optimizer: dict) -> None:
         # Geometry and Grid Setup
-        self.nelxyz = Dimensions.get("nelxyz", [1, 1, 1])
-        self.nelx, self.nely, self.nelz = self.nelxyz
-        self.is_3d = self.nelz > 0
-        self.nel = self.nelx * self.nely * (self.nelz if self.is_3d else 1)
-        self.elemndof = 3 if self.is_3d else 2
-        self.dim_mul = self.elemndof
-        self.ndof = (
+        self.nelxyz: Sequence[int] = Dimensions.get("nelxyz", [1, 1, 1])
+        self.nelx, self.nely, self.nelz = (int(v) for v in self.nelxyz)
+        self.is_3d: bool = self.nelz > 0
+        self.nel: int = self.nelx * self.nely * (self.nelz if self.is_3d else 1)
+        self.elemndof: int = 3 if self.is_3d else 2
+        self.dim_mul: int = self.elemndof
+        self.eldof: int = 8 * (self.elemndof if self.is_3d else 1)
+        self.ndof: int = (
             self.dim_mul
             * (self.nelx + 1)
             * (self.nely + 1)
@@ -25,64 +32,74 @@ class FEM:
         )
 
         # Materials and Optimization Params
-        self.E_max = Materials.get("E", [1.0])
-        self.nb_mat = len(self.E_max)
-        self.E_min = np.full(self.nb_mat, 1e-9)
-        self.nu = Materials.get("nu", [0.3])
-        self.penal = Optimizer.get("penal", 3.0)
-        self.solver_type = Optimizer.get("solver", "default")
-        self.filter_type = Optimizer.get("filter_type", 0)
-        self.filter_radius = Optimizer.get("filter_radius_min", 0.0)
+        self.E_max: FloatArray = np.atleast_1d(
+            np.asarray(Materials.get("E", [1.0]), dtype=np.float64)
+        )
+        self.nb_mat: int = self.E_max.size
+        self.E_min: FloatArray = np.full(self.nb_mat, 1e-9, dtype=np.float64)
+        self.nu: FloatArray = np.atleast_1d(
+            np.asarray(Materials.get("nu", [0.3]), dtype=np.float64)
+        )
+        self.penal: float = float(Optimizer.get("penal", 3.0))
+        self.solver_type: str = Optimizer.get("solver", "default")
+        self.filter_type: str = Optimizer.get("filter_type", 0)
+        self.filter_radius: float = float(Optimizer.get("filter_radius_min", 0.0))
 
         # Pre-compute Constant Matrices (KE, DOF Maps, Filter)
-        self.KE = self._get_lk_stiffness()
+        self.KE: FloatArray = self._get_lk_stiffness()
         self.edofMat, self.iK, self.jK = self._build_dof_map()
         self.H, self.Hs = self._build_filter()
 
         # State placeholders for BCs
-        self.fixed_dofs = np.array([], dtype=int)
-        self.free_dofs = np.array([], dtype=int)
-        self.fi_indices = []
-        self.fo_indices = []
-        self.forces_i = None
-        self.forces_o = None
+        self.fixed_dofs: IntArray = np.array([], dtype=np.int64)
+        self.free_dofs: IntArray = np.array([], dtype=np.int64)
+        self.fi_indices: list[int] = []
+        self.fo_indices: list[int] = []
+        self.di_indices: list[int] = []
+        self.do_indices: list[int] = []
+        self.finorm: Sequence[float] = []
+        self.fonorm: Sequence[float] = []
+        self.forces_i: FloatArray | None = None
+        self.forces_o: FloatArray | None = None
 
-    def setup_boundary_conditions(self, Forces: Dict, Supports: Dict = None):
+    def setup_boundary_conditions(
+        self, forces: dict, supports: dict | None = None
+    ) -> None:
         """Parses Forces and Supports dicts to create force vectors and fixed DOFs."""
         # Forces
+        di: list[int]
+        do: list[int]
         self.forces_i, self.fi_indices, di = self._parse_forces(
-            Forces, "fix", "fiy", "fiz", "fidir", "finorm"
+            forces, "fix", "fiy", "fiz", "fidir", "finorm"
         )
         self.forces_o, self.fo_indices, do = self._parse_forces(
-            Forces, "fox", "foy", "foz", "fodir", "fonorm"
+            forces, "fox", "foy", "foz", "fodir", "fonorm"
         )
 
         self.di_indices = di  # For artificial stiffness addition
         self.do_indices = do  # For artificial stiffness addition
-        self.finorm = Forces.get("finorm", [])
-        self.fonorm = Forces.get("fonorm", [])
+        self.finorm = forces.get("finorm", [])
+        self.fonorm = forces.get("fonorm", [])
 
         # Supports
-        fixed = []
-        if Supports:
-            sx, sy, sz = (
-                Supports.get("sx", []),
-                Supports.get("sy", []),
-                Supports.get("sz", []),
-            )
-            sr = Supports.get("sr", [0] * len(sx))
-            sdim = Supports.get("sdim", [])
-            active_sup = [i for i, val in enumerate(sdim) if val != "-"]
+        fixed: list[int] = []
+        if supports:
+            sx: list[float] = supports.get("sx", [])
+            sy: list[float] = supports.get("sy", [])
+            sz: list[float] = supports.get("sz", [])
+            sr: list[float] = supports.get("sr", [0.0] * len(sx))
+            sdim: list[str] = supports.get("sdim", [])
+            active_sup: list[int] = [i for i, val in enumerate(sdim) if val != "-"]
 
             for i in active_sup:
                 center_node_idx = self._get_node_idx(
-                    sx[i], sy[i], sz[i] if self.is_3d else 0
+                    int(sx[i]), int(sy[i]), int(sz[i]) if self.is_3d else 0
                 )
                 nodes_to_fix = [center_node_idx]
 
                 # If radius > 0, find all nodes within radius
                 if i < len(sr) and sr[i] > 0:
-                    radius = sr[i]
+                    radius = float(sr[i])
                     # Determine range to search
                     x_range = range(
                         max(0, int(sx[i] - radius)),
@@ -124,24 +141,29 @@ class FEM:
                     if self.is_3d and "Z" in sdim[i]:
                         fixed.append(node_dof + 2)
 
-        self.fixed_dofs = np.unique(fixed)
-        self.free_dofs = np.setdiff1d(np.arange(self.ndof), self.fixed_dofs)
+        self.fixed_dofs = np.unique(fixed).astype(np.int64)
+        self.free_dofs = np.setdiff1d(
+            np.arange(self.ndof, dtype=np.int64), self.fixed_dofs
+        )
 
-    def apply_regions(self, x: np.ndarray, Regions: Dict) -> np.ndarray:
+    def apply_regions(self, x: FloatArray, regions: dict) -> FloatArray:
         """Applies geometric constraints (Regions) to the density field."""
         xPhys = x.copy()
-        rshape = Regions.get("rshape", [])
+        rshape: list[str] = regions.get("rshape", [])
         if not rshape:
             return xPhys
 
-        rx, ry, rz = Regions.get("rx", []), Regions.get("ry", []), Regions.get("rz", [])
-        rradius, rstate = Regions.get("rradius", []), Regions.get("rstate", [])
+        rx: list[float] = regions.get("rx", [])
+        ry: list[float] = regions.get("ry", [])
+        rz: list[float] = regions.get("rz", [])
+        rradius: list[float] = regions.get("rradius", [])
+        rstate: list[str] = regions.get("rstate", [])
 
-        active_regions = [i for i, s in enumerate(rshape) if s != "-"]
+        active_regions: list[int] = [i for i, s in enumerate(rshape) if s != "-"]
 
         for i in active_regions:
             val = 1e-6 if rstate[i] == "Void" else 1.0
-            r = rradius[i]
+            r = float(rradius[i])
             z_range = (
                 range(max(0, int(rz[i] - r)), min(self.nelz, int(rz[i] + r)))
                 if self.is_3d
@@ -170,7 +192,7 @@ class FEM:
                         xPhys[idx] = val
         return xPhys
 
-    def solve(self, xPhys: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def solve(self, xPhys: FloatArray) -> tuple[FloatArray, FloatArray]:
         """Assembles K and solves for Input and Output forces."""
         # Assembly
         E_eff = (
@@ -187,21 +209,21 @@ class FEM:
 
         # Solving
         K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
-        ui = np.zeros((self.ndof, len(self.fi_indices)))
-        uo = np.zeros((self.ndof, len(self.fo_indices)))
+        ui = np.zeros((self.ndof, len(self.fi_indices)), dtype=np.float64)
+        uo = np.zeros((self.ndof, len(self.fo_indices)), dtype=np.float64)
         self._solve_linear_system(K_free, self.forces_i, self.fi_indices, ui)
         self._solve_linear_system(K_free, self.forces_o, self.fo_indices, uo)
 
         return ui, uo
 
-    def compute_ce(self, ui: np.ndarray, uo: np.ndarray) -> np.ndarray:
+    def compute_ce(self, ui: FloatArray, uo: FloatArray) -> FloatArray:
         """Compute element compliance ce = u^T KE u for all elements.
 
         For rigid mechanisms (no output forces): ce = sum_i u_i^T KE u_i
         For compliant mechanisms: ce = sum_i sum_o u_in^T KE u_out
         """
         nb_out = len(self.fo_indices)
-        ce_total = np.zeros(self.nel)
+        ce_total = np.zeros(self.nel, dtype=np.float64)
 
         if nb_out == 0:  # Rigid Mechanism (Minimize Compliance)
             for i_in in range(len(self.fi_indices)):
@@ -217,8 +239,8 @@ class FEM:
         return ce_total
 
     def compute_sensitivities(
-        self, xPhys: np.ndarray, ui: np.ndarray, uo: np.ndarray
-    ) -> Tuple[np.ndarray, np.ndarray]:
+        self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray
+    ) -> tuple[FloatArray, FloatArray]:
         """Calculates Sensitivity (dc) and Volume Sensitivity (dv)."""
         nb_out = len(self.fo_indices)
         ce_total = self.compute_ce(ui, uo)
@@ -230,20 +252,20 @@ class FEM:
             dc = self.penal * (xPhys ** (self.penal - 1)) * ce_total
 
         # Volume Sensitivity (dv)
-        dv = np.ones(self.nel)
+        dv: FloatArray = np.ones(self.nel, dtype=np.float64)
 
         # Filtering
         return self._apply_filter(xPhys, dc, dv)
 
     def compute_objective(
-        self, xPhys: np.ndarray, ui: np.ndarray, uo: np.ndarray
+        self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray
     ) -> float:
         """Compute objective value based on current displacements."""
         nb_out = len(self.fo_indices)
         obj_val = 0.0
 
         if nb_out == 0:  # Rigid Mechanism (Minimize Compliance)
-            E_eff = np.full(self.nel, self.E_min[0])
+            E_eff = np.full(self.nel, self.E_min[0], dtype=np.float64)
             for i, E_i in enumerate(self.E_max):
                 E_eff += xPhys[i] ** self.penal * (E_i - self.E_min[i])
             ce_total = self.compute_ce(ui, uo)
@@ -266,13 +288,13 @@ class FEM:
 
     def _parse_forces(
         self,
-        Forces: Dict,
+        Forces: dict,
         kx: str,
         ky: str,
         kz: str,
         kdir: str,
         knorm: str,
-    ):
+    ) -> tuple[FloatArray, list[int], list[int]]:
         fx = Forces.get(kx, [])
         fy = Forces.get(ky, [])
         fz = Forces.get(kz, []) if self.is_3d else []
@@ -280,8 +302,8 @@ class FEM:
         fnorm = Forces.get(knorm, [])
 
         active_indices = [i for i, val in enumerate(fdir) if val != "-"]
-        f_vec = np.zeros((self.ndof, len(active_indices)))
-        dof_indices = []
+        f_vec = np.zeros((self.ndof, len(active_indices)), dtype=np.float64)
+        dof_indices: list[int] = []
 
         for mat_idx, i in enumerate(active_indices):
             node = self._get_node_idx(fx[i], fy[i], fz[i] if self.is_3d else 0)
@@ -305,8 +327,12 @@ class FEM:
         return f_vec, active_indices, dof_indices
 
     def _add_artificial_springs(
-        self, K: np.ndarray, dofs: list, active_indices: list, norms: list
-    ):
+        self,
+        K: csc_matrix,
+        dofs: list[int],
+        active_indices: list[int],
+        norms: list[float],
+    ) -> None:
         for i, dof in enumerate(dofs):
             original_idx = active_indices[i]
             if original_idx < len(norms) and norms[original_idx] > 0:
@@ -314,12 +340,12 @@ class FEM:
 
     def _solve_linear_system(
         self,
-        K_free: np.ndarray,
-        F: np.ndarray,
-        active_indices: list,
-        U_full: np.ndarray,
-    ):
-        if not active_indices:
+        K_free: csc_matrix,
+        F: FloatArray | None,
+        active_indices: list[int],
+        U_full: FloatArray,
+    ) -> None:
+        if not active_indices or F is None:
             return
 
         use_direct = self.solver_type == "Direct" or (
@@ -360,8 +386,8 @@ class FEM:
                         U_full[self.free_dofs, i] = u_sol
 
     def _apply_filter(
-        self, x: np.ndarray, dc: np.ndarray, dv: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
+        self, x: FloatArray, dc: FloatArray, dv: FloatArray
+    ) -> tuple[FloatArray, FloatArray]:
         if self.filter_type == "Sensitivity":
             # H * (x * dc) / Hs / max(x, 0.001)
             dc = np.asarray((self.H @ (x * dc)) / self.Hs.flatten()) / np.maximum(
@@ -372,25 +398,26 @@ class FEM:
             dv = np.asarray(self.H * (dv[np.newaxis].T / self.Hs))[:, 0]
         return dc, dv
 
-    def update_xPhys(self, x: np.ndarray) -> np.ndarray:
+    def update_xPhys(self, x: FloatArray) -> FloatArray:
         """Calculates physical density based on design variable and filter."""
         if self.filter_type == "Density":
             return (self.H @ x).ravel() / np.asarray(self.Hs).ravel()
         return x
 
-    def _get_lk_stiffness(self) -> np.ndarray:
+    def _get_lk_stiffness(self) -> FloatArray:
         """Get element stiffness matrix."""
-        E, nu = 1.0, self.nu[0]  # Normalized E for KE
+        E, nu = 1.0, float(self.nu[0])  # Normalized E for KE
         if self.is_3d:
             A = np.array(
                 [
                     [32, 6, -8, 6, -6, 4, 3, -6, -10, 3, -3, -3, -4, -8],
                     [-48, 0, 0, -24, 24, 0, 0, 0, 12, -12, 0, 12, 12, 12],
-                ]
+                ],
+                dtype=np.float64,
             )
-            k = 1 / 72 * (A.T @ np.array([1, nu]))
+            k = 1 / 72 * (A.T @ np.array([1.0, nu], dtype=np.float64))
             K_blocks = self._build_3d_blocks(k)
-            return E / ((nu + 1) * (1 - 2 * nu)) * K_blocks
+            return (E / ((nu + 1) * (1 - 2 * nu)) * K_blocks).astype(np.float64)
         else:
             k = np.array(
                 [
@@ -402,7 +429,8 @@ class FEM:
                     -1 / 8 - nu / 8,
                     nu / 6,
                     1 / 8 - 3 * nu / 8,
-                ]
+                ],
+                dtype=np.float64,
             )
             return (
                 E
@@ -417,11 +445,12 @@ class FEM:
                         [k[5], k[4], k[3], k[2], k[1], k[0], k[7], k[6]],
                         [k[6], k[3], k[4], k[1], k[2], k[7], k[0], k[5]],
                         [k[7], k[2], k[1], k[4], k[3], k[6], k[5], k[0]],
-                    ]
+                    ],
+                    dtype=np.float64,
                 )
             )
 
-    def _build_3d_blocks(self, k: np.ndarray) -> np.ndarray:
+    def _build_3d_blocks(self, k: FloatArray) -> FloatArray:
         K1 = np.array(
             [
                 [k[0], k[1], k[1], k[2], k[4], k[4]],
@@ -430,7 +459,8 @@ class FEM:
                 [k[2], k[3], k[3], k[0], k[7], k[7]],
                 [k[4], k[5], k[6], k[7], k[0], k[1]],
                 [k[4], k[6], k[5], k[7], k[1], k[0]],
-            ]
+            ],
+            dtype=np.float64,
         )
         K2 = np.array(
             [
@@ -440,7 +470,8 @@ class FEM:
                 [k[5], k[4], k[10], k[8], k[1], k[9]],
                 [k[3], k[2], k[4], k[1], k[8], k[11]],
                 [k[10], k[3], k[5], k[11], k[9], k[12]],
-            ]
+            ],
+            dtype=np.float64,
         )
         K3 = np.array(
             [
@@ -450,7 +481,8 @@ class FEM:
                 [k[8], k[9], k[1], k[5], k[10], k[4]],
                 [k[11], k[12], k[9], k[10], k[5], k[3]],
                 [k[1], k[11], k[8], k[3], k[4], k[2]],
-            ]
+            ],
+            dtype=np.float64,
         )
         K4 = np.array(
             [
@@ -460,7 +492,8 @@ class FEM:
                 [k[12], k[11], k[11], k[13], k[6], k[6]],
                 [k[9], k[8], k[7], k[6], k[13], k[10]],
                 [k[9], k[7], k[8], k[6], k[10], k[13]],
-            ]
+            ],
+            dtype=np.float64,
         )
         K5 = np.array(
             [
@@ -470,7 +503,8 @@ class FEM:
                 [k[2], k[3], k[4], k[0], k[7], k[1]],
                 [k[4], k[5], k[10], k[7], k[0], k[7]],
                 [k[3], k[10], k[5], k[1], k[7], k[0]],
-            ]
+            ],
+            dtype=np.float64,
         )
         K6 = np.array(
             [
@@ -480,7 +514,8 @@ class FEM:
                 [k[12], k[11], k[9], k[13], k[6], k[10]],
                 [k[9], k[8], k[1], k[6], k[13], k[6]],
                 [k[11], k[1], k[8], k[10], k[6], k[13]],
-            ]
+            ],
+            dtype=np.float64,
         )
         return np.block(
             [
@@ -491,7 +526,7 @@ class FEM:
             ]
         )
 
-    def _build_dof_map(self):
+    def _build_dof_map(self) -> tuple[IntArray, IntArray, IntArray]:
         size = 8 * (self.elemndof if self.is_3d else 1)
         el = np.arange(self.nel)
 
@@ -515,23 +550,24 @@ class FEM:
                     self.nely + 2 + off,
                     self.nely + 1 + off,
                     off,
-                ]
+                ],
+                dtype=np.int64,
             )
         else:
             ex = el // self.nely
             ey = el % self.nely
             n1 = ex * (self.nely + 1) + ey
-            base_nodes = np.array([1, self.nely + 2, self.nely + 1, 0])
+            base_nodes = np.array([1, self.nely + 2, self.nely + 1, 0], dtype=np.int64)
 
         # 2. Map node combinations using broadcasting
         node_mat = n1[:, None] + base_nodes[None, :]
-        dof_offsets = np.arange(self.dim_mul)
+        dof_offsets = np.arange(self.dim_mul, dtype=np.int64)
 
         # Multiply by DOF multiplier and apply offsets, returning a flattened structure
         edofMat = (
             (node_mat[:, :, None] * self.dim_mul + dof_offsets[None, None, :])
             .reshape(self.nel, -1)
-            .astype(int)
+            .astype(np.int64)
         )
 
         # Fast equivalent of np.kron for DOF mappings
@@ -554,7 +590,7 @@ class FEM:
             ey = el % self.nely
 
         # Pre-calculate the localized relative neighbor meshgrid
-        r = np.ceil(self.filter_radius)
+        r = int(np.ceil(self.filter_radius))
         if self.is_3d:
             dx, dy, dz = np.meshgrid(
                 np.arange(-r, r + 1),

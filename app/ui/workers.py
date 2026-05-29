@@ -2,22 +2,27 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # QThread worker for running optimizers and displacements in the background.
 
+from __future__ import annotations
 import numpy as np
+import numpy.typing as npt
+import copy
 from PySide6.QtCore import QThread, Signal
 from abc import abstractmethod
 from app.core import analyzers, displacements, optimizers
-import copy
+
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
 
 
 class Worker:
     """Abstract base class for workers."""
 
     @abstractmethod
-    def request_stop(self):
+    def request_stop(self) -> None:
         pass
 
     @abstractmethod
-    def run(self):
+    def run(self) -> None:
         pass
 
 
@@ -33,25 +38,25 @@ class OptimizerWorker(QThread, Worker):
     # Signal argument: error message string
     error = Signal(str)
 
-    def __init__(self, params: dict):
+    def __init__(self, params: dict) -> None:
         super().__init__()
-        self.params = params
-        self.stop_requested = False
+        self.params: dict = params
+        self.stop_requested: bool = False
 
-    def request_stop(self):
+    def request_stop(self) -> None:
         """Public method for the main thread to request a stop."""
         print("Stop request received by worker.")
         self.stop_requested = True
 
-    def run(self):
+    def run(self) -> None:
         """Executes the optimization based on the provided parameters."""
         try:
-            optimizer_params = copy.deepcopy(self.params)
+            optimizer_params: dict = copy.deepcopy(self.params)
             # Remove unneeded parameters for the optimizer
             if "Displacement" in optimizer_params:
                 optimizer_params.pop("Displacement", None)
 
-            is_multimaterial = (
+            is_multimaterial: bool = (
                 len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
             )
 
@@ -61,7 +66,7 @@ class OptimizerWorker(QThread, Worker):
                     optimizer_params["Materials"].pop("percent", None)
 
             def _progress_callback(
-                iteration: int, objective: float, change: float, xPhys_frame: np.ndarray
+                iteration: int, objective: float, change: float, xPhys_frame: FloatArray
             ) -> bool:
                 self.progress.emit(iteration, objective, change)
                 self.frameReady.emit(xPhys_frame)
@@ -71,6 +76,8 @@ class OptimizerWorker(QThread, Worker):
 
             if is_multimaterial:
                 print("Dispatching to multi-material optimizer...")
+                result: FloatArray
+                u: FloatArray
                 result, u = optimizers.optimize_multimaterial(**optimizer_params)
             else:
                 print("Dispatching to optimizer...")
@@ -80,7 +87,7 @@ class OptimizerWorker(QThread, Worker):
         except Exception as e:
             import traceback
 
-            error_msg = f"An error occurred during optimization:\n{e}\n\n{traceback.format_exc()}"
+            error_msg: str = f"An error occurred during optimization:\n{e}\n\n{traceback.format_exc()}"
             self.error.emit(error_msg)
 
 
@@ -98,19 +105,19 @@ class DisplacementWorker(QThread, Worker):
     # Signal arguments: (error_message)
     error = Signal(str)
 
-    def __init__(self, params: dict, xPhys: np.ndarray, u: np.ndarray):
+    def __init__(self, params: dict, xPhys: FloatArray, u: FloatArray) -> None:
         super().__init__()
-        self.params = params
-        self.xPhys = xPhys
-        self.u = u
-        self._stop_requested = False
+        self.params: dict = params
+        self.xPhys: FloatArray = xPhys
+        self.u: FloatArray = u
+        self._stop_requested: bool = False
 
-    def request_stop(self):
+    def request_stop(self) -> None:
         """Public method for the main thread to request a stop."""
         print("Stop request received by worker.")
         self._stop_requested = True
 
-    def run(self):
+    def run(self) -> None:
         """Executes the analysis based on provided parameters."""
         try:
 
@@ -131,7 +138,7 @@ class DisplacementWorker(QThread, Worker):
         except Exception as e:
             import traceback
 
-            error_msg = f"An error occurred during displacement analysis:\n{e}\n\n{traceback.format_exc()}"
+            error_msg: str = f"An error occurred during displacement analysis:\n{e}\n\n{traceback.format_exc()}"
             self.error.emit(error_msg)
 
 
@@ -149,22 +156,22 @@ class AnalysisWorker(QThread, Worker):
     # Signal arguments: (error_message)
     error = Signal(str)
 
-    def __init__(self, params: dict, xPhys: np.ndarray, u: np.ndarray):
+    def __init__(self, params: dict, xPhys: FloatArray, u: FloatArray) -> None:
         super().__init__()
-        self.params = params
-        self.xPhys = xPhys
-        self.u = u
-        self._stop_requested = False
+        self.params: dict = params
+        self.xPhys: FloatArray = xPhys
+        self.u: FloatArray = u
+        self._stop_requested: bool = False
 
-    def request_stop(self):
+    def request_stop(self) -> None:
         """Public method for the main thread to request a stop."""
         print("Stop request received by worker.")
         self._stop_requested = True
 
-    def run(self):
+    def run(self) -> None:
         """Executes the analysis based on provided parameters."""
         try:
-            analysis_params = self.params.copy()
+            analysis_params: dict = self.params.copy()
             analysis_params["xPhys"] = self.xPhys
             analysis_params["u"] = self.u
 
@@ -188,6 +195,10 @@ class AnalysisWorker(QThread, Worker):
             analysis_params["progress_callback"] = _progress_callback
 
             # The function is a generator, yielding each frame
+            checkerboard: bool
+            watertight: bool
+            thresholded: bool
+            efficient: bool
             checkerboard, watertight, thresholded, efficient = analyzers.analyze(
                 **analysis_params
             )
@@ -196,7 +207,7 @@ class AnalysisWorker(QThread, Worker):
         except Exception as e:
             import traceback
 
-            error_msg = (
+            error_msg: str = (
                 f"An error occurred during analysis:\n{e}\n\n{traceback.format_exc()}"
             )
             self.error.emit(error_msg)

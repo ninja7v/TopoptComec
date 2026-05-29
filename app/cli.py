@@ -2,6 +2,7 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # CLI entry point of TopoptComec.
 
+from __future__ import annotations
 import argparse
 import json
 import os
@@ -10,9 +11,13 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 
 from app.core import optimizers
 from app.ui import exporters
+
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
 
 
 def _run_single_preset(
@@ -28,9 +33,11 @@ def _run_single_preset(
     if verbose:
         print(f"Running optimization for preset: {preset_name}")
 
-    xPhys = None
-    u = None
-    cache_file = Path("results") / preset_name / f"{preset_name}_density_field.npz"
+    xPhys: FloatArray | None = None
+    u: FloatArray | None = None
+    cache_file: Path = (
+        Path("results") / preset_name / f"{preset_name}_density_field.npz"
+    )
     if cache_file.exists():
         if verbose:
             print(f"[{preset_name}] Loading cached density field...")
@@ -43,11 +50,11 @@ def _run_single_preset(
 
     if xPhys is None:
         # Clean params for optimizer
-        optimizer_params = params.copy()
+        optimizer_params: dict = params.copy()
         if "Displacement" in optimizer_params:
             optimizer_params.pop("Displacement")
 
-        is_multimaterial = (
+        is_multimaterial: bool = (
             len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
         )
         if "Materials" in optimizer_params:
@@ -58,12 +65,14 @@ def _run_single_preset(
         if save_frames:
 
             def progress_callback(
-                iteration: int, objective: float, change: float, xPhys_frame: np.ndarray
-            ):
-                folder = Path("results") / preset_name / f"{preset_name}_creation"
+                iteration: int, objective: float, change: float, xPhys_frame: FloatArray
+            ) -> bool:
+                folder: Path = Path("results") / preset_name / f"{preset_name}_creation"
                 folder.mkdir(parents=True, exist_ok=True)
-                filename = folder / f"{preset_name}_creation_{iteration}.png"
-                colors = params.get("Materials", {}).get("color", None)
+                filename: Path = folder / f"{preset_name}_creation_{iteration}.png"
+                colors: list[str] | None = params.get("Materials", {}).get(
+                    "color", None
+                )
                 exporters.save_as_png(
                     xPhys_frame, params["Dimensions"]["nelxyz"], str(filename), colors
                 )
@@ -95,11 +104,11 @@ def _run_single_preset(
             print(f"[{preset_name}] Running displacement...")
         from app.core import displacements
 
-        disp_params = params.copy()
+        disp_params: dict = params.copy()
         try:
-            disp_iter = 0
+            disp_iter: int = 0
 
-            def disp_callback(iteration: int):
+            def disp_callback(iteration: int) -> bool:
                 nonlocal disp_iter
                 disp_iter = iteration
                 return False
@@ -108,12 +117,16 @@ def _run_single_preset(
                 disp_params, xPhys, disp_callback
             ):
                 if save_frames:
-                    folder = (
+                    folder: Path = (
                         Path("results") / preset_name / f"{preset_name}_displacement"
                     )
                     folder.mkdir(parents=True, exist_ok=True)
-                    filename = folder / f"{preset_name}_displacement_{disp_iter}.png"
-                    colors = params.get("Materials", {}).get("color", None)
+                    filename: Path = (
+                        folder / f"{preset_name}_displacement_{disp_iter}.png"
+                    )
+                    colors: list[str] | None = params.get("Materials", {}).get(
+                        "color", None
+                    )
                     exporters.save_as_png(
                         frame_data,
                         params["Dimensions"]["nelxyz"],
@@ -133,18 +146,20 @@ def _run_single_preset(
         xPhys = np.where(xPhys > 0.5, 1.0, 0.0)
 
     # Create results directory
-    results_dir = Path("results")
+    results_dir: Path = Path("results")
     results_dir.mkdir(exist_ok=True)
-    base_filename = results_dir / preset_name
+    base_filename: Path = results_dir / preset_name
 
     # Export
-    nelxyz = params["Dimensions"]["nelxyz"]
-    formats = ["png", "stl", "vti", "3mf"] if format == "all" else [format]
+    nelxyz: list[int] = params["Dimensions"]["nelxyz"]
+    formats: list[str] = ["png", "stl", "vti", "3mf"] if format == "all" else [format]
     for f in formats:
-        filename = str(base_filename.with_suffix(f".{f}"))
+        filename: str = str(base_filename.with_suffix(f".{f}"))
         if verbose:
             print(f"[{preset_name}] Saving {f.upper()} to {filename}...")
 
+        success: bool
+        error_msg: str | None
         success, error_msg = _export(xPhys, nelxyz, filename, f)
 
         if not success:
@@ -158,7 +173,7 @@ def _run_single_preset(
 
 
 def _export(
-    xPhys: np.ndarray, nelxyz: list, filename: str, format: str
+    xPhys: FloatArray, nelxyz: list[int], filename: str, format: str
 ) -> tuple[bool, str | None]:
     """Dispatch export to the correct exporter."""
     if format == "png":
@@ -172,9 +187,9 @@ def _export(
     return False, f"Unknown format: {format}"
 
 
-def run_cli():
+def run_cli() -> None:
     """Parses arguments and runs the optimization from the CLI."""
-    parser = argparse.ArgumentParser(
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="TopoptComec CLI - Topology Optimization for Compliant Mechanisms"
     )
     parser.add_argument(
@@ -217,23 +232,23 @@ def run_cli():
         help="Suppress intermediate optimizer output (useful for parallel runs)",
     )
 
-    args = parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
 
     # Load presets
-    presets_path = Path("presets.json")
+    presets_path: Path = Path("presets.json")
     if not presets_path.exists():
         print(f"Error: presets.json not found at {presets_path.absolute()}")
         sys.exit(1)
 
     try:
         with open(presets_path, "r") as f:
-            presets = json.load(f)
+            presets: dict = json.load(f)
     except json.JSONDecodeError as e:
         print(f"Error reading presets.json: {e}")
         sys.exit(1)
 
     # Parse and validate preset names
-    preset_names = [name.strip() for name in args.preset.split(",")]
+    preset_names: list[str] = [name.strip() for name in args.preset.split(",")]
     for name in preset_names:
         if name not in presets:
             print(f"Error: Preset '{name}' not found in presets.json")
@@ -255,12 +270,12 @@ def run_cli():
             print(error)
             sys.exit(1)
     else:
-        max_workers = min(len(preset_names), os.cpu_count() or 1)
+        max_workers: int = min(len(preset_names), os.cpu_count() or 1)
         print(
             f"Running {len(preset_names)} presets in parallel ({max_workers} workers)"
         )
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
+            futures: dict = {
                 executor.submit(
                     _run_single_preset,
                     name,
@@ -273,7 +288,7 @@ def run_cli():
                 ): name
                 for name in preset_names
             }
-            errors = []
+            errors: list[str] = []
             for future in futures:
                 preset_name, error = future.result()
                 if error:
