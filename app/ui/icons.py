@@ -10,20 +10,46 @@ from .resource_path_finder import resource_path
 
 
 class IconProvider:
-    """Provides standard Qt icons for the UI."""
+    """
+    Provides icons for the UI with theme support.
+
+    Tries to load custom themed icons, falls back to Qt standard icons.
+    """
 
     def __init__(self) -> None:
+        """
+        Initialize the icon provider.
+
+        Sets the default style and light theme.
+        """
         self.style: QStyle = QApplication.style()
         self.theme: str = "light"
 
     def _set_theme(self, theme_name: str) -> None:
-        """Sets the current theme ('light' or 'dark'). Called by the MainWindow."""
+        """
+        Sets the current theme ('light' or 'dark'). Called by the MainWindow.
+
+        Parameters
+        ----------
+        theme_name : str
+            The theme name to set ('light' or 'dark').
+        """
         self.theme = theme_name
 
     def _get(self, icon_name: str) -> QIcon:
         """
         Retrieves a QIcon by its name. Tries to load a custom icon from assets first,
         falls back to standard Qt icons if not found.
+
+        Parameters
+        ----------
+        icon_name : str
+            The name of the icon to retrieve.
+
+        Returns
+        -------
+        QIcon
+            The requested icon, or an empty QIcon if not found.
         """
         # 1. Try to find a themed icon file
         extensions: list[str] = [

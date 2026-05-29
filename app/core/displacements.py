@@ -20,7 +20,20 @@ def single_linear_displacement(
 ) -> tuple[np.ndarray, ...]:
     """
     Computes the deformed mesh grid for a single-frame plot.
-    Returns X, Y, Z meshgrid arrays for plotting.
+
+    Parameters
+    ----------
+    u : np.ndarray
+        Displacement vector from FEM solve, shape (ndof,) or (ndof, n_forces).
+    nelx, nely, nelz : int
+        Number of elements in each dimension.
+    disp_factor : float
+        Scaling factor to amplify displacements for visualization.
+
+    Returns
+    -------
+    tuple[np.ndarray, ...]
+        X, Y, Z meshgrid arrays for plotting deformed geometry.
     """
     is_3d: bool = nelz > 0
     nodes_flat: np.ndarray = np.arange(
@@ -85,7 +98,29 @@ def _embed_material(
     mz: int,
     fem: FEM,
 ) -> tuple[FloatArray, int, FloatArray]:
-    """Embed initial density into the expanded domain."""
+    """
+    Embed initial density into the expanded domain.
+
+    Parameters
+    ----------
+    xPhys_initial : FloatArray
+        Initial density field, shape (nel,) or (n_mat, nel).
+    is_multi : bool
+        Whether this is a multi-material optimization.
+    is_3d : bool
+        Whether this is a 3D problem.
+    nelx, nely, nelz : int
+        Original element counts in each dimension.
+    mx, my, mz : int
+        Padding margins added to each side.
+    fem : FEM
+        FEM solver instance with enlarged domain.
+
+    Returns
+    -------
+    tuple[FloatArray, int, FloatArray]
+        (xPhys, n_mat, volfrac) - Expanded density, material count, target volume fractions.
+    """
     _x_init: FloatArray = xPhys_initial if is_multi else xPhys_initial[np.newaxis, :]
     n_mat: int = _x_init.shape[0]
 
@@ -112,7 +147,22 @@ def _embed_material(
 def _reposition_forces(
     fem: FEM, sim_params: dict, u_curr: FloatArray, delta_disp: float, is_3d: bool
 ) -> None:
-    """Move force application points following the full nodal displacement."""
+    """
+    Move force application points following the full nodal displacement.
+
+    Parameters
+    ----------
+    fem : FEM
+        FEM solver instance.
+    sim_params : dict
+        Simulation parameters to update with new force positions.
+    u_curr : FloatArray
+        Current displacement vector.
+    delta_disp : float
+        Incremental displacement per iteration.
+    is_3d : bool
+        Whether this is a 3D problem.
+    """
     snelx: int = sim_params["Dimensions"]["nelxyz"][0]
     snely: int = sim_params["Dimensions"]["nelxyz"][1]
     snelz: int = sim_params["Dimensions"]["nelxyz"][2]
@@ -162,7 +212,28 @@ def _warp_density(
     nominator: float,
     c_val: float,
 ) -> None:
-    """Interpolate density onto the warped grid and renormalize."""
+    """
+    Interpolate density onto the warped grid and renormalize.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Density field to warp (modified in place).
+    n_mat : int
+        Number of materials.
+    volfrac : FloatArray
+        Target volume fractions per material.
+    points : FloatArray
+        Warped grid points (current positions).
+    points_interp : FloatArray
+        Original grid points for interpolation.
+    is_multi : bool
+        Whether this is multi-material optimization.
+    fem : FEM
+        FEM solver instance.
+    k, nominator, c_val : float
+        Sigmoid filter parameters.
+    """
     for i in range(n_mat):
         # Interpolate density from old points to new (warped) points
         xPhys[i] = np.nan_to_num(
@@ -196,7 +267,29 @@ def _crop_density(
     my: int,
     mz: int,
 ) -> FloatArray:
-    """Crop the expanded density field back to the original domain size."""
+    """
+    Crop the expanded density field back to the original domain size.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Expanded density field.
+    n_mat : int
+        Number of materials.
+    is_3d : bool
+        Whether this is a 3D problem.
+    fem : FEM
+        FEM solver instance with expanded domain.
+    nelx, nely, nelz : int
+        Original element counts.
+    mx, my, mz : int
+        Padding margins to remove.
+
+    Returns
+    -------
+    FloatArray
+        Cropped density field of shape (n_mat, nel) or (nel,).
+    """
     cropped: FloatArray = np.zeros((n_mat, nelx * nely * (nelz if is_3d else 1)))
     for i in range(n_mat):
         if is_3d:
@@ -218,7 +311,20 @@ def run_iterative_displacement(
 ) -> FloatArray:
     """
     Performs iterative FE analysis to simulate displacement.
-    Yields the cropped density field for each iteration.
+
+    Parameters
+    ----------
+    params : dict
+        Simulation parameters (Dimensions, Forces, Materials, etc.).
+    xPhys_initial : FloatArray
+        Initial density field.
+    progress_callback : Callable[[int], bool] | None
+        Optional callback to report progress and allow cancellation.
+
+    Yields
+    ------
+    FloatArray
+        Cropped density field for each iteration.
     """
     dims: dict = params["Dimensions"]
     nelx: int = dims["nelxyz"][0]

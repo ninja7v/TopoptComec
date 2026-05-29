@@ -13,8 +13,19 @@ FloatArray = npt.NDArray[np.float64]
 
 def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     """
-    Smoothly rescale densities so their mean equals volfrac,
-    while keeping values in [0,1] and reducing movement near 0/1.
+    Rescale densities so their mean equals volfrac while keeping values in [0,1].
+
+    Parameters
+    ----------
+    d : FloatArray
+        Input density field.
+    volfrac : float
+        Target volume fraction (mean value).
+
+    Returns
+    -------
+    FloatArray
+        Rescaled density field with mean approximately equal to volfrac.
     """
     tol: float = 1e-4
     current: float = np.mean(d)

@@ -11,7 +11,15 @@ class ParameterManagerMixin:
     """Mixin for MainWindow to handle parameter gathering, validation, and equivalency checks."""
 
     def _gather_parameters(self):
-        """Collects all parameters from the UI controls into a nested dictionary."""
+        """
+        Collect all parameters from UI controls into a nested dictionary.
+
+        Returns
+        -------
+        dict
+            Complete parameters dictionary with Dimensions, Regions, Forces,
+            Supports, Materials, Optimizer, and Displacement sections.
+        """
         params = {}
 
         # --- Dimensions ---
@@ -125,7 +133,20 @@ class ParameterManagerMixin:
         return params
 
     def _get_time_estimation_indicators(self, params: dict):
-        """Calculate the optimization time estimation and turn it into indicators"""
+        """
+        Calculate optimization time estimation indicators.
+
+        Parameters
+        ----------
+        params : dict
+            Current parameters dictionary.
+
+        Returns
+        -------
+        tuple[str, str]
+            (color, tooltip_text) - Color hex code and tooltip description
+            indicating estimated runtime.
+        """
         dims = self.last_params.get("Dimensions", {}).get("nelxyz", [1, 1, 1])
         nelx, nely, nelz = dims[0], dims[1], dims[2]
         is_3d = nelz > 0
@@ -293,7 +314,14 @@ class ParameterManagerMixin:
         return p1 == p2
 
     def _normalize_params(self, p: dict):
-        """Helper to normalize parameters for comparison."""
+        """
+        Normalize parameters for comparison by removing irrelevant keys.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters dictionary to normalize (modified in place).
+        """
         pd = p["Dimensions"]
         if "nelxyz" in pd:
             is_2d = len(pd["nelxyz"]) < 3 or pd["nelxyz"][2] == 0.0
@@ -310,6 +338,16 @@ class ParameterManagerMixin:
         p.pop("Optimizer", None)
 
     def _normalize_regions(self, p: dict, is_2d: bool):
+        """
+        Normalize region parameters for comparison.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters dictionary containing Regions.
+        is_2d : bool
+            Whether this is a 2D problem.
+        """
         if "Regions" in p:
             pr = p["Regions"]
             if "rshape" in pr:
@@ -339,6 +377,16 @@ class ParameterManagerMixin:
                     pr.pop("rz")
 
     def _normalize_supports(self, p: dict, is_2d: bool):
+        """
+        Normalize support parameters for comparison.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters dictionary containing Supports.
+        is_2d : bool
+            Whether this is a 2D problem.
+        """
         if "Supports" in p:
             ps = p["Supports"]
             if "sdim" in ps:
@@ -360,6 +408,16 @@ class ParameterManagerMixin:
                     ps.pop("sz")
 
     def _normalize_forces(self, p: dict, is_2d: bool):
+        """
+        Normalize force parameters for comparison.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters dictionary containing Forces.
+        is_2d : bool
+            Whether this is a 2D problem.
+        """
         pf = p["Forces"]
         for prefix in ["fi", "fo"]:
             dir_key = f"{prefix}dir"
@@ -389,6 +447,14 @@ class ParameterManagerMixin:
                     pf.pop(f"{prefix}z")
 
     def _normalize_materials(self, p: dict):
+        """
+        Normalize material parameters for comparison.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters dictionary containing Materials.
+        """
         if "Materials" in p:
             pm = p["Materials"]
             if len(pm["E"]) == 1:
@@ -414,6 +480,23 @@ class ParameterManagerMixin:
         return err
 
     def _check_duplicates(self, indices: list, keyfunc: callable, msg: callable):
+        """
+        Check for duplicate entries and return error message if found.
+
+        Parameters
+        ----------
+        indices : list
+            List of indices to check.
+        keyfunc : callable
+            Function to extract comparison key from index.
+        msg : callable
+            Function to generate error message (takes two indices).
+
+        Returns
+        -------
+        str or None
+            Error message if duplicate found, None otherwise.
+        """
         seen = {}
         for i in indices:
             k = keyfunc(i)
@@ -422,6 +505,19 @@ class ParameterManagerMixin:
             seen[k] = i
 
     def _check_forces(self, params: dict):
+        """
+        Validate that at least one input force is active.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters dictionary.
+
+        Returns
+        -------
+        str or None
+            Error message if validation fails, None otherwise.
+        """
         pf = params["Forces"]
         ps = params.get("Supports", {})
 
@@ -434,6 +530,19 @@ class ParameterManagerMixin:
             return "At least one output force (for compliant mechanisms) or support (for rigid mechanisms) must be active"
 
     def _check_regions(self, params: dict):
+        """
+        Check for duplicate regions.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters dictionary.
+
+        Returns
+        -------
+        str or None
+            Error message if duplicate found, None otherwise.
+        """
         pr = params.get("Region")
         if not pr:
             return
@@ -453,6 +562,19 @@ class ParameterManagerMixin:
         )
 
     def _check_supports(self, params: dict):
+        """
+        Check for duplicate supports.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters dictionary.
+
+        Returns
+        -------
+        str or None
+            Error message if duplicate found, None otherwise.
+        """
         ps = params.get("Supports")
         if not ps:
             return
@@ -466,6 +588,19 @@ class ParameterManagerMixin:
         )
 
     def _check_force_duplicates(self, params: dict):
+        """
+        Check for duplicate input and output forces.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters dictionary.
+
+        Returns
+        -------
+        str or None
+            Error message if duplicate found, None otherwise.
+        """
         pf = params["Forces"]
 
         err = self._check_duplicates(
@@ -483,6 +618,19 @@ class ParameterManagerMixin:
         )
 
     def _check_materials(self, params: dict):
+        """
+        Check for duplicate materials and validate percentages sum to 100.
+
+        Parameters
+        ----------
+        params : dict
+            Parameters dictionary.
+
+        Returns
+        -------
+        str or None
+            Error message if validation fails, None otherwise.
+        """
         pm = params["Materials"]
 
         err = self._check_duplicates(
@@ -497,7 +645,11 @@ class ParameterManagerMixin:
             return "Material percentages don't sum up to 100%."
 
     def _update_position_ranges(self):
-        """Updates the maximum values for all position-related spin boxes."""
+        """
+        Update maximum values for position spin boxes based on current dimensions.
+
+        Ensures position inputs don't exceed the current mesh size.
+        """
         nelx = self.dim_widget.nx.value()
         nely = self.dim_widget.ny.value()
         nelz = self.dim_widget.nz.value()
@@ -529,7 +681,12 @@ class ParameterManagerMixin:
             sw["sz"].setMaximum(nelz)
 
     def _scale_parameters(self):
-        """Scales all dimensional and positional parameters by a given factor."""
+        """
+        Scale all dimensional and positional parameters by the scale factor.
+
+        Shows error if scaling would move values out of range, and warning
+        if rounding would lose proportions.
+        """
         scale = self.dim_widget.scale.value()
         if scale == 1.0:
             self.status_bar.showMessage("Scale is 1.0, nothing to do.", 3000)
@@ -632,7 +789,14 @@ class ParameterManagerMixin:
         )
 
     def _block_all_parameter_signals(self, block: bool):
-        """Helper to block or unblock signals for all parameter widgets."""
+        """
+        Block or unblock signals for all parameter widgets.
+
+        Parameters
+        ----------
+        block : bool
+            True to block signals, False to unblock.
+        """
         all_widgets = [
             self.dim_widget.nx,
             self.dim_widget.ny,
