@@ -2,11 +2,17 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Analyze a mechanism.
 
-from typing import Dict, Callable, Optional, Tuple
+from __future__ import annotations
+from collections.abc import Callable
 import numpy as np
+import numpy.typing as npt
+
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
+IntArray = npt.NDArray[np.int64]
 
 
-def _checkerboard(x: np.ndarray) -> bool:
+def _checkerboard(x: FloatArray) -> bool:
     """Check if the mechanism contains a checkerboard pattern."""
     # Apply a mask [[0, 1], [1, 0]] to the xPhys array with a tolerance to detect checkerboard patterns
     xbin = (x > 0.5).astype(int)
@@ -39,7 +45,7 @@ def _checkerboard(x: np.ndarray) -> bool:
     return False
 
 
-def _watertight(x: np.ndarray) -> bool:
+def _watertight(x: FloatArray) -> bool:
     """Check if the mechanism is watertight."""
     # Binarize xPhys with a threshold of 0.5 to get a binary image
     xbin = (x > 0.5).astype(int)
@@ -55,69 +61,71 @@ def _watertight(x: np.ndarray) -> bool:
     return n == 1  # If there is only one connected component (connex), it is watertight
 
 
-def _thresholded(xPhys: np.ndarray) -> bool:
+def _thresholded(xPhys: FloatArray) -> bool:
     """Check if the mechanism is thresholded."""
     # Check if np.mean(np.minimum(x, 1 - x)) is close to 0 (worst case is 0.5 where all elements are at 0.5)
     mean = np.mean(np.minimum(xPhys, 1 - xPhys))
     return bool(mean < 0.1)
 
 
-def _efficient(u: np.ndarray, Dimensions: Dict, Forces: Dict) -> bool:
+def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
     """Check if the mechanism is efficient."""
-    nelx, nely, nelz = Dimensions["nelxyz"]
-    is_3d = nelz > 0
-    dim_mul = 3 if is_3d else 2
+    nelx: int = dimensions["nelxyz"][0]
+    nely: int = dimensions["nelxyz"][1]
+    nelz: int = dimensions["nelxyz"][2]
+    is_3d: bool = nelz > 0
+    dim_mul: int = 3 if is_3d else 2
 
-    active_iforces_indices = [
-        i for i, fdir in enumerate(Forces.get("fidir", [])) if fdir != "-"
+    active_iforces_indices: list[int] = [
+        i for i, fdir in enumerate(forces.get("fidir", [])) if fdir != "-"
     ]
-    nbInputForces = len(active_iforces_indices)
+    nbInputForces: int = len(active_iforces_indices)
     if nbInputForces == 0:
         return False
 
     def get_disp(x: int, y: int, z: int, fdir: str, col_idx: int) -> float:
-        node = (z * (nelx + 1) * (nely + 1) if is_3d else 0) + x * (nely + 1) + y
-        dof_base = node * dim_mul
+        node: int = (z * (nelx + 1) * (nely + 1) if is_3d else 0) + x * (nely + 1) + y
+        dof_base: int = node * dim_mul
         if "X" in fdir:
-            dof = dof_base
+            dof: int = dof_base
         elif "Y" in fdir:
             dof = dof_base + 1
         else:
             dof = dof_base + 2
 
-        sign = -1 if "\u2190" in fdir or "\u2191" in fdir or "<" in fdir else 1
+        sign: float = -1 if "\u2190" in fdir or "\u2191" in fdir or "<" in fdir else 1
         return u[dof, col_idx] * sign
 
-    effectiveness = 0.0
-    active_oforces_indices = [
-        i for i, fdir in enumerate(Forces.get("fodir", [])) if fdir != "-"
+    effectiveness: float = 0.0
+    active_oforces_indices: list[int] = [
+        i for i, fdir in enumerate(forces.get("fodir", [])) if fdir != "-"
     ]
 
     if active_oforces_indices:
         # Compliant mechanism: compare total input travel to total output geometric travel
-        total_u_in = 0.0
-        total_u_out = 0.0
+        total_u_in: float = 0.0
+        total_u_out: float = 0.0
 
-        nbOutputForces = len(active_oforces_indices)
+        nbOutputForces: int = len(active_oforces_indices)
 
         for col_idx, i in enumerate(active_iforces_indices):
             total_u_in += abs(
                 get_disp(
-                    Forces["fix"][i],
-                    Forces["fiy"][i],
-                    Forces["fiz"][i] if is_3d else 0,
-                    Forces["fidir"][i],
+                    forces["fix"][i],
+                    forces["fiy"][i],
+                    forces["fiz"][i] if is_3d else 0,
+                    forces["fidir"][i],
                     col_idx,
                 )
             )
 
         for col_idx, oi in enumerate(active_oforces_indices):
-            actual_col = col_idx if col_idx < nbInputForces else 0
-            u_out_val = get_disp(
-                Forces["fox"][oi],
-                Forces["foy"][oi],
-                Forces["foz"][oi] if is_3d else 0,
-                Forces["fodir"][oi],
+            actual_col: int = col_idx if col_idx < nbInputForces else 0
+            u_out_val: float = get_disp(
+                forces["fox"][oi],
+                forces["foy"][oi],
+                forces["foz"][oi] if is_3d else 0,
+                forces["fodir"][oi],
                 actual_col,
             )
             # Only reward positive movement in the intended direction
@@ -129,53 +137,53 @@ def _efficient(u: np.ndarray, Dimensions: Dict, Forces: Dict) -> bool:
     else:
         # Rigid mechanism: displacement at input location must remain small
         for col_idx, i in enumerate(active_iforces_indices):
-            u_in = get_disp(
-                Forces["fix"][i],
-                Forces["fiy"][i],
-                Forces["fiz"][i] if is_3d else 0,
-                Forces["fidir"][i],
+            u_in: float = get_disp(
+                forces["fix"][i],
+                forces["fiy"][i],
+                forces["fiz"][i] if is_3d else 0,
+                forces["fidir"][i],
                 col_idx,
             )
-            effectiveness += abs(u_in) / max(Forces["finorm"][i], 1e-9)
+            effectiveness += abs(u_in) / max(forces["finorm"][i], 1e-9)
 
         return bool(effectiveness < 500 * nbInputForces)
 
 
 def analyze(
-    xPhys: np.ndarray,
-    u: np.ndarray,
-    Dimensions: Dict,
-    Forces: Dict,
-    progress_callback: Optional[Callable] = None,
-) -> Tuple[bool, bool, bool, bool]:
+    xPhys: FloatArray,
+    u: FloatArray,
+    dimensions: dict,
+    forces: dict,
+    progress_callback: Callable[[int], bool] | None = None,
+) -> tuple[bool, bool, bool, bool]:
     """Analyze the mechanism."""
-    xPhys_copy = xPhys.copy()
+    xPhys_copy: FloatArray = xPhys.copy()
     if xPhys.ndim == 2:
         xPhys_copy = np.clip(xPhys_copy.sum(axis=0, keepdims=True), 0.0, 1.0)
-    x = (
+    x: FloatArray = (
         xPhys_copy.reshape(
-            Dimensions["nelxyz"][2], Dimensions["nelxyz"][0], Dimensions["nelxyz"][1]
+            dimensions["nelxyz"][2], dimensions["nelxyz"][0], dimensions["nelxyz"][1]
         )
-        if Dimensions["nelxyz"][2] > 0
-        else xPhys_copy.reshape(Dimensions["nelxyz"][0], Dimensions["nelxyz"][1])
+        if dimensions["nelxyz"][2] > 0
+        else xPhys_copy.reshape(dimensions["nelxyz"][0], dimensions["nelxyz"][1])
     )
 
-    contains_checkerboard = _checkerboard(x)
+    contains_checkerboard: bool = _checkerboard(x)
     if progress_callback and progress_callback(1):
         print("Optimization stopped by user.")
         return contains_checkerboard, False, False, False
 
-    is_watertight = _watertight(x)
+    is_watertight: bool = _watertight(x)
     if progress_callback and progress_callback(2):
         print("Optimization stopped by user.")
         return contains_checkerboard, is_watertight, False, False
 
-    is_thresholded = _thresholded(xPhys)
+    is_thresholded: bool = _thresholded(xPhys)
     if progress_callback and progress_callback(3):
         print("Optimization stopped by user.")
         return contains_checkerboard, is_watertight, is_thresholded, False
 
-    is_efficient = _efficient(u, Dimensions, Forces)
+    is_efficient: bool = _efficient(u, dimensions, forces)
     if progress_callback and progress_callback(4):
         print("Optimization stopped by user.")
 

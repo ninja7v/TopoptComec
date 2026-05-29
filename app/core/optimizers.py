@@ -2,22 +2,28 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Topology Optimizers.
 
-from typing import Dict, Callable, Optional, Tuple
+from __future__ import annotations
+from collections.abc import Callable
 import numpy as np
+import numpy.typing as npt
 
 from app.core import initializers
 from app.core.fem import FEM
 
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
+IntArray = npt.NDArray[np.int64]
+
 
 def _oc(
     nel: int,
-    x: np.ndarray,
+    x: FloatArray,
     eta: float,
     max_change: float,
-    dc: np.ndarray,
-    dv: np.ndarray,
+    dc: FloatArray,
+    dv: FloatArray,
     g: float,
-) -> Tuple[np.ndarray, float]:
+) -> tuple[FloatArray, float]:
     """
     Optimality Criterion (OC) update scheme.
 
@@ -32,15 +38,16 @@ def _oc(
     Returns:
         A tuple containing the new design variables (xnew) and the updated gt value.
     """
-    l1, l2 = 0.0, 1e9
-    rhomin = 1e-6
-    xnew = np.zeros(nel)
+    l1: float = 0.0
+    l2: float = 1e9
+    rhomin: float = 1e-6
+    xnew: FloatArray = np.zeros(nel, dtype=np.float64)
 
     while (l2 - l1) / (l1 + l2) > 1e-4 and l2 > 1e-40:
-        lmid = 0.5 * (l2 + l1)
+        lmid: float = 0.5 * (l2 + l1)
         # Bisection method to find the Lagrange multiplier
         # This is the OC update rule with move limits
-        x_update = x * np.maximum(0.1, -dc / dv / lmid) ** eta
+        x_update: FloatArray = x * np.maximum(0.1, -dc / dv / lmid) ** eta
         xnew[:] = np.maximum(
             rhomin,
             np.maximum(
@@ -48,7 +55,7 @@ def _oc(
             ),
         )
 
-        gt = g + np.sum(
+        gt: float = g + np.sum(
             dv * (xnew - x)
         )  # Should be near zero for the volume constraint
         if gt > 0:
@@ -59,15 +66,15 @@ def _oc(
 
 
 def optimize(
-    Dimensions: Dict,
-    Forces: Dict,
-    Materials: Dict,
-    Optimizer: Dict,
-    Supports: Optional[Dict] = None,
-    Regions: Optional[Dict] = None,
-    progress_callback: Optional[Callable] = None,
+    Dimensions: dict,
+    Forces: dict,
+    Materials: dict,
+    Optimizer: dict,
+    Supports: dict | None = None,
+    Regions: dict | None = None,
+    progress_callback: Callable[[int, float, float, FloatArray], bool] | None = None,
     verbose: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[FloatArray, FloatArray]:
     """
     Topology optimization
 
@@ -81,14 +88,15 @@ def optimize(
     """
     if verbose:
         print("Optimizer starting...")
-    Supports, Regions = Supports or {}, Regions or {}
+    Supports = Supports or {}
+    Regions = Regions or {}
 
     # Initialize FEM Environment
-    fem = FEM(Dimensions, Materials, Optimizer)
+    fem: FEM = FEM(Dimensions, Materials, Optimizer)
     fem.setup_boundary_conditions(Forces, Supports)
 
     # Initialize Material
-    x = initializers.initialize_material(
+    x: FloatArray = initializers.initialize_material(
         Materials.get("init_type", 0),
         Dimensions.get("volfrac", 0.5),
         fem.nelx,
@@ -98,16 +106,18 @@ def optimize(
         *_get_active_coords(Supports, Forces, fem.is_3d),
     )
     x = fem.apply_regions(x, Regions)
-    xPhys = x.copy()
-    g = 0.0
+    xPhys: FloatArray = x.copy()
+    g: float = 0.0
 
     # Optimization Params
-    eta, max_change = Optimizer.get("eta", 1.0), Optimizer.get("max_change", 0.1)
-    n_it = Optimizer.get("n_it", 30)
+    eta: float = Optimizer.get("eta", 1.0)
+    max_change: float = Optimizer.get("max_change", 0.1)
+    n_it: int = Optimizer.get("n_it", 30)
 
     if verbose:
         print("   Preparation done -> Optimization loop starting...")
-    loop, change = 0, 1.0
+    loop: int = 0
+    change: float = 1.0
 
     # Emit frame 0 (initial density)
     if progress_callback and progress_callback(0, 0.0, 1.0, xPhys.copy()):
@@ -115,15 +125,17 @@ def optimize(
 
     while change > 0.01 and loop < n_it:
         loop += 1
-        xold = x.copy()
+        xold: FloatArray = x.copy()
 
         # Finite element analysis
         ui, uo = fem.solve(xPhys)
 
         # Optional: Compute Objective Value for Console Output (can also be computed inside compute_sensitivities for efficiency)
-        obj_val = fem.compute_objective(xPhys, ui, uo)
+        obj_val: float = fem.compute_objective(xPhys, ui, uo)
 
         # Compute Sensitivities & Filter
+        dc: FloatArray
+        dv: FloatArray
         (dc, dv) = fem.compute_sensitivities(xPhys, ui, uo)
 
         # Update Design Variables
@@ -151,40 +163,47 @@ def optimize(
 
 
 def _get_active_coords(
-    Supports: Dict, Forces: Dict, is_3d: bool
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    supports: dict, forces: dict, is_3d: bool
+) -> tuple[FloatArray, FloatArray, FloatArray]:
     """Helper to extract active coordinates for material initialization."""
 
     # This extracts the logic previously doing np.concatenate on active indices
-    def get_act(d, k_dim, k_flag):
-        return np.array(d.get(k_dim, []))[
+    def get_act(d: dict, k_dim: str, k_flag: str) -> FloatArray:
+        return np.array(d.get(k_dim, []), dtype=np.float64)[
             [i for i, v in enumerate(d.get(k_flag, [])) if v != "-"]
         ]
 
-    sx, sy = get_act(Supports, "sx", "sdim"), get_act(Supports, "sy", "sdim")
-    fix, fiy = get_act(Forces, "fix", "fidir"), get_act(Forces, "fiy", "fidir")
-    fox, foy = get_act(Forces, "fox", "fodir"), get_act(Forces, "foy", "fodir")
+    sx: FloatArray
+    sy: FloatArray
+    fix: FloatArray
+    fiy: FloatArray
+    fox: FloatArray
+    foy: FloatArray
+    sx, sy = get_act(supports, "sx", "sdim"), get_act(supports, "sy", "sdim")
+    fix, fiy = get_act(forces, "fix", "fidir"), get_act(forces, "fiy", "fidir")
+    fox, foy = get_act(forces, "fox", "fodir"), get_act(forces, "foy", "fodir")
 
-    all_x = np.concatenate([fix, fox, sx])
-    all_y = np.concatenate([fiy, foy, sy])
+    all_x: FloatArray = np.concatenate([fix, fox, sx])
+    all_y: FloatArray = np.concatenate([fiy, foy, sy])
 
     if is_3d:
-        sz = get_act(Supports, "sz", "sdim")
-        fiz, foz = get_act(Forces, "fiz", "fidir"), get_act(Forces, "foz", "fodir")
+        sz: FloatArray = get_act(supports, "sz", "sdim")
+        fiz: FloatArray = get_act(forces, "fiz", "fidir")
+        foz: FloatArray = get_act(forces, "foz", "fodir")
         return all_x, all_y, np.concatenate([fiz, foz, sz])
-    return all_x, all_y, np.array([0] * len(all_x))
+    return all_x, all_y, np.array([0] * len(all_x), dtype=np.float64)
 
 
 def optimize_multimaterial(
-    Dimensions: Dict,
-    Forces: Dict,
-    Materials: Dict,
-    Optimizer: Dict,
-    Supports: Optional[Dict] = None,
-    Regions: Optional[Dict] = None,
-    progress_callback: Optional[Callable] = None,
+    Dimensions: dict,
+    Forces: dict,
+    Materials: dict,
+    Optimizer: dict,
+    Supports: dict | None = None,
+    Regions: dict | None = None,
+    progress_callback: Callable[[int, float, float, FloatArray], bool] | None = None,
     verbose: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[FloatArray, FloatArray]:
     """Multi-material topology optimization (max 2 materials).
 
     Uses per-material density fields. Each material is updated via OC
@@ -201,20 +220,21 @@ def optimize_multimaterial(
     """
     if verbose:
         print("Multi-material optimizer starting...")
-    Supports, Regions = Supports or {}, Regions or {}
+    Supports = Supports or {}
+    Regions = Regions or {}
 
     # Initialize FEM Environment
-    fem = FEM(Dimensions, Materials, Optimizer)
+    fem: FEM = FEM(Dimensions, Materials, Optimizer)
     fem.setup_boundary_conditions(Forces, Supports)
 
-    E_list = Materials.get("E", [1.0])
-    percents = Materials.get("percent", [100])
-    n_mat = len(E_list)
+    E_list: list[float] = Materials.get("E", [1.0])
+    percents: list[int] = Materials.get("percent", [100])
+    n_mat: int = len(E_list)
 
-    volfrac = Dimensions.get("volfrac", 0.5)
+    volfrac: float = Dimensions.get("volfrac", 0.5)
 
     # Initialize Material
-    x = initializers.initialize_materials(
+    x: FloatArray = initializers.initialize_materials(
         Materials.get("init_type", 0),
         percents,
         volfrac,
@@ -225,17 +245,18 @@ def optimize_multimaterial(
     )
     for i in range(n_mat):
         x[i] = fem.apply_regions(x[i], Regions)
-    xPhys = x.copy()
-    g = np.zeros(n_mat)
+    xPhys: FloatArray = x.copy()
+    g: FloatArray = np.zeros(n_mat, dtype=np.float64)
 
     # Optimization Params
-    eta = Optimizer.get("eta", 1.0)
-    max_change = Optimizer.get("max_change", 0.1)
-    n_it = Optimizer.get("n_it", 30)
+    eta: float = Optimizer.get("eta", 1.0)
+    max_change: float = Optimizer.get("max_change", 0.1)
+    n_it: int = Optimizer.get("n_it", 30)
 
     if verbose:
         print("   Preparation done -> Optimization loop starting...")
-    loop, change = 0, 1.0
+    loop: int = 0
+    change: float = 1.0
 
     # Emit frame 0 (initial density)
     if progress_callback and progress_callback(0, 0.0, 1.0, xPhys.copy()):
@@ -243,17 +264,19 @@ def optimize_multimaterial(
 
     while change > 0.01 and loop < n_it:
         loop += 1
-        xold = x.copy()
+        xold: FloatArray = x.copy()
 
         # Finite element analysis
         ui, uo = fem.solve(xPhys)
 
         # Optional: Compute Objective Value for Console Output (can also be computed inside compute_sensitivities for efficiency)
-        obj_val = fem.compute_objective(xPhys, ui, uo)
+        obj_val: float = fem.compute_objective(xPhys, ui, uo)
 
         # Per-material sensitivity & OC update
         for i in range(n_mat):
             # Compute Sensitivities & Filter
+            dc_i: FloatArray
+            dv_i: FloatArray
             (dc_i, dv_i) = fem.compute_sensitivities(xPhys[i], ui, uo)
 
             # Chain-rule: Scale the sensitivity by the material's stiffness.
@@ -268,8 +291,8 @@ def optimize_multimaterial(
             xPhys[i] = fem.apply_regions(xPhys[i], Regions)
 
         # Partition-of-unity constraint: ensure sum of densities <= 1 per element
-        col_sums = xPhys.sum(axis=0)
-        excess = col_sums > 1.0
+        col_sums: FloatArray = xPhys.sum(axis=0)
+        excess: np.ndarray = col_sums > 1.0
         if np.any(excess):
             xPhys[:, excess] /= col_sums[excess]
 

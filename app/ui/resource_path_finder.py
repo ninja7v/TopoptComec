@@ -2,6 +2,7 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Resource path finder.
 
+from __future__ import annotations
 import sys
 from pathlib import Path
 
@@ -10,11 +11,11 @@ def resource_path(relative_path: str) -> Path:
     """Get the absolute path to a resource, working for both development and PyInstaller."""
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # PyInstaller frozen exe
-        base_path = Path(sys._MEIPASS)
+        base_path: Path = Path(sys._MEIPASS)
     else:
         # Normal development run
         # Try to find the project root by looking for main.py or known file
-        current = Path(__file__).resolve()
+        current: Path = Path(__file__).resolve()
         for parent in [
             current.parent,
             current.parent.parent,

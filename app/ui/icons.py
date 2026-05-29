@@ -2,6 +2,8 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Icon management.
 
+from __future__ import annotations
+from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 from .resource_path_finder import resource_path
@@ -10,11 +12,11 @@ from .resource_path_finder import resource_path
 class IconProvider:
     """Provides standard Qt icons for the UI."""
 
-    def __init__(self):
-        self.style = QApplication.style()
-        self.theme = "light"
+    def __init__(self) -> None:
+        self.style: QStyle = QApplication.style()
+        self.theme: str = "light"
 
-    def _set_theme(self, theme_name: str):
+    def _set_theme(self, theme_name: str) -> None:
         """Sets the current theme ('light' or 'dark'). Called by the MainWindow."""
         self.theme = theme_name
 
@@ -24,18 +26,22 @@ class IconProvider:
         falls back to standard Qt icons if not found.
         """
         # 1. Try to find a themed icon file
-        extensions = ["svg", "png", "jpg"]  # Try .svg first, then .png, then .jpg
-        icon_dir = resource_path("icons")
+        extensions: list[str] = [
+            "svg",
+            "png",
+            "jpg",
+        ]  # Try .svg first, then .png, then .jpg
+        icon_dir: Path = resource_path("icons")
         for ext in extensions:
-            themed_path = icon_dir / f"{icon_name}_{self.theme}.{ext}"
+            themed_path: Path = icon_dir / f"{icon_name}_{self.theme}.{ext}"
             if themed_path.is_file():
-                icon = QIcon(str(themed_path))
+                icon: QIcon = QIcon(str(themed_path))
                 if not icon.isNull():
                     return icon
 
         # 2. If not found, try to find a generic (non-themed) icon file
         for ext in extensions:
-            generic_path = icon_dir / f"{icon_name}.{ext}"
+            generic_path: Path = icon_dir / f"{icon_name}.{ext}"
             if generic_path.is_file():
                 icon = QIcon(str(generic_path))
                 if not icon.isNull():
@@ -46,7 +52,7 @@ class IconProvider:
             # Ensure the style is initialized, especially for tests
             self.style = QApplication.instance().style()
 
-        icon_map = {
+        icon_map: dict[str, QStyle.StandardPixmap] = {
             "save": QStyle.StandardPixmap.SP_DialogSaveButton,
             "delete": QStyle.StandardPixmap.SP_TrashIcon,
             "eye_open": QStyle.StandardPixmap.SP_DialogYesButton,
@@ -67,7 +73,7 @@ class IconProvider:
             "reset": QStyle.StandardPixmap.SP_BrowserReload,
             "scale": QStyle.StandardPixmap.SP_ArrowRight,
         }
-        pixmap = icon_map.get(icon_name)
+        pixmap: QStyle.StandardPixmap | None = icon_map.get(icon_name)
         if pixmap:
             return self.style.standardIcon(pixmap)
 
@@ -76,4 +82,4 @@ class IconProvider:
 
 
 # Global instance for easy access
-icons = IconProvider()
+icons: IconProvider = IconProvider()
