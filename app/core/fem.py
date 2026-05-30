@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
-from scipy.sparse import coo_matrix, csc_matrix
+from scipy.sparse import coo_matrix, csc_matrix, eye
 from scipy.sparse.linalg import spsolve, cg, LinearOperator
 
 # Type aliases
@@ -50,6 +50,8 @@ class FEM:
         self.nelxyz: Sequence[int] = Dimensions.get("nelxyz", [1, 1, 1])
         self.nelx, self.nely, self.nelz = (int(v) for v in self.nelxyz)
         self.is_3d: bool = self.nelz > 0
+        if self.nelx <= 0 or self.nely <= 0 or (self.is_3d and self.nelz <= 0):
+            raise ValueError(f"Invalid grid dimensions: {self.nelxyz!r}")
         self.nel: int = self.nelx * self.nely * (self.nelz if self.is_3d else 1)
         self.elemndof: int = 3 if self.is_3d else 2
         self.dim_mul: int = self.elemndof
@@ -72,11 +74,12 @@ class FEM:
         )
         self.penal: float = float(Optimizer.get("penal", 3.0))
         self.solver_type: str = Optimizer.get("solver", "default")
-        self.filter_type: str = Optimizer.get("filter_type", 0)
+        self.filter_type: str = Optimizer.get("filter_type", "Sensitivity")
         self.filter_radius: float = float(Optimizer.get("filter_radius_min", 0.0))
 
         # Pre-compute Constant Matrices (KE, DOF Maps, Filter)
         self.KE: FloatArray = self._get_lk_stiffness()
+        self._KE_flat: FloatArray = self.KE.ravel(order="F")  # reused at every assembly
         self.edofMat, self.iK, self.jK = self._build_dof_map()
         self.H, self.Hs = self._build_filter()
 
@@ -263,11 +266,13 @@ class FEM:
         # Assembly
         E_eff = (
             self.E_min[:, None] + xPhys**self.penal * (self.E_max - self.E_min)[:, None]
-        )
-        E_eff = E_eff.sum(axis=0)
-        sK = (self.KE.flatten()[np.newaxis]).T * E_eff
+        ).sum(axis=0)
+
+        sK = self._KE_flat[:, None] * E_eff
+
         K = coo_matrix(
-            (sK.flatten(order="F"), (self.iK, self.jK)), shape=(self.ndof, self.ndof)
+            (sK.ravel(order="F"), (self.iK, self.jK)),
+            shape=(self.ndof, self.ndof),
         ).tocsc()
         # Add artificial stiffness at force locations
         self._add_artificial_springs(K, self.di_indices, self.fi_indices, self.finorm)
@@ -369,21 +374,18 @@ class FEM:
         float
             Objective function value.
         """
-        nb_out = len(self.fo_indices)
-        obj_val = 0.0
-
-        if nb_out == 0:  # Rigid Mechanism (Minimize Compliance)
+        if len(self.fo_indices) == 0:
+            # Rigid Mechanism (Minimize Compliance)
             E_eff = np.full(self.nel, self.E_min[0], dtype=np.float64)
             for i, E_i in enumerate(self.E_max):
                 E_eff += xPhys[i] ** self.penal * (E_i - self.E_min[i])
             ce_total = self.compute_ce(ui, uo)
-            obj_val = (E_eff * ce_total).sum()
-        else:  # Compliant Mechanism
-            # Sum of absolute output displacements
-            for idx, dof_indices in enumerate(self.do_indices):
-                obj_val += sum(abs(uo[dof, idx]) for dof in [dof_indices]) / nb_out
+            return float((E_eff * ce_total).sum())
 
-        return obj_val
+        # Compliant Mechanism: maximize average output displacement
+        return float(
+            np.mean([abs(uo[dof, idx]) for idx, dof in enumerate(self.do_indices)])
+        )
 
     # --- Internal Helper Methods ---
 
@@ -575,13 +577,13 @@ class FEM:
             (filtered_dc, filtered_dv) - Filtered sensitivity arrays.
         """
         if self.filter_type == "Sensitivity":
-            # H * (x * dc) / Hs / max(x, 0.001)
-            dc = np.asarray((self.H @ (x * dc)) / self.Hs.flatten()) / np.maximum(
-                0.001, x
-            )
+            Hx_dc = self.H @ (x * dc)
+            dc = np.asarray(Hx_dc, dtype=np.float64) / self.Hs / np.maximum(0.001, x)
+
         elif self.filter_type == "Density":
-            dc = np.asarray(self.H * (dc[np.newaxis].T / self.Hs))[:, 0]
-            dv = np.asarray(self.H * (dv[np.newaxis].T / self.Hs))[:, 0]
+            dc = np.asarray(self.H @ (dc / self.Hs), dtype=np.float64)
+            dv = np.asarray(self.H @ (dv / self.Hs), dtype=np.float64)
+
         return dc, dv
 
     def update_xPhys(self, x: FloatArray) -> FloatArray:
@@ -802,7 +804,7 @@ class FEM:
 
         return edofMat, iK, jK
 
-    def _build_filter(self):
+    def _build_filter(self) -> tuple[csc_matrix, FloatArray]:
         """
         Build the sensitivity/density filter matrix.
 
@@ -811,6 +813,12 @@ class FEM:
         tuple
             (H, Hs) - Sparse filter matrix and row sums for normalization.
         """
+        if self.filter_radius <= 0:
+            # No error rased since it is equivalent to no filtering.
+            H = eye(self.nel, format="csc", dtype=np.float64)
+            Hs = np.ones(self.nel, dtype=np.float64)
+            return H, Hs
+
         el = np.arange(self.nel)
 
         # Map 1D element arrays to 2D/3D indices
@@ -876,4 +884,4 @@ class FEM:
             shape=(self.nel, self.nel),
         ).tocsc()
 
-        return H, H.sum(1)
+        return H, np.asarray(H.sum(1)).ravel()
