@@ -11,7 +11,7 @@ from matplotlib.patches import Rectangle
 class PlottingMixin:
     """Mixin for MainWindow to handle all plotting operations."""
 
-    def _style_plot_default(self):
+    def _style_plot_default(self) -> None:
         """
         Apply the default white theme styling to the plot.
 
@@ -162,7 +162,7 @@ class PlottingMixin:
                 )
         # Multi-iteration displacement handled in _update_animation_frame
 
-    def _initialize_xphys(self, nelx: int, nely: int, nelz: int, is_3d: bool):
+    def _initialize_xphys(self, nelx: int, nely: int, nelz: int, is_3d: bool) -> None:
         """
         Initialize the material density field based on current parameters.
 
@@ -239,7 +239,7 @@ class PlottingMixin:
         if self.xPhys is not None and "Regions" in self.last_params:
             self._apply_regions(nelx, nely, nelz, is_3d)
 
-    def _apply_regions(self, nelx: int, nely: int, nelz: int, is_3d: bool):
+    def _apply_regions(self, nelx: int, nely: int, nelz: int, is_3d: bool) -> None:
         """
         Apply solid/void region overrides to the current density field.
 
@@ -306,7 +306,7 @@ class PlottingMixin:
                 else:
                     self.xPhys[:, flat_idx] = value
 
-    def _show_initial_message(self, ax: plt.Axes, is_3d: bool):
+    def _show_initial_message(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Display placeholder message on the plot before optimization results exist.
 
@@ -344,7 +344,7 @@ class PlottingMixin:
                     color="black",
                 )
 
-    def replot(self):
+    def replot(self) -> None:
         """
         Redraw the entire plot including all visible layers.
 
@@ -382,7 +382,9 @@ class PlottingMixin:
         ax.autoscale(tight=True)
         self.canvas.draw()
 
-    def _plot_material(self, ax: plt.Axes, is_3d: bool, xPhys_data=None):
+    def _plot_material(
+        self, ax: plt.Axes, is_3d: bool, xPhys_data: np.ndarray | None = None
+    ) -> None:
         """
         Plot the material density field.
 
@@ -532,7 +534,7 @@ class PlottingMixin:
         )
         ax.set_box_aspect([nelx, nely, nelz])
 
-    def _redraw_non_material_layers(self, ax: plt.Axes, is_3d: bool):
+    def _redraw_non_material_layers(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Redraw overlay layers (forces, supports, regions, dimensions, displacement preview).
 
@@ -550,7 +552,7 @@ class PlottingMixin:
         self._plot_dimensions_frame(ax, is_3d=is_3d)
         self._plot_displacement_preview(ax, is_3d=is_3d)
 
-    def _plot_dimensions_frame(self, ax: plt.Axes, is_3d: bool):
+    def _plot_dimensions_frame(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Draw a dotted frame around the design space.
         Controlled by the Dimensions section's visibility button.
@@ -633,7 +635,7 @@ class PlottingMixin:
             spine.set_visible(True)
             spine.set_edgecolor("black")
 
-    def _plot_forces(self, ax: plt.Axes, is_3d: bool):
+    def _plot_forces(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Plot force vectors on the axes.
 
@@ -662,7 +664,9 @@ class PlottingMixin:
         else:
             self._plot_initial_forces(ax, is_3d, pf, length)
 
-    def _arrow_vectors(self, dirs: list, length: float, is_3d: bool):
+    def _arrow_vectors(
+        self, dirs: list, length: float, is_3d: bool
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
         """
         Convert force direction strings to direction vectors.
 
@@ -701,7 +705,9 @@ class PlottingMixin:
 
         return dx, dy, dz
 
-    def _plot_initial_forces(self, ax: plt.Axes, is_3d: bool, pf: dict, length: float):
+    def _plot_initial_forces(
+        self, ax: plt.Axes, is_3d: bool, pf: dict, length: float
+    ) -> None:
         """
         Plot force vectors at their initial positions.
 
@@ -744,7 +750,9 @@ class PlottingMixin:
             else:
                 ax.quiver(x, y, dx, dy, color=color, units="xy", scale=1, width=0.5)
 
-    def _plot_deformed_forces(self, ax: plt.Axes, is_3d: bool, pd: dict, length: float):
+    def _plot_deformed_forces(
+        self, ax: plt.Axes, is_3d: bool, pd: dict, length: float
+    ) -> None:
         """
         Plot force vectors at their displaced positions.
 
@@ -813,7 +821,7 @@ class PlottingMixin:
             else:
                 ax.quiver(fx, fy, dx, dy, color=color, units="xy", scale=1, width=0.5)
 
-    def _plot_supports(self, ax: plt.Axes, is_3d: bool):
+    def _plot_supports(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Plot support markers on the provided axes.
 
@@ -849,7 +857,7 @@ class PlottingMixin:
             else:
                 ax.scatter(pos[0], pos[1], s=size, marker="^", c="black")
 
-    def _plot_regions(self, ax: plt.Axes, is_3d: bool):
+    def _plot_regions(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Draw region outlines (square/cube or circle/sphere) on the axes.
 
@@ -947,7 +955,7 @@ class PlottingMixin:
                     )
                     ax.add_patch(circ)
 
-    def _plot_displacement_preview(self, ax: plt.Axes, is_3d: bool):
+    def _plot_displacement_preview(self, ax: plt.Axes, is_3d: bool) -> None:
         """
         Overlay displacement preview vectors (quivers) on the plot.
 
