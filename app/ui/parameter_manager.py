@@ -466,6 +466,25 @@ class ParameterManagerMixin:
                     pm["init_type"] = 0
 
     def _validate_parameters(self, params: dict) -> str | None:
+        """
+        Validate the full parameters dictionary before running optimization.
+
+        Performs a sequence of targeted checks (domain, regions, forces,
+        supports, materials and optimizer settings). Returns an error string
+        describing the first detected issue, or `None` when the parameters are
+        valid.
+
+        Parameters
+        ----------
+        params : dict
+            Complete parameters dictionary as produced by `_gather_parameters`.
+
+        Returns
+        -------
+        str or None
+            Error message describing the invalid parameter, or `None` when
+            validation passes.
+        """
         nelx, nely, nelz = params["Dimensions"]["nelxyz"]
         if nelx <= 0 or nely <= 0 or nelz < 0:
             return "Nx, Ny, Nz must be positive."

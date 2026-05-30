@@ -814,7 +814,17 @@ class PlottingMixin:
                 ax.quiver(fx, fy, dx, dy, color=color, units="xy", scale=1, width=0.5)
 
     def _plot_supports(self, ax: plt.Axes, is_3d: bool):
-        """Plots the supports as triangles."""
+        """
+        Plot support markers on the provided axes.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Target axes (2D or 3D) where supports will be drawn.
+        is_3d : bool
+            Whether the axes represent a 3D plot. Controls marker placement
+            and plotting API used.
+        """
         if not self.sections["Supports"].visibility_button.isChecked():
             return
         if not self.last_params or "Supports" not in self.last_params:
@@ -840,7 +850,20 @@ class PlottingMixin:
                 ax.scatter(pos[0], pos[1], s=size, marker="^", c="black")
 
     def _plot_regions(self, ax: plt.Axes, is_3d: bool):
-        """Plots the regions outline (square/cube or circle/sphere) in 2D or 3D."""
+        """
+        Draw region outlines (square/cube or circle/sphere) on the axes.
+
+        Regions are drawn with a green, dashed outline. In 2D a `matplotlib`
+        patch (Rectangle or Circle) is added, while in 3D the function plots
+        the corresponding edges or a wireframe sphere.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Target axes for drawing.
+        is_3d : bool
+            Whether the plot is 3D.
+        """
         if not self.sections["Regions"].visibility_button.isChecked():
             return
         if self.is_displaying_deformation:
@@ -925,7 +948,21 @@ class PlottingMixin:
                     ax.add_patch(circ)
 
     def _plot_displacement_preview(self, ax: plt.Axes, is_3d: bool):
-        """Overlays displacement vectors (quivers) on the plot if the preview is active."""
+        """
+        Overlay displacement preview vectors (quivers) on the plot.
+
+        The function samples a subset of elements/nodes and draws quiver
+        arrows representing the displacement vector at those locations. Only
+        elements considered to contain material are shown. Scaling and arrow
+        density depend on the current UI controls.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Target axes to draw displacement arrows.
+        is_3d : bool
+            Whether to draw 3D quivers or 2D arrows.
+        """
         if not self.sections["Displacement"].visibility_button.isChecked():
             return
         if self.is_displaying_deformation:

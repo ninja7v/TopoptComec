@@ -344,7 +344,14 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     ################
 
     def _run_optimization(self):
-        """Starts the optimization process based on current parameters, and gives live updates."""
+        """
+        Start the optimization process using the current UI parameters.
+
+        This method validates parameters, prepares the UI (progress bar,
+        disabling controls), and starts an `OptimizerWorker` thread. Live
+        updates are received via connected signals which update the plot and
+        progress indicators.
+        """
         error = self._validate_parameters(self.last_params)
         if error:
             QMessageBox.critical(self, "Input Error", error)
@@ -396,7 +403,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
 
     def _update_optimization_plot(self, xPhys_frame: np.ndarray):
-        """Updates the plot with an intermediate frame from the optimizer."""
+        """
+        Update the main plot with an intermediate optimizer frame.
+
+        Parameters
+        ----------
+        xPhys_frame : np.ndarray
+            Flattened density frame produced by the optimizer. For
+            multi-material problems the array may be 2D (n_mat, nel).
+        """
         # Ensure a plot exist to update
         if not self.figure.get_axes():
             return
@@ -437,7 +452,16 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 self.figure.savefig(filename, dpi=300, bbox_inches="tight")
 
     def _handle_optimization_results(self, result: Tuple[np.ndarray, np.ndarray]):
-        """Handles the results after optimization finishes successfully."""
+        """
+        Finalize the UI after optimization completes and cache results.
+
+        Parameters
+        ----------
+        result : tuple
+            Tuple `(xPhys, u)` where `xPhys` is the density field and `u` is
+            the displacement vector returned by the optimizer. If a preset
+            is selected the result is saved to `results/<preset>/...`.
+        """
         self.xPhys, self.u = result
         self.last_displayed_frame_data = None
         self.status_bar.showMessage("Optimization finished successfully.", 5000)
@@ -487,7 +511,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     ################
 
     def _run_displacement(self):
-        """Starts the displacement animation based on the last optimization result, and gives live updates."""
+        """
+        Start displacement computation/animation for the last optimization.
+
+        If only a single displacement frame is requested it computes it
+        synchronously; otherwise it launches a `DisplacementWorker` to
+        compute frames in the background while updating the UI.
+        """
         if self.xPhys is None or self.u is None:
             QMessageBox.warning(
                 self,
@@ -572,7 +602,16 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
 
     def _update_animation_frame(self, frame_data: np.ndarray):
-        """Updates the plot with a new frame from the displacement animation."""
+        """
+        Update the main plot with a displacement animation frame.
+
+        Parameters
+        ----------
+        frame_data : np.ndarray
+            Frame data containing either a single-material flattened density
+            field or multi-material (n_mat, nel) array depending on the
+            current result.
+        """
         # Safety checks to ensure a plot exists and parameters are available
         if not self.figure.get_axes() or not self.last_params:
             return
@@ -748,8 +787,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
     def _save_result_as(self, file_type: str):
         """
-        Save the current result as file_type in a result folder.
-        The result folder is created if it does not exist.
+        Save the current result to disk in the requested format.
+
+        Parameters
+        ----------
+        file_type : str
+            One of `"png"`, `"vti"`, `"stl"`, or `"3mf"`. The function
+            will present a file dialog and call the appropriate exporter.
         """
         if self.xPhys is None:
             return
@@ -909,7 +953,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.status_bar.showMessage(f"Preset '{preset_name}' deleted.", 3000)
 
     def _on_preset_selected(self):
-        """Applies the parameters when a preset is selected from the combo box."""
+        """
+        Apply the selected preset to the UI widgets and, if a cached result
+        exists under `results/<preset>/`, load it into the viewer.
+        """
         preset_name = self.preset.presets_combo.currentText()
         if preset_name in self.presets:
             self.footer.start_create_button_effect()
