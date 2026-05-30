@@ -136,6 +136,7 @@ def _run_single_preset(
                     )
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             return preset_name, f"Displacement failed: {e}"
 
@@ -157,7 +158,6 @@ def _run_single_preset(
         filename: str = str(base_filename.with_suffix(f".{f}"))
         if verbose:
             print(f"[{preset_name}] Saving {f.upper()} to {filename}...")
-
         success: bool
         error_msg: str | None
         success, error_msg = _export(xPhys, nelxyz, filename, f)
