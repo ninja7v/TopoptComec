@@ -255,6 +255,7 @@ class ColorPickerButton(QPushButton):
     colorChanged = Signal(QColor)
 
     def __init__(self, initial_color: QColor = QColor("black")):
+        """Initialize the ColorPickerButton."""
         super().__init__()
         self.setObjectName("ColorPickerButton")
         if isinstance(initial_color, str):

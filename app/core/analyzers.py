@@ -13,7 +13,23 @@ IntArray = npt.NDArray[np.int64]
 
 
 def _checkerboard(x: FloatArray) -> bool:
-    """Check if the mechanism contains a checkerboard pattern."""
+    """
+    Detect checkerboard patterns in a binaryized density field.
+
+    This routine inspects local 3x3 (or 3x3x3 for 3D) neighborhoods looking
+    for alternating patterns that indicate numerical checkerboarding.
+
+    Parameters
+    ----------
+    x : FloatArray
+        Binary or continuous spatial field. Values are interpreted by
+        thresholding at 0.5.
+
+    Returns
+    -------
+    bool
+        True if a checkerboard-like pattern is detected, False otherwise.
+    """
     # Apply a mask [[0, 1], [1, 0]] to the xPhys array with a tolerance to detect checkerboard patterns
     xbin = (x > 0.5).astype(int)
     if xbin.ndim == 2:
@@ -46,7 +62,24 @@ def _checkerboard(x: FloatArray) -> bool:
 
 
 def _watertight(x: FloatArray) -> bool:
-    """Check if the mechanism is watertight."""
+    """
+    Test whether the solid region is a single connected component.
+
+    The function binarizes the input at 0.5 and uses connected-component
+    labeling to determine how many connected components are present. If the
+    solid part forms a single component the design is considered watertight.
+
+    Parameters
+    ----------
+    x : FloatArray
+        Spatial density field (binary or continuous). Values are thresholded
+        at 0.5 prior to connectivity analysis.
+
+    Returns
+    -------
+    bool
+        True when exactly one connected component exists, False otherwise.
+    """
     # Binarize xPhys with a threshold of 0.5 to get a binary image
     xbin = (x > 0.5).astype(int)
     from scipy.ndimage import label, generate_binary_structure
@@ -62,14 +95,53 @@ def _watertight(x: FloatArray) -> bool:
 
 
 def _thresholded(xPhys: FloatArray) -> bool:
-    """Check if the mechanism is thresholded."""
+    """
+    Determine whether the density field is mostly near binary values.
+
+    A field is considered thresholded when the average closeness to either
+    0 or 1 is below a small threshold (default heuristic uses 0.1). This
+    helps detect designs that are already nearly binary.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Density field (can be multi-material where values are in [0,1]).
+
+    Returns
+    -------
+    bool
+        True if the field appears thresholded, False otherwise.
+    """
     # Check if np.mean(np.minimum(x, 1 - x)) is close to 0 (worst case is 0.5 where all elements are at 0.5)
     mean = np.mean(np.minimum(xPhys, 1 - xPhys))
     return bool(mean < 0.1)
 
 
 def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
-    """Check if the mechanism is efficient."""
+    """
+    Heuristic check whether the mechanism achieves useful movement.
+
+    For compliant mechanisms (with output forces) the routine compares the
+    total input travel to the achieved output travel and expects a favourable
+    ratio. For rigid mechanisms (no output forces) it checks that input
+    displacements remain acceptably small. The thresholds are heuristic and
+    chosen to provide a quick indicator.
+
+    Parameters
+    ----------
+    u : FloatArray
+        Displacement matrix returned by the solver (DOFs x columns).
+    dimensions : dict
+        Dimensions dictionary containing `nelxyz` for mesh sizes.
+    forces : dict
+        Forces dictionary with input/output force definitions and norms.
+
+    Returns
+    -------
+    bool
+        True if the mechanism is considered efficient by the heuristic,
+        False otherwise.
+    """
     nelx: int = dimensions["nelxyz"][0]
     nely: int = dimensions["nelxyz"][1]
     nelz: int = dimensions["nelxyz"][2]
@@ -156,7 +228,38 @@ def analyze(
     forces: dict,
     progress_callback: Callable[[int], bool] | None = None,
 ) -> tuple[bool, bool, bool, bool]:
-    """Analyze the mechanism."""
+    """
+    Run a series of quick, independent analyses on a design.
+
+    The function computes four boolean indicators:
+    - contains_checkerboard: detection of local checkerboard artifacts
+    - is_watertight: whether the solid region is a single connected component
+    - is_thresholded: whether the density field is near-binary
+    - is_efficient: heuristic effectiveness of the mechanism movement
+
+    The `progress_callback` can be used to interrupt long-running analysis
+    (it will be called with increasing step indices and should return True
+    to request cancellation).
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Density field produced by the optimizer (can be multi-material).
+    u : FloatArray
+        Displacement field produced by the solver.
+    dimensions : dict
+        Dimensions dictionary (contains `nelxyz`).
+    forces : dict
+        Forces dictionary used to evaluate efficiency.
+    progress_callback : callable or None
+        Optional callback called with step index; if it returns True the
+        analysis will stop early and the partial results will be returned.
+
+    Returns
+    -------
+    tuple(bool, bool, bool, bool)
+        (contains_checkerboard, is_watertight, is_thresholded, is_efficient)
+    """
     xPhys_copy: FloatArray = xPhys.copy()
     if xPhys.ndim == 2:
         xPhys_copy = np.clip(xPhys_copy.sum(axis=0, keepdims=True), 0.0, 1.0)

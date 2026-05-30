@@ -61,7 +61,35 @@ def initialize_material(
     all_y: FloatArray,
     all_z: FloatArray,
 ) -> FloatArray:
-    """Initialize the material distribution based on the selected type."""
+    """
+    Initialize a single-material density field according to a chosen strategy.
+
+    Parameters
+    ----------
+    init_type : int
+        Type of initializer: 0 = uniform, 1 = distance-field from active
+        coordinates, 2 = random seed.
+    volfrac : float
+        Target volume fraction (mean density between 0 and 1).
+    nelx, nely, nelz : int
+        Number of elements along each axis. If `nelz` > 0, a 3D field is
+        assumed.
+    all_x, all_y, all_z : FloatArray
+        Arrays of active coordinate locations used by the distance-field
+        initializer (typically forces and supports coordinates). For 2D
+        problems `all_z` may be an array of zeros.
+
+    Returns
+    -------
+    FloatArray
+        Flattened density field of length `nelx * nely * (nelz or 1)` with
+        values clipped to [0, 1] and mean approximately equal to `volfrac`.
+
+    Raises
+    ------
+    ValueError
+        If `init_type` is not one of the supported integers (0, 1, 2).
+    """
     is_3d: bool = nelz > 0
     nel: int = nelx * nely * (nelz if is_3d else 1)
 

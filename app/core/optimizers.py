@@ -165,7 +165,29 @@ def optimize(
 def _get_active_coords(
     supports: dict, forces: dict, is_3d: bool
 ) -> tuple[FloatArray, FloatArray, FloatArray]:
-    """Helper to extract active coordinates for material initialization."""
+    """
+    Extract active element coordinates from supports and forces dictionaries.
+
+    Parameters
+    ----------
+    supports : dict
+        Supports section from parameters, expected keys like `sx`, `sy`, `sz`,
+        and `sdim` that indicate active supports.
+    forces : dict
+        Forces section from parameters, expected keys like `fix`, `fiy`, `fiz`,
+        `fox`, `foy`, `foz`, and direction keys `fidir`, `fodir`.
+    is_3d : bool
+        Whether the problem is 3D. If False, a placeholder z-array of zeros is
+        returned as the third element.
+
+    Returns
+    -------
+    tuple of three FloatArray
+        `all_x`, `all_y`, `all_z` arrays containing the x/y/z coordinates of
+        active points concatenated from input forces, output forces and
+        supports. For 2D problems `all_z` is an array of zeros matching the
+        length of `all_x`.
+    """
 
     # This extracts the logic previously doing np.concatenate on active indices
     def get_act(d: dict, k_dim: str, k_flag: str) -> FloatArray:
