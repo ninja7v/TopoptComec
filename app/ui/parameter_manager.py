@@ -471,13 +471,48 @@ class ParameterManagerMixin:
             return "Nx, Ny, Nz must be positive."
 
         err = (
-            self._check_forces(params)
+            self._check_domain(params)
             or self._check_regions(params)
+            or self._check_forces(params)
             or self._check_supports(params)
-            or self._check_force_duplicates(params)
             or self._check_materials(params)
+            or self._check_optimizer(params)
         )
         return err
+
+    def _check_domain(self, params: dict):
+        """
+        Validate domain-related configuration values.
+        """
+        pd = params.get("Dimensions", {})
+        nelx, nely, nelz = pd.get("nelxyz", [0, 0, 0])
+        if nelx < 0 or nely < 0 or nelz < 0:
+            return "Dimensions must not be negative."
+        volfrac = pd.get("volfrac", 0.0)
+        if volfrac <= 0.0 or volfrac > 1.0:
+            return "Volume fraction must be between 0 and 1."
+
+    def _check_optimizer(self, params: dict):
+        """
+        Validate optimizer-related parameters.
+        """
+        po = params.get("Optimizer", {})
+        if po.get("filter_radius_min", 0.0) < 0.0:
+            return "Filter radius must be non-negative."
+        eta = po.get("eta", 0.0)
+        if eta <= 0.0:
+            return "Optimizer eta must be positive."
+        if eta > 1.0:
+            return "Optimizer eta must be at most 1.0."
+        penal = po.get("penal", 0.0)
+        if penal < 1.0:
+            return "Penalization must be at least 1.0."
+        if penal > 10.0:
+            return "Penalization must be at most 10.0."
+        if po.get("max_change", 0.0) <= 0.0:
+            return "Optimizer max_change must be positive."
+        if po.get("n_it", 0) <= 0:
+            return "Optimizer iteration count must be positive."
 
     def _check_duplicates(self, indices: list, keyfunc: callable, msg: callable):
         """
@@ -528,6 +563,20 @@ class ParameterManagerMixin:
             d != "-" for d in ps.get("sdim", [])
         ):
             return "At least one output force (for compliant mechanisms) or support (for rigid mechanisms) must be active"
+
+        err = self._check_duplicates(
+            [i for i, d in enumerate(pf["fidir"]) if d != "-"],
+            lambda i: (pf["fix"][i], pf["fiy"][i], pf["fiz"][i], pf["fidir"][i]),
+            lambda a, b: f"Input forces {a + 1} and {b + 1} are identical.",
+        )
+        if err:
+            return err
+
+        return self._check_duplicates(
+            [i for i, d in enumerate(pf["fodir"]) if d != "-"],
+            lambda i: (pf["fox"][i], pf["foy"][i], pf["foz"][i], pf["fodir"][i]),
+            lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
+        )
 
     def _check_regions(self, params: dict):
         """
@@ -585,36 +634,6 @@ class ParameterManagerMixin:
             idx,
             lambda i: (ps["sx"][i], ps["sy"][i], ps["sz"][i], ps["sdim"][i]),
             lambda a, b: f"Supports {a + 1} and {b + 1} are identical.",
-        )
-
-    def _check_force_duplicates(self, params: dict):
-        """
-        Check for duplicate input and output forces.
-
-        Parameters
-        ----------
-        params : dict
-            Parameters dictionary.
-
-        Returns
-        -------
-        str or None
-            Error message if duplicate found, None otherwise.
-        """
-        pf = params["Forces"]
-
-        err = self._check_duplicates(
-            [i for i, d in enumerate(pf["fidir"]) if d != "-"],
-            lambda i: (pf["fix"][i], pf["fiy"][i], pf["fiz"][i], pf["fidir"][i]),
-            lambda a, b: f"Input forces {a + 1} and {b + 1} are identical.",
-        )
-        if err:
-            return err
-
-        return self._check_duplicates(
-            [i for i, d in enumerate(pf["fodir"]) if d != "-"],
-            lambda i: (pf["fox"][i], pf["foy"][i], pf["foz"][i], pf["fodir"][i]),
-            lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
         )
 
     def _check_materials(self, params: dict):
