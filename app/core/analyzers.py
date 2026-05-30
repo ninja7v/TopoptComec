@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 from collections.abc import Callable
+from functools import partial
 import numpy as np
 import numpy.typing as npt
 
@@ -15,9 +16,6 @@ IntArray = npt.NDArray[np.int64]
 def _checkerboard(x: FloatArray) -> bool:
     """
     Detect checkerboard patterns in a binaryized density field.
-
-    This routine inspects local 3x3 (or 3x3x3 for 3D) neighborhoods looking
-    for alternating patterns (checkerboard).
 
     Parameters
     ----------
@@ -67,10 +65,6 @@ def _watertight(x: FloatArray) -> bool:
     """
     Test whether the solid region is a single connected component.
 
-    The function binarizes the input at 0.5 and uses connected-component
-    labeling to determine how many connected components are present. If the
-    solid part forms a single component the design is considered watertight.
-
     Parameters
     ----------
     x : FloatArray
@@ -82,27 +76,18 @@ def _watertight(x: FloatArray) -> bool:
     bool
         True when exactly one connected component exists, False otherwise.
     """
-    # Binarize xPhys with a threshold of 0.5 to get a binary image
     xbin = (x > 0.5).astype(int)
     from scipy.ndimage import label, generate_binary_structure
 
     # Define a structure to consider diagonal connections as touching
     structure = generate_binary_structure(rank=xbin.ndim, connectivity=xbin.ndim)
-    res = label(xbin, structure)
-    if isinstance(res, tuple):
-        _, n = res
-    else:
-        n = res
+    _, n = label(xbin, structure=structure)
     return n == 1  # If there is only one connected component (connex), it is watertight
 
 
 def _thresholded(xPhys: FloatArray) -> bool:
     """
     Determine whether the density field is mostly near binary values.
-
-    A field is considered thresholded when the average closeness to either
-    0 or 1 is below a small threshold (default heuristic uses 0.1). This
-    helps detect designs that are already nearly binary.
 
     Parameters
     ----------
@@ -114,8 +99,8 @@ def _thresholded(xPhys: FloatArray) -> bool:
     bool
         True if the field appears thresholded, False otherwise.
     """
-    # Check if np.mean(np.minimum(x, 1 - x)) is close to 0 (worst case is 0.5 where all elements are at 0.5)
-    mean = np.mean(np.minimum(xPhys, 1 - xPhys))
+    # This should be close to 0 (worst case is 0.5 where all elements are at 0.5)
+    mean: float = np.mean(np.minimum(xPhys, 1.0 - xPhys))
     return bool(mean < 0.1)
 
 
@@ -167,7 +152,9 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
         else:
             dof = dof_base + 2
 
-        sign: float = -1 if "\u2190" in fdir or "\u2191" in fdir or "<" in fdir else 1
+        sign: float = (
+            -1.0 if "\u2190" in fdir or "\u2191" in fdir or "<" in fdir else 1.0
+        )
         return u[dof, col_idx] * sign
 
     effectiveness: float = 0.0
@@ -273,23 +260,26 @@ def analyze(
         else xPhys_copy.reshape(Dimensions["nelxyz"][0], Dimensions["nelxyz"][1])
     )
 
-    contains_checkerboard: bool = _checkerboard(x)
-    if progress_callback and progress_callback(1):
-        print("Optimization stopped by user.")
-        return contains_checkerboard, False, False, False
+    checks = [
+        partial(_checkerboard, x),
+        partial(_watertight, x),
+        partial(_thresholded, xPhys),
+        partial(
+            _efficient,
+            u=u,
+            Dimensions=Dimensions,
+            Forces=Forces,
+        ),
+    ]
 
-    is_watertight: bool = _watertight(x)
-    if progress_callback and progress_callback(2):
-        print("Optimization stopped by user.")
-        return contains_checkerboard, is_watertight, False, False
+    results: list[bool] = []
 
-    is_thresholded: bool = _thresholded(xPhys)
-    if progress_callback and progress_callback(3):
-        print("Optimization stopped by user.")
-        return contains_checkerboard, is_watertight, is_thresholded, False
+    for step, check in enumerate(checks, start=1):
+        results.append(check())
+        if progress_callback and progress_callback(step):
+            print("Optimization stopped by user.")
+            # Fill remaining checks with False
+            results.extend([False] * (len(checks) - len(results)))
+            break
 
-    is_efficient: bool = _efficient(u=u, Dimensions=Dimensions, Forces=Forces)
-    if progress_callback and progress_callback(4):
-        print("Optimization stopped by user.")
-
-    return contains_checkerboard, is_watertight, is_thresholded, is_efficient
+    return tuple(results)
