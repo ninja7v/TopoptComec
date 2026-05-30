@@ -35,10 +35,12 @@ def _run_single_preset(
 
     xPhys: FloatArray | None = None
     u: FloatArray | None = None
-    cache_file: Path = (
-        Path("results") / preset_name / f"{preset_name}_density_field.npz"
-    )
-    if cache_file.exists():
+    # Detect if running from pytest and use tests/ instead of results/
+    is_pytest = os.environ.get("PYTEST_CURRENT_TEST") is not None
+    base_dir = "tests" if is_pytest else "results"
+    cache_file: Path = Path(base_dir) / preset_name / f"{preset_name}_density_field.npz"
+    cache_exists = cache_file.exists()
+    if cache_exists:
         if verbose:
             print(f"[{preset_name}] Loading cached density field...")
         try:
@@ -67,7 +69,7 @@ def _run_single_preset(
             def progress_callback(
                 iteration: int, objective: float, change: float, xPhys_frame: FloatArray
             ) -> bool:
-                folder: Path = Path("results") / preset_name / f"{preset_name}_creation"
+                folder: Path = Path(base_dir) / preset_name / f"{preset_name}_creation"
                 folder.mkdir(parents=True, exist_ok=True)
                 filename: Path = folder / f"{preset_name}_creation_{iteration}.png"
                 colors: list[str] | None = params.get("Materials", {}).get(
@@ -118,7 +120,7 @@ def _run_single_preset(
             ):
                 if save_frames:
                     folder: Path = (
-                        Path("results") / preset_name / f"{preset_name}_displacement"
+                        Path(base_dir) / preset_name / f"{preset_name}_displacement"
                     )
                     folder.mkdir(parents=True, exist_ok=True)
                     filename: Path = (
