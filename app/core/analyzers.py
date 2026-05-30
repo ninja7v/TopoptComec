@@ -17,7 +17,7 @@ def _checkerboard(x: FloatArray) -> bool:
     Detect checkerboard patterns in a binaryized density field.
 
     This routine inspects local 3x3 (or 3x3x3 for 3D) neighborhoods looking
-    for alternating patterns that indicate numerical checkerboarding.
+    for alternating patterns (checkerboard).
 
     Parameters
     ----------
@@ -30,18 +30,18 @@ def _checkerboard(x: FloatArray) -> bool:
     bool
         True if a checkerboard-like pattern is detected, False otherwise.
     """
-    # Apply a mask [[0, 1], [1, 0]] to the xPhys array with a tolerance to detect checkerboard patterns
-    xbin = (x > 0.5).astype(int)
+    xbin = (x > 0.5).astype(np.int8)
+
     if xbin.ndim == 2:
-        mask1 = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]], dtype=bool)
-        mask2 = ~mask1
-        h, w = xbin.shape
-        for i in range(h - 2):
-            for j in range(w - 2):
-                block = xbin[i : i + 3, j : j + 3]
-                if np.array_equal(block, mask1) or np.array_equal(block, mask2):
-                    return True
-    else:
+        mask1 = np.array(
+            [
+                [0, 1, 0],
+                [1, 0, 1],
+                [0, 1, 0],
+            ],
+            dtype=bool,
+        )
+    elif xbin.ndim == 3:
         mask1 = np.array(
             [
                 [[0, 1, 0], [1, 0, 1], [0, 1, 0]],
@@ -50,15 +50,17 @@ def _checkerboard(x: FloatArray) -> bool:
             ],
             dtype=bool,
         )
-        mask2 = ~mask1
-        h, w, d = xbin.shape
-        for i in range(h - 2):
-            for j in range(w - 2):
-                for k in range(d - 2):
-                    block = xbin[i : i + 3, j : j + 3, k : k + 3]
-                    if np.array_equal(block, mask1) or np.array_equal(block, mask2):
-                        return True
-    return False
+    else:
+        raise ValueError("Input must be 2D or 3D.")
+
+    mask2 = ~mask1
+
+    windows = np.lib.stride_tricks.sliding_window_view(xbin, mask1.shape)
+
+    return bool(
+        np.any(np.all(windows == mask1, axis=tuple(range(-xbin.ndim, 0))))
+        or np.any(np.all(windows == mask2, axis=tuple(range(-xbin.ndim, 0))))
+    )
 
 
 def _watertight(x: FloatArray) -> bool:
