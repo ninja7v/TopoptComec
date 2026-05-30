@@ -32,7 +32,6 @@ def _run_single_preset(
     """Run optimization and export for a single preset. Returns (preset_name, error)."""
     if verbose:
         print(f"Running optimization for preset: {preset_name}")
-
     xPhys: FloatArray | None = None
     u: FloatArray | None = None
     # Detect if running from pytest and use tests/ instead of results/
@@ -137,7 +136,6 @@ def _run_single_preset(
                     )
         except Exception as e:
             import traceback
-
             traceback.print_exc()
             return preset_name, f"Displacement failed: {e}"
 
