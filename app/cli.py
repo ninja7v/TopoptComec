@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from app.core import optimizers
+from app.core import analyzers, optimizers
 from app.ui import exporters
 
 # Type aliases
@@ -102,6 +102,63 @@ def _load_or_run_optimization(
 
         traceback.print_exc()
         return None, None, f"Optimization failed: {e}"
+
+
+def _run_analysis(
+    preset_name: str,
+    params: dict,
+    xPhys: FloatArray,
+    u: FloatArray,
+    verbose: bool,
+) -> str | None:
+    """
+    Run analysis indicators for terminal output.
+
+    Parameters
+    ----------
+    preset_name : str
+        Preset identifier used for logging.
+    params : dict
+        Full preset configuration dictionary.
+    xPhys : FloatArray
+        Density field produced by the optimizer.
+    u : FloatArray
+        Displacement field produced by the solver.
+    verbose : bool
+        Whether to print progress messages.
+
+    Returns
+    -------
+    str | None
+        Error message if analysis fails, otherwise None.
+    """
+    if verbose:
+        print(f"[{preset_name}] Running analysis...")
+
+    try:
+        analysis_results = analyzers.analyze(
+            xPhys, u, params["Dimensions"], params["Forces"]
+        )
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return f"Analysis failed: {e}"
+
+    print(f"[{preset_name}] Analysis results:")
+    labels: list[str] = [
+        "Contains checkerboard",
+        "Watertight",
+        "Thresholded",
+        "Efficient",
+    ]
+    print(
+        "\n".join(
+            f"{label}: {'yes' if value else 'no'}"
+            for label, value in zip(labels, analysis_results)
+        )
+    )
+    return None
 
 
 def _run_displacement(
@@ -218,9 +275,10 @@ def _run_single_preset(
     params: dict,
     format: str,
     threshold: bool,
-    verbose: bool = False,
+    analysis: bool = False,
     run_disp: bool = False,
     save_frames: bool = False,
+    verbose: bool = False,
 ) -> tuple[str, str | None]:
     """
     Execute a single preset from the CLI workflow.
@@ -272,6 +330,11 @@ def _run_single_preset(
     )
     if error:
         return preset_name, error
+
+    if analysis and u is not None:
+        error = _run_analysis(preset_name, params, xPhys, u, verbose)
+        if error:
+            return preset_name, error
 
     if run_disp and u is not None:
         error = _run_displacement(
@@ -357,6 +420,12 @@ def run_cli() -> None:
         help="Binarize the result (black and white)",
     )
     parser.add_argument(
+        "-a",
+        "--analysis",
+        action="store_true",
+        help="Run quick analysis on the optimized result and print it to the terminal",
+    )
+    parser.add_argument(
         "-d",
         "--displacement",
         action="store_true",
@@ -403,11 +472,12 @@ def run_cli() -> None:
         _, error = _run_single_preset(
             preset_names[0],
             presets[preset_names[0]],
-            args.format,
-            args.threshold,
-            args.verbose,
-            args.displacement,
-            args.intermediate,
+            format=args.format,
+            threshold=args.threshold,
+            analysis=args.analysis,
+            run_disp=args.displacement,
+            save_frames=args.intermediate,
+            verbose=args.verbose,
         )
         if error:
             print(error)
@@ -423,11 +493,12 @@ def run_cli() -> None:
                     _run_single_preset,
                     name,
                     presets[name],
-                    args.format,
-                    args.threshold,
-                    args.verbose,
-                    args.displacement,
-                    args.intermediate,
+                    format=args.format,
+                    threshold=args.threshold,
+                    analysis=args.analysis,
+                    run_disp=args.displacement,
+                    save_frames=args.intermediate,
+                    verbose=args.verbose,
                 ): name
                 for name in preset_names
             }

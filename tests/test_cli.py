@@ -384,6 +384,40 @@ def test_run_cli_saving_cache(
     mock_exporters.save_as_png.assert_called_once()
 
 
+@patch("app.cli.analyzers.analyze")
+@patch("app.cli.np.load")
+@patch("app.cli.optimizers.optimize")
+@patch("app.cli.exporters")
+@patch("builtins.open")
+@patch("json.load")
+@patch("app.cli.Path.exists")
+def test_run_cli_analysis_flag(
+    mock_exists,
+    mock_json_load,
+    mock_open,
+    mock_exporters,
+    mock_optimize,
+    mock_np_load,
+    mock_analyze,
+    mock_presets_data,
+):
+    """Test that analysis runs when -a is passed."""
+    mock_exists.side_effect = [True, True]
+    mock_json_load.return_value = mock_presets_data
+    mock_np_load.return_value = {"xPhys": np.zeros(150), "u": np.zeros(300)}
+    mock_analyze.return_value = (False, True, False, True)
+    mock_exporters.save_as_png.return_value = (True, None)
+
+    with patch.object(
+        sys,
+        "argv",
+        ["main.py", "-p", "ForceInverter_2Sup_2D", "-f", "png", "-a"],
+    ):
+        run_cli()
+
+    mock_analyze.assert_called_once()
+
+
 @patch("app.core.displacements.run_iterative_displacement")
 @patch("app.cli.np.load")
 @patch("app.cli.optimizers.optimize")
