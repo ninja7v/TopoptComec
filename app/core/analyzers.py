@@ -119,7 +119,7 @@ def _thresholded(xPhys: FloatArray) -> bool:
     return bool(mean < 0.1)
 
 
-def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
+def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     """
     Heuristic check whether the mechanism achieves useful movement.
 
@@ -133,9 +133,9 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
     ----------
     u : FloatArray
         Displacement matrix returned by the solver (DOFs x columns).
-    dimensions : dict
+    Dimensions : dict
         Dimensions dictionary containing `nelxyz` for mesh sizes.
-    forces : dict
+    Forces : dict
         Forces dictionary with input/output force definitions and norms.
 
     Returns
@@ -144,14 +144,14 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
         True if the mechanism is considered efficient by the heuristic,
         False otherwise.
     """
-    nelx: int = dimensions["nelxyz"][0]
-    nely: int = dimensions["nelxyz"][1]
-    nelz: int = dimensions["nelxyz"][2]
+    nelx: int = Dimensions["nelxyz"][0]
+    nely: int = Dimensions["nelxyz"][1]
+    nelz: int = Dimensions["nelxyz"][2]
     is_3d: bool = nelz > 0
     dim_mul: int = 3 if is_3d else 2
 
     active_iforces_indices: list[int] = [
-        i for i, fdir in enumerate(forces.get("fidir", [])) if fdir != "-"
+        i for i, fdir in enumerate(Forces.get("fidir", [])) if fdir != "-"
     ]
     nbInputForces: int = len(active_iforces_indices)
     if nbInputForces == 0:
@@ -172,7 +172,7 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
 
     effectiveness: float = 0.0
     active_oforces_indices: list[int] = [
-        i for i, fdir in enumerate(forces.get("fodir", [])) if fdir != "-"
+        i for i, fdir in enumerate(Forces.get("fodir", [])) if fdir != "-"
     ]
 
     if active_oforces_indices:
@@ -185,10 +185,10 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
         for col_idx, i in enumerate(active_iforces_indices):
             total_u_in += abs(
                 get_disp(
-                    forces["fix"][i],
-                    forces["fiy"][i],
-                    forces["fiz"][i] if is_3d else 0,
-                    forces["fidir"][i],
+                    Forces["fix"][i],
+                    Forces["fiy"][i],
+                    Forces["fiz"][i] if is_3d else 0,
+                    Forces["fidir"][i],
                     col_idx,
                 )
             )
@@ -196,10 +196,10 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
         for col_idx, oi in enumerate(active_oforces_indices):
             actual_col: int = col_idx if col_idx < nbInputForces else 0
             u_out_val: float = get_disp(
-                forces["fox"][oi],
-                forces["foy"][oi],
-                forces["foz"][oi] if is_3d else 0,
-                forces["fodir"][oi],
+                Forces["fox"][oi],
+                Forces["foy"][oi],
+                Forces["foz"][oi] if is_3d else 0,
+                Forces["fodir"][oi],
                 actual_col,
             )
             # Only reward positive movement in the intended direction
@@ -212,13 +212,13 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
         # Rigid mechanism: displacement at input location must remain small
         for col_idx, i in enumerate(active_iforces_indices):
             u_in: float = get_disp(
-                forces["fix"][i],
-                forces["fiy"][i],
-                forces["fiz"][i] if is_3d else 0,
-                forces["fidir"][i],
+                Forces["fix"][i],
+                Forces["fiy"][i],
+                Forces["fiz"][i] if is_3d else 0,
+                Forces["fidir"][i],
                 col_idx,
             )
-            effectiveness += abs(u_in) / max(forces["finorm"][i], 1e-9)
+            effectiveness += abs(u_in) / max(Forces["finorm"][i], 1e-9)
 
         return bool(effectiveness < 500 * nbInputForces)
 
@@ -226,8 +226,8 @@ def _efficient(u: FloatArray, dimensions: dict, forces: dict) -> bool:
 def analyze(
     xPhys: FloatArray,
     u: FloatArray,
-    dimensions: dict,
-    forces: dict,
+    Dimensions: dict,
+    Forces: dict,
     progress_callback: Callable[[int], bool] | None = None,
 ) -> tuple[bool, bool, bool, bool]:
     """
@@ -249,9 +249,9 @@ def analyze(
         Density field produced by the optimizer (can be multi-material).
     u : FloatArray
         Displacement field produced by the solver.
-    dimensions : dict
+    Dimensions : dict
         Dimensions dictionary (contains `nelxyz`).
-    forces : dict
+    Forces : dict
         Forces dictionary used to evaluate efficiency.
     progress_callback : callable or None
         Optional callback called with step index; if it returns True the
@@ -267,10 +267,10 @@ def analyze(
         xPhys_copy = np.clip(xPhys_copy.sum(axis=0, keepdims=True), 0.0, 1.0)
     x: FloatArray = (
         xPhys_copy.reshape(
-            dimensions["nelxyz"][2], dimensions["nelxyz"][0], dimensions["nelxyz"][1]
+            Dimensions["nelxyz"][2], Dimensions["nelxyz"][0], Dimensions["nelxyz"][1]
         )
-        if dimensions["nelxyz"][2] > 0
-        else xPhys_copy.reshape(dimensions["nelxyz"][0], dimensions["nelxyz"][1])
+        if Dimensions["nelxyz"][2] > 0
+        else xPhys_copy.reshape(Dimensions["nelxyz"][0], Dimensions["nelxyz"][1])
     )
 
     contains_checkerboard: bool = _checkerboard(x)
@@ -288,7 +288,7 @@ def analyze(
         print("Optimization stopped by user.")
         return contains_checkerboard, is_watertight, is_thresholded, False
 
-    is_efficient: bool = _efficient(u, dimensions, forces)
+    is_efficient: bool = _efficient(u=u, Dimensions=Dimensions, Forces=Forces)
     if progress_callback and progress_callback(4):
         print("Optimization stopped by user.")
 
