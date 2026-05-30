@@ -455,9 +455,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         preset_name = self.preset.presets_combo.currentText()
         if preset_name in self.presets:
-            os.makedirs(os.path.join("results", preset_name), exist_ok=True)
+            # Detect if running from pytest and use tests/ instead of results/
+            is_pytest = os.environ.get("PYTEST_CURRENT_TEST") is not None
+            base_dir = "tests" if is_pytest else "results"
+
+            os.makedirs(os.path.join(base_dir, preset_name), exist_ok=True)
             cache_file = os.path.join(
-                "results", preset_name, f"{preset_name}_density_field.npz"
+                base_dir, preset_name, f"{preset_name}_density_field.npz"
             )
             try:
                 np.savez_compressed(cache_file, xPhys=self.xPhys, u=self.u)
