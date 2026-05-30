@@ -35,6 +35,6 @@ Useful tests:
 ```bash
 ruff format --check .
 ruff check .
-lizard -L 150 -C 30 -w .
+lizard -L 150 -C 30 -w app main.py
 pytest
 ```
