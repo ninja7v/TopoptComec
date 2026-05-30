@@ -52,7 +52,8 @@ from .parameter_manager import ParameterManagerMixin
 
 
 class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
-    def __init__(self):
+    def __init__(self) -> None:
+        """Initialize the main window, set up the UI, and connect signals."""
         super().__init__()
         self.setWindowTitle(
             "TopoptComec - Topology Optimization for Compliant Mechanisms"
@@ -114,7 +115,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # CONTROL PANEL #
     #################
 
-    def _create_control_panel(self):
+    def _create_control_panel(self) -> None:
         """Creates the right-hand side control panel with all settings."""
         self.control_panel_frame = QFrame()
         self.control_panel_frame.setFixedWidth(350)
@@ -159,7 +160,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # SECTIONS #
     ############
 
-    def _create_header(self):
+    def _create_header(self) -> HeaderWidget:
         """Creates the header widget and connects its signals."""
         header_widget = HeaderWidget()
 
@@ -171,7 +172,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         return header_widget
 
-    def _create_preset_section(self):
+    def _create_preset_section(self) -> PresetWidget:
         """Creates the preset widget and connects its signals."""
         preset_widget = PresetWidget()
         preset_widget.presets_combo.activated.connect(self._on_preset_selected)
@@ -179,7 +180,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         preset_widget.delete_preset_button.clicked.connect(self._delete_selected_preset)
         return preset_widget
 
-    def _create_Dimensions_section(self):
+    def _create_Dimensions_section(self) -> CollapsibleSection:
         """Creates the first section for Dimensions and volume fraction."""
         self.dim_widget = DimensionsWidget()
         section = CollapsibleSection("🔲 Dimensions", self.dim_widget)
@@ -195,7 +196,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.dim_widget.nz.valueChanged.connect(self._update_position_ranges)
         return section
 
-    def _create_regions_section(self):
+    def _create_regions_section(self) -> CollapsibleSection:
         """Creates the second section for regions parameters."""
         self.regions_widget = RegionsWidget()
         section = CollapsibleSection("⚫ Regions", self.regions_widget)
@@ -206,7 +207,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.regions_widget.nbRegionsChanged.connect(self.on_parameter_changed)
         return section
 
-    def _create_forces_section(self):
+    def _create_forces_section(self) -> CollapsibleSection:
         """Creates the third section for forces parameters."""
         self.forces_widget = ForcesWidget()
         section = CollapsibleSection("💪 Forces", self.forces_widget)
@@ -222,7 +223,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         return section
 
-    def _create_supports_section(self):
+    def _create_supports_section(self) -> CollapsibleSection:
         """Creates the fourth section for supports parameters."""
         self.supports_widget = SupportWidget()
         section = CollapsibleSection("🔺 Supports", self.supports_widget)
@@ -234,7 +235,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         return section
 
-    def _create_materials_section(self):
+    def _create_materials_section(self) -> CollapsibleSection:
         """Creates the fifth section for material properties."""
         self.materials_widget = MaterialsWidget()
         section = CollapsibleSection("🧱 Materials", self.materials_widget)
@@ -247,7 +248,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         return section
 
-    def _connect_material_signals(self):
+    def _connect_material_signals(self) -> None:
         """(Re)connects on_parameter_changed signals to all current material widgets."""
         for mw in self.materials_widget.inputs:
             mw["color"].clicked.connect(self.replot)
@@ -255,7 +256,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             mw["nu"].valueChanged.connect(self.on_parameter_changed)
             mw["percent"].valueChanged.connect(self.on_parameter_changed)
 
-    def _create_optimizer_section(self):
+    def _create_optimizer_section(self) -> CollapsibleSection:
         """Creates the sixth section for optimization parameters."""
         self.optimizer_widget = OptimizerWidget()
         section = CollapsibleSection("💻 Optimizer", self.optimizer_widget)
@@ -271,7 +272,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.optimizer_widget.opt_n_it.valueChanged.connect(self.on_parameter_changed)
         return section
 
-    def _create_analysis_section(self):
+    def _create_analysis_section(self) -> CollapsibleSection:
         """Creates the seventh section for analysis parameters."""
         self.analysis_widget = AnalysisWidget()
         section = CollapsibleSection("🔍 Analysis", self.analysis_widget)
@@ -284,7 +285,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.analysis_widget.stop_analysis_button.clicked.connect(self._stop_analysis)
         return section
 
-    def _create_displacement_section(self):
+    def _create_displacement_section(self) -> CollapsibleSection:
         """Creates the seventh section for displacement animation parameters."""
         self.displacement_widget = DisplacementWidget()
         section = CollapsibleSection("↔️ Displacement", self.displacement_widget)
@@ -312,8 +313,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         return section
 
-    def _on_visibility_toggled(self, checked: bool):
-        """Handles the toggling of any visibility button."""
+    def _on_visibility_toggled(self, checked: bool) -> None:
+        """
+        Handles the toggling of any visibility button.
+
+        Parameters
+        ----------
+        checked : bool
+            The new checked state of the visibility button that was toggled.
+        """
         button = self.sender()  # method gives the specific button that was clicked.
         if not button:
             return
@@ -327,7 +335,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.replot()
 
-    def _create_footer(self):
+    def _create_footer(self) -> FooterWidget:
         """Creates the footer widget and connects its signals."""
         footer_widget = FooterWidget()
         footer_widget.create_button.clicked.connect(self._run_optimization)
@@ -343,7 +351,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # OPTIMIZATION #
     ################
 
-    def _run_optimization(self):
+    def _run_optimization(self) -> None:
         """
         Start the optimization process using the current UI parameters.
 
@@ -387,7 +395,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.worker.error.connect(self._handle_optimization_error)
         self.worker.start()
 
-    def _stop_optimization(self):
+    def _stop_optimization(self) -> None:
         """Requests the running optimizer worker to stop."""
         if self.worker:
             self.status_bar.showMessage("Stopping optimization...")
@@ -395,14 +403,27 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.footer.stop_button.setEnabled(False)  # Prevent multiple clicks
             self.worker.request_stop()
 
-    def _update_optimization_progress(self, iteration, objective, change):
-        """Updates the progress bar and status message during optimization."""
+    def _update_optimization_progress(
+        self, iteration: int, objective: float, change: float
+    ) -> None:
+        """
+        Updates the progress bar and status message during optimization.
+
+        Parameters
+        ----------
+        iteration : int
+            Current iteration number of the optimizer.
+        objective : float
+            Current objective function value.
+        change : float
+            Current change in design variables (smaller than max density change).
+        """
         self.progress_bar.setValue(iteration)
         self.status_bar.showMessage(
             f"It: {iteration}, Obj: {objective:.4f}, Change: {change:.4f}"
         )
 
-    def _update_optimization_plot(self, xPhys_frame: np.ndarray):
+    def _update_optimization_plot(self, xPhys_frame: np.ndarray) -> None:
         """
         Update the main plot with an intermediate optimizer frame.
 
@@ -451,7 +472,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 )
                 self.figure.savefig(filename, dpi=300, bbox_inches="tight")
 
-    def _handle_optimization_results(self, result: Tuple[np.ndarray, np.ndarray]):
+    def _handle_optimization_results(
+        self, result: Tuple[np.ndarray, np.ndarray]
+    ) -> None:
         """
         Finalize the UI after optimization completes and cache results.
 
@@ -494,8 +517,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.replot()
 
-    def _handle_optimization_error(self, error_msg: str):
-        """Handles any errors that occur during optimization."""
+    def _handle_optimization_error(self, error_msg: str) -> None:
+        """
+        Handles any errors that occur during optimization.
+
+        Parameters
+        ----------
+        error_msg : str
+            Message describing the error that occurred.
+        """
         self.status_bar.showMessage("Optimization failed.", 5000)
         self.preset.setEnabled(True)
         self.footer.stop_button.hide()
@@ -510,7 +540,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # DISPLACEMENT #
     ################
 
-    def _run_displacement(self):
+    def _run_displacement(self) -> None:
         """
         Start displacement computation/animation for the last optimization.
 
@@ -577,14 +607,14 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.displacement_worker.error.connect(self._handle_displacement_error)
             self.displacement_worker.start()
 
-    def _stop_displacement(self):
+    def _stop_displacement(self) -> None:
         """Requests the running displacement worker to stop."""
         if self.displacement_worker:
             self.displacement_widget.stop_disp_button.setText("Stopping...")
             self.displacement_widget.stop_disp_button.setEnabled(False)
             self.displacement_worker.request_stop()
 
-    def _reset_displacement_view(self):
+    def _reset_displacement_view(self) -> None:
         """Resets the plot to the original, undeformed optimizer result."""
         self.is_displaying_deformation = False
         self.last_displayed_frame_data = None
@@ -594,14 +624,14 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.displacement_widget.run_disp_button
         )
 
-    def _update_displacement_progress(self, iteration: int):
+    def _update_displacement_progress(self, iteration: int) -> None:
         """Updates the progress bar and status message during displacement computation."""
         self.progress_bar.setValue(iteration)
         self.status_bar.showMessage(
             f"Running non-linear displacement: step {iteration}..."
         )
 
-    def _update_animation_frame(self, frame_data: np.ndarray):
+    def _update_animation_frame(self, frame_data: np.ndarray) -> None:
         """
         Update the main plot with a displacement animation frame.
 
@@ -674,12 +704,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 )
                 self.figure.savefig(filename, dpi=300, bbox_inches="tight")
 
-    def _on_displacement_preview_changed(self):
+    def _on_displacement_preview_changed(self) -> None:
         """Triggers a replot if the preview is active when displacement factor changes."""
         if self.sections["Displacement"].visibility_button.isChecked():
             self.replot()
 
-    def _handle_displacement_finished(self, message: str):
+    def _handle_displacement_finished(self, message: str) -> None:
         """Handles the results after displacement computation finishes successfully."""
         self.status_bar.showMessage(message, 5000)
         self.progress_bar.setVisible(False)
@@ -694,7 +724,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.displacement_widget.stop_disp_button.setEnabled(True)
         self.is_displaying_deformation = True
 
-    def _handle_displacement_error(self, error_msg: str):
+    def _handle_displacement_error(self, error_msg: str) -> None:
         """Handles any errors that occur during displacement computation."""
         self.status_bar.showMessage("Displacements failed.", 5000)
         self.progress_bar.setVisible(False)
@@ -705,7 +735,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     ############
     # Analysis #
     ############
-    def _run_analysis(self):
+    def _run_analysis(self) -> None:
         """Starts the analysis evaluation based on the last optimization result"""
         if self.xPhys is None or self.u is None:
             QMessageBox.warning(
@@ -732,19 +762,19 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.analysis_worker.error.connect(self._handle_analysis_error)
         self.analysis_worker.start()
 
-    def _stop_analysis(self):
+    def _stop_analysis(self) -> None:
         """Requests the running analysis worker to stop."""
         if self.analysis_worker:
             self.analysis_widget.stop_analysis_button.setText(" Stopping...")
             self.analysis_widget.stop_analysis_button.setEnabled(False)
             self.analysis_worker.request_stop()
 
-    def _update_analysis_progress(self, iteration: int):
+    def _update_analysis_progress(self, iteration: int) -> None:
         """Updates the progress bar and status message during analysis."""
         self.progress_bar.setValue(iteration)
         self.status_bar.showMessage(f"Running analysis: step {iteration}...")
 
-    def _handle_analysis_finished(self, results: Tuple[bool, bool, bool, bool]):
+    def _handle_analysis_finished(self, results: Tuple[bool, bool, bool, bool]) -> None:
         """Handles the results after analysis finishes successfully."""
         aw = self.analysis_widget
         aw.checkerboard_result.setText("yes" if results[0] else "no")
@@ -773,7 +803,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.displacement_widget.run_disp_button.setEnabled(True)
         self.footer.create_button.setEnabled(True)
 
-    def _handle_analysis_error(self, error_msg: str):
+    def _handle_analysis_error(self, error_msg: str) -> None:
         """Handles any errors that occur during analysis."""
         self.status_bar.showMessage("Analysis failed.", 5000)
         self.progress_bar.setVisible(False)
@@ -785,7 +815,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # Save #
     ########
 
-    def _save_result_as(self, file_type: str):
+    def _save_result_as(self, file_type: str) -> None:
         """
         Save the current result to disk in the requested format.
 
@@ -866,19 +896,19 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Could not save the file:\n{e}")
 
-    def _save_as_png(self):
+    def _save_as_png(self) -> None:
         """Function connected to the save as PNG button."""
         self._save_result_as("png")
 
-    def _save_as_vti(self):
+    def _save_as_vti(self) -> None:
         """Function connected to the save as VTI button."""
         self._save_result_as("vti")
 
-    def _save_as_stl(self):
+    def _save_as_stl(self) -> None:
         """Function connected to the save as STL button."""
         self._save_result_as("stl")
 
-    def _save_as_3mf(self):
+    def _save_as_3mf(self) -> None:
         """Function connected to the save as 3MF button."""
         self._save_result_as("3mf")
 
@@ -886,7 +916,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # Presets #
     ###########
 
-    def _load_presets(self):
+    def _load_presets(self) -> None:
         """Loads presets from the JSON file and populates the combo box."""
         try:
             with open(self.presets_file, "r") as f:
@@ -902,13 +932,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.preset.presets_combo.blockSignals(False)
         self.preset.delete_preset_button.setEnabled(False)
 
-    def _save_presets(self):
+    def _save_presets(self) -> None:
         """Saves the current presets dictionary to the JSON file."""
         with open(self.presets_file, "w") as f:
             json.dump(self.presets, f, indent=4)
         self.status_bar.showMessage("Presets saved.", 3000)
 
-    def _save_new_preset(self):
+    def _save_new_preset(self) -> None:
         """Prompts the user for a name and saves the current parameters."""
         preset_name, ok = QInputDialog.getText(
             self, "Save Preset", "Enter a name for this preset:"
@@ -932,7 +962,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.preset.presets_combo.setCurrentText(preset_name)
             self.preset.delete_preset_button.setEnabled(True)
 
-    def _delete_selected_preset(self):
+    def _delete_selected_preset(self) -> None:
         """Deletes the currently selected preset after confirmation."""
         preset_name = self.preset.presets_combo.currentText()
         if preset_name not in self.presets:
@@ -952,7 +982,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self._load_presets()  # Reloads the list and disables the delete button
             self.status_bar.showMessage(f"Preset '{preset_name}' deleted.", 3000)
 
-    def _on_preset_selected(self):
+    def _on_preset_selected(self) -> None:
         """
         Apply the selected preset to the UI widgets and, if a cached result
         exists under `results/<preset>/`, load it into the viewer.
@@ -978,7 +1008,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         else:
             self.preset.delete_preset_button.setEnabled(False)
 
-    def _apply_parameters(self, params: dict):
+    def _apply_parameters(self, params: dict) -> None:
         """Sets all UI widgets to the values from a given parameter dictionary."""
         self._block_all_parameter_signals(True)
 
@@ -1000,7 +1030,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             f"Loaded preset: {self.preset.presets_combo.currentText()}", 3000
         )
 
-    def _apply_dimensions_param(self, params: dict):
+    def _apply_dimensions_param(self, params: dict) -> None:
         """Applies dimension parameters from a preset dictionary."""
         Dimensions = params.get("Dimensions", {})
         self.dim_widget.nx.setValue(Dimensions.get("nelxyz", [1, 1, 1])[0])
@@ -1009,7 +1039,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.dim_widget.volfrac.setValue(Dimensions.get("volfrac", 0.3))
         self._update_position_ranges()
 
-    def _apply_regions_param(self, params: dict):
+    def _apply_regions_param(self, params: dict) -> None:
         """Applies region parameters from a preset dictionary."""
         pr = params.get("Regions", {})
         num_regions_in_preset = len(pr.get("rshape", []))
@@ -1034,7 +1064,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             rw["rz"].setValue(pr["rz"][i])
         self._connect_region_signals()
 
-    def _apply_forces_param(self, params: dict):
+    def _apply_forces_param(self, params: dict) -> None:
         """Applies force parameters from a preset dictionary."""
         pf = params.get("Forces", {})
 
@@ -1086,7 +1116,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self._connect_forces_signals()
 
-    def _apply_supports_param(self, params: dict):
+    def _apply_supports_param(self, params: dict) -> None:
         """Applies support parameters from a preset dictionary."""
         ps = params.get("Supports", {})
         num_supports_in_preset = len(ps.get("sx", []))
@@ -1111,7 +1141,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             sw["sr"].setValue(ps["sr"][i])
         self._connect_support_signals()
 
-    def _apply_materials_param(self, params: dict):
+    def _apply_materials_param(self, params: dict) -> None:
         """Applies material parameters from a preset dictionary."""
         pm = params.get("Materials", {})
         num_material_in_preset = len(pm.get("E", []))
@@ -1141,7 +1171,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.materials_widget.mat_init_type.setCurrentIndex(pm.get("init_type", 0))
         self._connect_material_signals()
 
-    def _apply_optimizer_param(self, params: dict):
+    def _apply_optimizer_param(self, params: dict) -> None:
         """Applies optimizer parameters from a preset dictionary."""
         po = params.get("Optimizer", {})
         self.optimizer_widget.opt_ft.setCurrentIndex(
@@ -1159,7 +1189,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.optimizer_widget.opt_solver.setCurrentText(po.get("solver", "Auto"))
         self.optimizer_widget.save_frames_cb.setChecked(po.get("save_frames", False))
 
-    def _apply_displacement_param(self, params: dict):
+    def _apply_displacement_param(self, params: dict) -> None:
         """Applies displacement parameters from a preset dictionary."""
         Displacement = params.get("Displacement", {})
         self.displacement_widget.mov_disp.setValue(Displacement.get("disp_factor", 1.0))
@@ -1170,7 +1200,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             Displacement.get("save_frames", False)
         )
 
-    def _connect_forces_signals(self):
+    def _connect_forces_signals(self) -> None:
         """(Re)connects on_parameter_changed signals to all current forces widgets."""
         for force_group in self.forces_widget.input_forces:
             force_group["fix"].valueChanged.connect(self.on_parameter_changed)
@@ -1185,7 +1215,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             force_group["fodir"].currentIndexChanged.connect(self.on_parameter_changed)
             force_group["fonorm"].valueChanged.connect(self.on_parameter_changed)
 
-    def _connect_support_signals(self):
+    def _connect_support_signals(self) -> None:
         """(Re)connects on_parameter_changed signals to all current support widgets."""
         for support_group in self.supports_widget.inputs:
             support_group["sx"].valueChanged.connect(self.on_parameter_changed)
@@ -1195,7 +1225,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             support_group["sr"].valueChanged.connect(self.on_parameter_changed)
             # there is a special "nbSupportsChanged" signal for the remove button
 
-    def _connect_region_signals(self):
+    def _connect_region_signals(self) -> None:
         """(Re)connects on_parameter_changed signals to all current region widgets."""
         for region_group in self.regions_widget.inputs:
             region_group["rshape"].currentIndexChanged.connect(
@@ -1214,7 +1244,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # BINARIZE #
     ############
 
-    def _on_binarize_clicked(self):
+    def _on_binarize_clicked(self) -> None:
         """Applies a 0-or-1 threshold to the displayed result."""
         if self.xPhys is None:
             return
@@ -1234,8 +1264,17 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # THEME #
     #########
 
-    def _set_theme(self, theme_name: str, initial_setup=False):
-        """Applies a theme stylesheet to the application GUI only."""
+    def _set_theme(self, theme_name: str, initial_setup: bool = False) -> None:
+        """
+        Applies a theme stylesheet to the application GUI only.
+
+        Parameters
+        ----------
+        theme_name : str
+            Name of the theme to apply ("light" or "dark").
+        initial_setup : bool
+            Whether this is the initial setup of the application.
+        """
         stylesheet = (
             LIGHT_THEME_STYLESHEET if theme_name == "light" else DARK_THEME_STYLESHEET
         )
@@ -1248,7 +1287,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         if initial_setup:
             self._style_plot_default()
 
-    def _toggle_theme(self):
+    def _toggle_theme(self) -> None:
         """Switches between light and dark themes."""
         if self.current_theme == "light":
             self._set_theme("dark")
@@ -1256,7 +1295,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self._set_theme("light")
         self._update_ui_icons()
 
-    def _update_ui_icons(self):
+    def _update_ui_icons(self) -> None:
         """
         Resets all icons in the UI to force them to be re-fetched from the
         now theme-aware IconProvider.
@@ -1290,22 +1329,22 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         for section in self.sections.values():
             section.update_all_icons()
 
-    def _open_github_link(self):
+    def _open_github_link(self) -> None:
         """Opens the specified URL in the user's default web browser."""
         url = QUrl("https://github.com/ninja7v/TopoptComec")
         QDesktopServices.openUrl(url)
 
-    def _open_wiki_link(self):
+    def _open_wiki_link(self) -> None:
         """Opens the specified URL in the user's default web browser."""
         url = QUrl("https://github.com/ninja7v/TopoptComec/wiki/TopoptComec-wiki")
         QDesktopServices.openUrl(url)
 
-    def _open_issue_link(self):
+    def _open_issue_link(self) -> None:
         """Opens the specified URL in the user's default web browser."""
         url = QUrl("https://github.com/ninja7v/TopoptComec/issues")
         QDesktopServices.openUrl(url)
 
-    def closeEvent(self, event: QCloseEvent):
+    def closeEvent(self, event: QCloseEvent) -> None:
         """Close figure when the app is closed"""
         # Needed for the tests
         if self.figure:

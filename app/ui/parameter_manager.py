@@ -10,7 +10,7 @@ from matplotlib.colors import to_hex
 class ParameterManagerMixin:
     """Mixin for MainWindow to handle parameter gathering, validation, and equivalency checks."""
 
-    def _gather_parameters(self):
+    def _gather_parameters(self) -> dict:
         """
         Collect all parameters from UI controls into a nested dictionary.
 
@@ -132,7 +132,7 @@ class ParameterManagerMixin:
 
         return params
 
-    def _get_time_estimation_indicators(self, params: dict):
+    def _get_time_estimation_indicators(self, params: dict) -> tuple[str, str]:
         """
         Calculate optimization time estimation indicators.
 
@@ -245,7 +245,7 @@ class ParameterManagerMixin:
             tooltip_text += " Very slow (more than an hour)"
         return color, tooltip_text
 
-    def on_parameter_changed(self):
+    def on_parameter_changed(self) -> None:
         """React when a parameter is changed."""
         # First, check if a valid result from a previous run exists.
         if self.xPhys is not None:
@@ -302,7 +302,7 @@ class ParameterManagerMixin:
                 self.preset.presets_combo.blockSignals(False)
                 self.preset.delete_preset_button.setEnabled(False)
 
-    def _are_parameters_equivalent(self, params1: dict, params2: dict):
+    def _are_parameters_equivalent(self, params1: dict, params2: dict) -> bool:
         """Compares two parameter dictionaries, ignoring irrelevant data."""
         # Create deep copies to avoid modifying the original dictionaries
         p1 = copy.deepcopy(params1)
@@ -313,7 +313,7 @@ class ParameterManagerMixin:
 
         return p1 == p2
 
-    def _normalize_params(self, p: dict):
+    def _normalize_params(self, p: dict) -> None:
         """
         Normalize parameters for comparison by removing irrelevant keys.
 
@@ -337,7 +337,7 @@ class ParameterManagerMixin:
         p.pop("Displacement", None)
         p.pop("Optimizer", None)
 
-    def _normalize_regions(self, p: dict, is_2d: bool):
+    def _normalize_regions(self, p: dict, is_2d: bool) -> None:
         """
         Normalize region parameters for comparison.
 
@@ -376,7 +376,7 @@ class ParameterManagerMixin:
                 if is_2d and "rz" in pr:
                     pr.pop("rz")
 
-    def _normalize_supports(self, p: dict, is_2d: bool):
+    def _normalize_supports(self, p: dict, is_2d: bool) -> None:
         """
         Normalize support parameters for comparison.
 
@@ -407,7 +407,7 @@ class ParameterManagerMixin:
                 if is_2d and "sz" in ps:
                     ps.pop("sz")
 
-    def _normalize_forces(self, p: dict, is_2d: bool):
+    def _normalize_forces(self, p: dict, is_2d: bool) -> None:
         """
         Normalize force parameters for comparison.
 
@@ -446,7 +446,7 @@ class ParameterManagerMixin:
                 if is_2d and f"{prefix}z" in pf:
                     pf.pop(f"{prefix}z")
 
-    def _normalize_materials(self, p: dict):
+    def _normalize_materials(self, p: dict) -> None:
         """
         Normalize material parameters for comparison.
 
@@ -499,7 +499,7 @@ class ParameterManagerMixin:
         )
         return err
 
-    def _check_domain(self, params: dict):
+    def _check_domain(self, params: dict) -> str | None:
         """
         Validate domain-related configuration values.
         """
@@ -511,7 +511,7 @@ class ParameterManagerMixin:
         if volfrac <= 0.0 or volfrac > 1.0:
             return "Volume fraction must be between 0 and 1."
 
-    def _check_optimizer(self, params: dict):
+    def _check_optimizer(self, params: dict) -> str | None:
         """
         Validate optimizer-related parameters.
         """
@@ -533,7 +533,9 @@ class ParameterManagerMixin:
         if po.get("n_it", 0) <= 0:
             return "Optimizer iteration count must be positive."
 
-    def _check_duplicates(self, indices: list, keyfunc: callable, msg: callable):
+    def _check_duplicates(
+        self, indices: list, keyfunc: callable, msg: callable
+    ) -> str | None:
         """
         Check for duplicate entries and return error message if found.
 
@@ -558,7 +560,7 @@ class ParameterManagerMixin:
                 return msg(seen[k], i)
             seen[k] = i
 
-    def _check_forces(self, params: dict):
+    def _check_forces(self, params: dict) -> str | None:
         """
         Validate that at least one input force is active.
 
@@ -597,7 +599,7 @@ class ParameterManagerMixin:
             lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
         )
 
-    def _check_regions(self, params: dict):
+    def _check_regions(self, params: dict) -> str | None:
         """
         Check for duplicate regions.
 
@@ -629,7 +631,7 @@ class ParameterManagerMixin:
             lambda a, b: f"Regions {a + 1} and {b + 1} are identical.",
         )
 
-    def _check_supports(self, params: dict):
+    def _check_supports(self, params: dict) -> str | None:
         """
         Check for duplicate supports.
 
@@ -655,7 +657,7 @@ class ParameterManagerMixin:
             lambda a, b: f"Supports {a + 1} and {b + 1} are identical.",
         )
 
-    def _check_materials(self, params: dict):
+    def _check_materials(self, params: dict) -> str | None:
         """
         Check for duplicate materials and validate percentages sum to 100.
 
@@ -682,7 +684,7 @@ class ParameterManagerMixin:
         if len(pm["E"]) > 1 and sum(pm["percent"]) != 100:
             return "Material percentages don't sum up to 100%."
 
-    def _update_position_ranges(self):
+    def _update_position_ranges(self) -> None:
         """
         Update maximum values for position spin boxes based on current dimensions.
 
@@ -718,7 +720,7 @@ class ParameterManagerMixin:
             sw["sy"].setMaximum(nely)
             sw["sz"].setMaximum(nelz)
 
-    def _scale_parameters(self):
+    def _scale_parameters(self) -> None:
         """
         Scale all dimensional and positional parameters by the scale factor.
 
@@ -741,7 +743,7 @@ class ParameterManagerMixin:
         pos_to_validate = []
         pos_to_scale = []
 
-        def register(widget, active: bool, is_radius=False):
+        def register(widget, active: bool, is_radius: bool = False) -> None:
             if active:
                 pos_to_validate.append(widget)
             pos_to_scale.append((widget, is_radius))
@@ -826,7 +828,7 @@ class ParameterManagerMixin:
             f"All parameters scaled by a factor of {scale}.", 3000
         )
 
-    def _block_all_parameter_signals(self, block: bool):
+    def _block_all_parameter_signals(self, block: bool) -> None:
         """
         Block or unblock signals for all parameter widgets.
 
