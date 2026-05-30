@@ -383,7 +383,9 @@ class FEM:
             return float((E_eff * ce_total).sum())
 
         # Compliant Mechanism: maximize average output displacement
-        return float(np.mean([abs(uo[dof, idx]) for idx, dof in enumerate(self.do_indices)]))
+        return float(
+            np.mean([abs(uo[dof, idx]) for idx, dof in enumerate(self.do_indices)])
+        )
 
     # --- Internal Helper Methods ---
 
@@ -576,9 +578,7 @@ class FEM:
         """
         if self.filter_type == "Sensitivity":
             Hx_dc = self.H @ (x * dc)
-            dc = np.asarray(Hx_dc, dtype=np.float64) / self.Hs / np.maximum(
-                0.001, x
-            )
+            dc = np.asarray(Hx_dc, dtype=np.float64) / self.Hs / np.maximum(0.001, x)
 
         elif self.filter_type == "Density":
             dc = np.asarray(self.H @ (dc / self.Hs), dtype=np.float64)
