@@ -6,6 +6,8 @@ import pytest
 
 from app.ui.main_window import MainWindow
 
+from PySide6.QtWidgets import QCheckBox
+
 from unittest.mock import patch
 
 # --- Test Cases for the Intelligent Comparison ---
@@ -383,7 +385,7 @@ def test_handle_optimization_results(mock_makedirs, mock_savez, qt_app):
     import numpy as np
 
     window: MainWindow = MainWindow()
-    nelx: int, nely: int = window.last_params["Dimensions"]["nelxyz"][:2]
+    nelx, nely = window.last_params["Dimensions"]["nelxyz"][:2]
     nel: int = nelx * nely
     ndof: int = 2 * (nelx + 1) * (nely + 1)
     mock_xPhys: np.ndarray = np.ones(nel)
@@ -448,7 +450,7 @@ def test_binarize(qt_app):
     # xPhys exists
     import numpy as np
 
-    nelx: int, nely: int = window.last_params["Dimensions"]["nelxyz"][:2]
+    nelx, nely = window.last_params["Dimensions"]["nelxyz"][:2]
     nel: int = nelx * nely
     window.xPhys = np.linspace(0.1, 0.9, nel)
     window._on_binarize_clicked()
@@ -538,7 +540,7 @@ def test_low_density_validation(qt_app):
     assert window.xPhys_valid == (window.xPhys is not None)
 
     # 1. Test handle results with low density (< 1%)
-    nelx: int, nely: int = window.last_params["Dimensions"]["nelxyz"][:2]
+    nelx, nely = window.last_params["Dimensions"]["nelxyz"][:2]
     nel: int = nelx * nely
     mock_xPhys_empty: np.ndarray = np.zeros(nel)
     mock_u: np.ndarray = np.ones((2 * (nelx + 1) * (nely + 1), 1))
@@ -571,8 +573,8 @@ def test_low_density_validation(qt_app):
 
     # 4. Test binarization resulting in low density
     # Set xPhys to values just below threshold 0.5, so they binarize to 0.0
-    window.xPhys = np.ones(nel) * 0.4
-    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warning_bin:
+    window.xPhys: np.ndarray = np.ones(nel) * 0.4
+    with patch("PySide6.QtWidgets.QMessageBox.warning"):
         window._on_binarize_clicked()
 
     assert window.xPhys_valid is False
