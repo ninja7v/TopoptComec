@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from trimesh.typed import Tuple
+from typing import Tuple
 
 # import mcubes
 from app.ui import exporters
