@@ -5,8 +5,5 @@ matplotlib
 vtk
 PyMCubes
 numpy-stl
-darkdetect
 pytest
-trimesh
 lib3mf
-lxml
