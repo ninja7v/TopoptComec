@@ -527,3 +527,57 @@ def test_handle_displacement_error(qt_app):
     mock_msg.assert_called_once()
     assert window.displacement_widget.run_disp_button.isEnabled()
     window.close()
+
+
+def test_low_density_validation(qt_app):
+    """Test that low density result is detected as invalid and blocks run buttons."""
+    import numpy as np
+    from unittest.mock import patch
+
+    window = MainWindow()
+    assert window.xPhys_valid == (window.xPhys is not None)
+
+    # 1. Test handle results with low density (< 1%)
+    nelx, nely = window.last_params["Dimensions"]["nelxyz"][:2]
+    nel = nelx * nely
+    mock_xPhys_empty = np.zeros(nel)
+    mock_u = np.ones((2 * (nelx + 1) * (nely + 1), 1))
+
+    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warning:
+        window._handle_optimization_results((mock_xPhys_empty, mock_u))
+
+    assert window.xPhys_valid is False
+    mock_warning.assert_called_once()
+    assert not window.analysis_widget.run_analysis_button.isEnabled()
+    assert not window.displacement_widget.run_disp_button.isEnabled()
+
+    # 2. Test run buttons are blocked when invalid
+    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warning_disp:
+        window._run_displacement()
+    mock_warning_disp.assert_called_once()
+
+    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warning_anal:
+        window._run_analysis()
+    mock_warning_anal.assert_called_once()
+
+    # 3. Test handle results with valid density (>= 1%)
+    mock_xPhys_valid = np.ones(nel)
+    with patch("app.ui.main_window.np.savez_compressed"):
+        window._handle_optimization_results((mock_xPhys_valid, mock_u))
+
+    assert window.xPhys_valid is True
+    assert window.analysis_widget.run_analysis_button.isEnabled()
+    assert window.displacement_widget.run_disp_button.isEnabled()
+
+    # 4. Test binarization resulting in low density
+    # Set xPhys to values just below threshold 0.5, so they binarize to 0.0
+    window.xPhys = np.ones(nel) * 0.4
+    with patch("PySide6.QtWidgets.QMessageBox.warning") as mock_warning_bin:
+        window._on_binarize_clicked()
+
+    assert window.xPhys_valid is False
+    mock_warning_bin.assert_called_once()
+    assert not window.analysis_widget.run_analysis_button.isEnabled()
+    assert not window.displacement_widget.run_disp_button.isEnabled()
+
+    window.close()
