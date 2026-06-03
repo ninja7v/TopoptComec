@@ -7,6 +7,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.typing as npt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.colors import to_rgb
 from PySide6.QtCore import Qt, QUrl
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QStatusBar,
     QScrollArea,
     QSplitter,
     QVBoxLayout,
@@ -50,6 +52,9 @@ from .workers import AnalysisWorker, DisplacementWorker, OptimizerWorker
 from .plotting import PlottingMixin
 from .parameter_manager import ParameterManagerMixin
 
+# Type aliases
+FloatArray = npt.NDArray[np.float64]
+
 
 class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     def __init__(self) -> None:
@@ -60,55 +65,53 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         self.setGeometry(100, 100, 1280, 720)
 
-        # Consolidate duplicate variable declarations
-        self.xPhys = None
-        self.u = None
-        self.last_params = {}
-        self.current_theme = "dark"
-        self.displacement_worker = None
-        self.worker = None  # To hold the optimizer worker
+        self.xPhys: FloatArray = None
+        self.u: FloatArray = None
+        self.last_params: dict = {}
+        self.current_theme: str = "dark"
+        self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
 
         self._set_theme(self.current_theme)
 
-        self.presets = {}
-        self.presets_file = "presets.json"
+        self.presets: dict = {}
+        self.presets_file: str = "presets.json"
 
-        self.main_widget = QWidget()
+        self.main_widget: QWidget = QWidget()
         self.setCentralWidget(self.main_widget)
-        self.main_layout = QHBoxLayout(self.main_widget)
+        self.main_layout: QHBoxLayout = QHBoxLayout(self.main_widget)
 
-        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter: QSplitter = QSplitter(Qt.Horizontal)
         self.main_layout.addWidget(self.splitter)
 
-        self.plot_frame = QFrame()
-        plot_layout = QVBoxLayout(self.plot_frame)
-        self.figure = plt.figure()
-        self.canvas = FigureCanvas(self.figure)
+        self.plot_frame: QFrame = QFrame()
+        plot_layout: QVBoxLayout = QVBoxLayout(self.plot_frame)
+        self.figure: plt.Figure = plt.figure()
+        self.canvas: FigureCanvas = FigureCanvas(self.figure)
         plot_layout.addWidget(self.canvas)
         self.splitter.addWidget(self.plot_frame)
 
-        self.is_displaying_deformation = False
-        self.last_displayed_frame_data = None
+        self.is_displaying_deformation: bool = False
+        self.last_displayed_frame_data: FloatArray = None
 
         self._create_control_panel()
         self.splitter.addWidget(self.control_panel_frame)
         self.splitter.setSizes([800, 480])
 
-        self.status_bar = self.statusBar()
-        self.progress_bar = QProgressBar()
+        self.status_bar: QStatusBar = self.statusBar()
+        self.progress_bar: QProgressBar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
 
         self._load_presets()
 
-        default_preset_name = "ForceInverter_2Sup_2D"
+        default_preset_name: str = "ForceInverter_2Sup_2D"
         if default_preset_name in self.presets:
             self.preset.presets_combo.setCurrentText(default_preset_name)
             self._on_preset_selected()  # This applies the preset and replots
         else:
             # Fallback in case the default preset isn't found
             print(f"Warning: Default preset '{default_preset_name}' not found.")
-            self.last_params = self._gather_parameters()
+            self.last_params: dict = self._gather_parameters()
             self.replot()
 
     #################
@@ -360,6 +363,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         updates are received via connected signals which update the plot and
         progress indicators.
         """
+        if self.worker is not None:
+            QMessageBox.warning(
+                self,
+                "Analysis Error",
+                "A worker is already running.",
+            )
+            return
         error = self._validate_parameters(self.last_params)
         if error:
             QMessageBox.critical(self, "Input Error", error)
@@ -487,6 +497,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         """
         self.xPhys, self.u = result
         self.last_displayed_frame_data = None
+        self.worker = None
         self.status_bar.showMessage("Optimization finished successfully.", 5000)
         self.preset.setEnabled(True)
         self.footer.stop_button.hide()
@@ -526,6 +537,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         error_msg : str
             Message describing the error that occurred.
         """
+        self.worker = None
         self.status_bar.showMessage("Optimization failed.", 5000)
         self.preset.setEnabled(True)
         self.footer.stop_button.hide()
@@ -553,6 +565,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 self,
                 "Displacement Error",
                 "You must run a successful optimization before analyzing movement.",
+            )
+            return
+        if self.worker is not None:
+            QMessageBox.warning(
+                self,
+                "Analysis Error",
+                "A worker is already running.",
             )
             return
 
@@ -594,25 +613,19 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.progress_bar.setValue(0)
             self.progress_bar.setVisible(True)
 
-            self.displacement_worker = DisplacementWorker(
-                self.last_params, self.xPhys, self.u
-            )
-            self.displacement_worker.progress.connect(
-                self._update_displacement_progress
-            )
-            self.displacement_worker.frameReady.connect(self._update_animation_frame)
-            self.displacement_worker.finished.connect(
-                self._handle_displacement_finished
-            )
-            self.displacement_worker.error.connect(self._handle_displacement_error)
-            self.displacement_worker.start()
+            self.worker = DisplacementWorker(self.last_params, self.xPhys, self.u)
+            self.worker.progress.connect(self._update_displacement_progress)
+            self.worker.frameReady.connect(self._update_animation_frame)
+            self.worker.finished.connect(self._handle_displacement_finished)
+            self.worker.error.connect(self._handle_displacement_error)
+            self.worker.start()
 
     def _stop_displacement(self) -> None:
         """Requests the running displacement worker to stop."""
-        if self.displacement_worker:
+        if self.worker:
             self.displacement_widget.stop_disp_button.setText("Stopping...")
             self.displacement_widget.stop_disp_button.setEnabled(False)
-            self.displacement_worker.request_stop()
+            self.worker.request_stop()
 
     def _reset_displacement_view(self) -> None:
         """Resets the plot to the original, undeformed optimizer result."""
@@ -723,9 +736,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )  # Reset text for next run
         self.displacement_widget.stop_disp_button.setEnabled(True)
         self.is_displaying_deformation = True
+        self.worker = None
 
     def _handle_displacement_error(self, error_msg: str) -> None:
         """Handles any errors that occur during displacement computation."""
+        self.worker = None
         self.status_bar.showMessage("Displacements failed.", 5000)
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
@@ -744,6 +759,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 "You must run a successful optimization before analyzing results.",
             )
             return
+        if self.worker is not None:
+            QMessageBox.warning(
+                self,
+                "Analysis Error",
+                "A worker is already running.",
+            )
+            return
 
         aw = self.analysis_widget
         aw.run_analysis_button.setEnabled(False)
@@ -756,18 +778,18 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.progress_bar.setVisible(True)
         self.displacement_widget.run_disp_button.setEnabled(False)
 
-        self.analysis_worker = AnalysisWorker(self.last_params, self.xPhys, self.u)
-        self.analysis_worker.progress.connect(self._update_analysis_progress)
-        self.analysis_worker.finished.connect(self._handle_analysis_finished)
-        self.analysis_worker.error.connect(self._handle_analysis_error)
-        self.analysis_worker.start()
+        self.worker = AnalysisWorker(self.last_params, self.xPhys, self.u)
+        self.worker.progress.connect(self._update_analysis_progress)
+        self.worker.finished.connect(self._handle_analysis_finished)
+        self.worker.error.connect(self._handle_analysis_error)
+        self.worker.start()
 
     def _stop_analysis(self) -> None:
         """Requests the running analysis worker to stop."""
-        if self.analysis_worker:
+        if self.worker:
             self.analysis_widget.stop_analysis_button.setText(" Stopping...")
             self.analysis_widget.stop_analysis_button.setEnabled(False)
-            self.analysis_worker.request_stop()
+            self.worker.request_stop()
 
     def _update_analysis_progress(self, iteration: int) -> None:
         """Updates the progress bar and status message during analysis."""
@@ -802,9 +824,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         aw.run_analysis_button.setEnabled(True)
         self.displacement_widget.run_disp_button.setEnabled(True)
         self.footer.create_button.setEnabled(True)
+        self.worker = None
 
     def _handle_analysis_error(self, error_msg: str) -> None:
         """Handles any errors that occur during analysis."""
+        self.worker = None
         self.status_bar.showMessage("Analysis failed.", 5000)
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
