@@ -67,6 +67,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.xPhys: FloatArray = None
         self.u: FloatArray = None
+        self.xPhys_valid: bool = False
         self.last_params: dict = {}
         self.current_theme: str = "dark"
         self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
@@ -366,7 +367,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         if self.worker is not None:
             QMessageBox.warning(
                 self,
-                "Analysis Error",
+                "Analysis Warning",
                 "A worker is already running.",
             )
             return
@@ -374,6 +375,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         if error:
             QMessageBox.critical(self, "Input Error", error)
             return
+
+        self.xPhys_valid = False
 
         if self.is_displaying_deformation or self.last_displayed_frame_data is not None:
             self._reset_displacement_view()
@@ -504,15 +507,36 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.footer.create_button.show()
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
-        self.footer.binarize_button.setEnabled(True)
-        self.footer.save_button.setEnabled(True)
-        self.analysis_widget.run_analysis_button.setEnabled(True)
-        self.displacement_widget.run_disp_button.setEnabled(True)
-        self.sections["Displacement"].visibility_button.setEnabled(True)
         self.footer.stop_create_button_effect()
 
+        # Validate convergence (density > 1%)
+        mean_density: float = (
+            np.mean(self.xPhys.sum(axis=0))
+            if self.xPhys.ndim == 2
+            else np.mean(self.xPhys)
+        )
+        if mean_density < 0.01:
+            self.xPhys_valid = False
+            QMessageBox.warning(
+                self,
+                "Optimization Warning",
+                "No valid structure was found. Please adjust your parameters and try again.",
+            )
+            self.footer.binarize_button.setEnabled(False)
+            self.footer.save_button.setEnabled(False)
+            self.analysis_widget.run_analysis_button.setEnabled(False)
+            self.displacement_widget.run_disp_button.setEnabled(False)
+            self.sections["Displacement"].visibility_button.setEnabled(False)
+        else:
+            self.xPhys_valid = True
+            self.footer.binarize_button.setEnabled(True)
+            self.footer.save_button.setEnabled(True)
+            self.analysis_widget.run_analysis_button.setEnabled(True)
+            self.displacement_widget.run_disp_button.setEnabled(True)
+            self.sections["Displacement"].visibility_button.setEnabled(True)
+
         preset_name = self.preset.presets_combo.currentText()
-        if preset_name in self.presets:
+        if self.xPhys_valid and preset_name in self.presets:
             # Detect if running from pytest and use tests/ instead of results/
             is_pytest = os.environ.get("PYTEST_CURRENT_TEST") is not None
             base_dir = "tests" if is_pytest else "results"
@@ -544,8 +568,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.footer.create_button.show()
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
-        self.footer.binarize_button.setEnabled(True)
-        self.footer.save_button.setEnabled(True)
+        self.footer.binarize_button.setEnabled(False)
+        self.footer.save_button.setEnabled(False)
+        self.analysis_widget.run_analysis_button.setEnabled(False)
+        self.displacement_widget.run_disp_button.setEnabled(False)
+        self.sections["Displacement"].visibility_button.setEnabled(False)
+        self.xPhys_valid = False
         QMessageBox.critical(self, "Runtime Error", error_msg)
 
     ################
@@ -560,17 +588,17 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         synchronously; otherwise it launches a `DisplacementWorker` to
         compute frames in the background while updating the UI.
         """
-        if self.xPhys is None or self.u is None:
+        if not self.xPhys_valid or self.u is None:
             QMessageBox.warning(
                 self,
-                "Displacement Error",
-                "You must run a successful optimization before analyzing movement.",
+                "Displacement Warning",
+                "You must run a successful optimization with a valid result before analyzing movement.",
             )
             return
         if self.worker is not None:
             QMessageBox.warning(
                 self,
-                "Analysis Error",
+                "Displacement Warning",
                 "A worker is already running.",
             )
             return
@@ -752,17 +780,17 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     ############
     def _run_analysis(self) -> None:
         """Starts the analysis evaluation based on the last optimization result"""
-        if self.xPhys is None or self.u is None:
+        if not self.xPhys_valid or self.u is None:
             QMessageBox.warning(
                 self,
-                "Analysis Error",
-                "You must run a successful optimization before analyzing results.",
+                "Analysis Warning",
+                "You must run a successful optimization with a valid result before analyzing results.",
             )
             return
         if self.worker is not None:
             QMessageBox.warning(
                 self,
-                "Analysis Error",
+                "Analysis Warning",
                 "A worker is already running.",
             )
             return
@@ -1283,6 +1311,21 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.status_bar.showMessage("View binarized.", 3000)
 
         self.footer.binarize_button.setEnabled(False)
+
+        # Validate density after binarization (> 1%)
+        mean_density: float = (
+            np.mean(self.xPhys.sum(axis=0))
+            if self.xPhys.ndim == 2
+            else np.mean(self.xPhys)
+        )
+        if mean_density < 0.01:
+            self.xPhys_valid = False
+            self.footer.save_button.setEnabled(False)
+            self.analysis_widget.run_analysis_button.setEnabled(False)
+            self.displacement_widget.run_disp_button.setEnabled(False)
+            self.sections["Displacement"].visibility_button.setEnabled(False)
+        else:
+            self.xPhys_valid = True
 
     #########
     # THEME #
