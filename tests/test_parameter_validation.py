@@ -254,3 +254,30 @@ def test_block_all_parameter_signals(qt_app):
     window._block_all_parameter_signals(True)
     window._block_all_parameter_signals(False)
     window.close()
+
+
+def test_validate_init_type_from_current_result(qt_app):
+    """Test validation when init_type=3 (From current result)."""
+    window = MainWindow()
+    params = window._gather_parameters()
+    params["Materials"]["init_type"] = 3
+
+    # 1. No current result exists
+    window.last_successful_xPhys = None
+    err = window._validate_parameters(params)
+    assert err == "No current result available to initialize from."
+
+    # 2. Result exists but dimensions mismatch
+    window.last_successful_xPhys = np.ones(
+        50
+    )  # default is 12x12=144 or 10x10=100 (let's use size match checks dynamically)
+    err = window._validate_parameters(params)
+    assert "does not match the active grid dimensions" in err
+
+    # 3. Valid matching result
+    nelx, nely, nelz = params["Dimensions"]["nelxyz"]
+    nel = nelx * nely * (nelz if nelz > 0 else 1)
+    window.last_successful_xPhys = np.ones(nel)
+    err = window._validate_parameters(params)
+    assert err is None
+    window.close()

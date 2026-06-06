@@ -68,6 +68,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.xPhys: FloatArray = None
         self.u: FloatArray = None
         self.xPhys_valid: bool = False
+        self.last_successful_xPhys: FloatArray = None
         self.last_params: dict = {}
         self.current_theme: str = "dark"
         self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
@@ -401,6 +402,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
 
+        self.last_params = self._gather_parameters()
+        self.last_params["current_xPhys"] = getattr(self, "last_successful_xPhys", None)
         self.worker = OptimizerWorker(self.last_params)
         self.worker.progress.connect(self._update_optimization_progress)
         self.worker.frameReady.connect(self._update_optimization_plot)
@@ -499,6 +502,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             is selected the result is saved to `results/<preset>/...`.
         """
         self.xPhys, self.u = result
+        self.last_successful_xPhys = (
+            self.xPhys.copy() if self.xPhys is not None else None
+        )
         self.last_displayed_frame_data = None
         self.worker = None
         self.status_bar.showMessage("Optimization finished successfully.", 5000)
@@ -1306,6 +1312,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         # Use NumPy's fast vectorized 'where' function
         self.xPhys = np.where(self.xPhys > threshold, 1.0, 0.0)
+        self.last_successful_xPhys = (
+            self.xPhys.copy() if self.xPhys is not None else None
+        )
 
         self.replot()
         self.status_bar.showMessage("View binarized.", 3000)

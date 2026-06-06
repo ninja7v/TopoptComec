@@ -219,9 +219,18 @@ class PlottingMixin:
             else np.array([0] * len(all_x))
         )
 
+        current_x = getattr(self, "last_successful_xPhys", None)
         if len(pm["E"]) == 1:
             self.xPhys = initializers.initialize_material(
-                pm["init_type"], pd["volfrac"], nelx, nely, nelz, all_x, all_y, all_z
+                pm["init_type"],
+                pd["volfrac"],
+                nelx,
+                nely,
+                nelz,
+                all_x,
+                all_y,
+                all_z,
+                current_xPhys=current_x,
             )
         else:
             self.xPhys = initializers.initialize_materials(
@@ -234,6 +243,7 @@ class PlottingMixin:
                 all_x,
                 all_y,
                 all_z,
+                current_xPhys=current_x,
             )
 
         if self.xPhys is not None and "Regions" in self.last_params:

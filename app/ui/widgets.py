@@ -1106,7 +1106,7 @@ class MaterialsWidget(QWidget):
         init_layout = QHBoxLayout()
         init_layout.addWidget(QLabel("Initialization:"))
         self.mat_init_type = _make_combo(
-            ["Uniform", "Around activity points", "Random"],
+            ["Uniform", "Around activity points", "Random", "From current result"],
             0,
             "Materials distribution initialization type",
         )
