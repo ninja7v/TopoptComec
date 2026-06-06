@@ -489,6 +489,16 @@ class ParameterManagerMixin:
         if nelx <= 0 or nely <= 0 or nelz < 0:
             return "Nx, Ny, Nz must be positive."
 
+        # Validate initialization from current result if chosen
+        if params.get("Materials", {}).get("init_type") == 3:
+            last_x = getattr(self, "last_successful_xPhys", None)
+            if last_x is None:
+                return "No current result available to initialize from."
+            nel = nelx * nely * (nelz if nelz > 0 else 1)
+            last_x_nel = last_x.shape[1] if last_x.ndim == 2 else last_x.size
+            if last_x_nel != nel:
+                return f"Current result grid size ({last_x_nel}) does not match the active grid dimensions ({nel})."
+
         err = (
             self._check_domain(params)
             or self._check_regions(params)

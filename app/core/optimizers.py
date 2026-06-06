@@ -74,6 +74,7 @@ def optimize(
     Regions: dict | None = None,
     progress_callback: Callable[[int, float, float, FloatArray], bool] | None = None,
     verbose: bool = True,
+    current_xPhys: FloatArray | None = None,
 ) -> tuple[FloatArray, FloatArray]:
     """
     Topology optimization
@@ -97,13 +98,15 @@ def optimize(
 
     # Initialize Material
     x: FloatArray = initializers.initialize_material(
-        Materials.get("init_type", 0),
-        Dimensions.get("volfrac", 0.5),
-        fem.nelx,
-        fem.nely,
-        fem.nelz,
-        # Helper to get active coordinate arrays for initialization
-        *_get_active_coords(Supports, Forces, fem.is_3d),
+        init_type=Materials.get("init_type", 0),
+        volfrac=Dimensions.get("volfrac", 0.5),
+        nelx=fem.nelx,
+        nely=fem.nely,
+        nelz=fem.nelz,
+        all_x=_get_active_coords(Supports, Forces, fem.is_3d)[0],
+        all_y=_get_active_coords(Supports, Forces, fem.is_3d)[1],
+        all_z=_get_active_coords(Supports, Forces, fem.is_3d)[2],
+        current_xPhys=current_xPhys,
     )
     x = fem.apply_regions(x, Regions)
     xPhys: FloatArray = x.copy()
@@ -225,6 +228,7 @@ def optimize_multimaterial(
     Regions: dict | None = None,
     progress_callback: Callable[[int, float, float, FloatArray], bool] | None = None,
     verbose: bool = True,
+    current_xPhys: FloatArray | None = None,
 ) -> tuple[FloatArray, FloatArray]:
     """Multi-material topology optimization (max 2 materials).
 
@@ -257,13 +261,16 @@ def optimize_multimaterial(
 
     # Initialize Material
     x: FloatArray = initializers.initialize_materials(
-        Materials.get("init_type", 0),
-        percents,
-        volfrac,
-        fem.nelx,
-        fem.nely,
-        fem.nelz,
-        *_get_active_coords(Supports, Forces, fem.is_3d),
+        init_type=Materials.get("init_type", 0),
+        materials_percentage=percents,
+        volfrac=volfrac,
+        nelx=fem.nelx,
+        nely=fem.nely,
+        nelz=fem.nelz,
+        all_x=_get_active_coords(Supports, Forces, fem.is_3d)[0],
+        all_y=_get_active_coords(Supports, Forces, fem.is_3d)[1],
+        all_z=_get_active_coords(Supports, Forces, fem.is_3d)[2],
+        current_xPhys=current_xPhys,
     )
     for i in range(n_mat):
         x[i] = fem.apply_regions(x[i], Regions)
