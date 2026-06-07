@@ -1412,7 +1412,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
     def _open_wiki_link(self) -> None:
         """Opens the specified URL in the user's default web browser."""
-        url = QUrl("https://github.com/ninja7v/TopoptComec/wiki/TopoptComec-wiki")
+        url = QUrl("https://github.com/ninja7v/TopoptComec/wiki")
         QDesktopServices.openUrl(url)
 
     def _open_issue_link(self) -> None:
