@@ -13,8 +13,8 @@ Quick map of the repository.
 
 ## Source
 
-### `app/cli.py`
-- CLI execution, preset loading, parallel runs, export dispatch
+- `app/cli.py`: CLI execution, preset loading, parallel runs, export dispatch
+- `app/cli_preview.py`: CLI execution, preset loading, parallel runs, export dispatch
 
 ### `app/core/`
 - `fem.py`: FEM model and solves
@@ -32,6 +32,7 @@ Quick map of the repository.
 - `exporters.py`: PNG, STL, VTI, 3MF export
 - `themes.py`: stylesheets
 - `icons.py`: icon handling
+- `resource_path_finder.py`: path getter
 
 ## Tests
 
