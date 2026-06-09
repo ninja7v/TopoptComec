@@ -52,7 +52,7 @@ python main.py
 ```
 CLI:
 ```bash
-python main.py -p ForceInverter_2Sup_2D
+python main.py -p ForceInverter_2Sup_2D --preview
 ```
 ### Create
 Tweak the parameters or choose a preset and hit "Create"!

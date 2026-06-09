@@ -278,6 +278,7 @@ def _run_single_preset(
     analysis: bool = False,
     run_disp: bool = False,
     save_frames: bool = False,
+    preview: bool = False,
     verbose: bool = False,
 ) -> tuple[str, str | None]:
     """
@@ -300,6 +301,8 @@ def _run_single_preset(
         Whether to print diagnostic messages.
     run_disp : bool, optional
         Whether to run displacement analysis after optimization.
+    preview : bool, optional
+        Whether to render a terminal preview of the result.
     save_frames : bool, optional
         Whether to save intermediate frames during optimization and displacement.
 
@@ -347,6 +350,11 @@ def _run_single_preset(
         if verbose:
             print(f"[{preset_name}] Applying threshold (0.5)...")
         xPhys = np.where(xPhys > 0.5, 1.0, 0.0)
+
+    if preview:
+        from app.cli_preview import render_preview
+
+        print(render_preview(xPhys, params["Dimensions"]["nelxyz"]))
 
     _export_results(preset_name, xPhys, params["Dimensions"]["nelxyz"], format, verbose)
 
@@ -438,6 +446,11 @@ def run_cli() -> None:
         help="Save intermediate frames for both optimization and displacement",
     )
     parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Show a terminal preview of the result after optimization",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -477,6 +490,7 @@ def run_cli() -> None:
             analysis=args.analysis,
             run_disp=args.displacement,
             save_frames=args.intermediate,
+            preview=args.preview,
             verbose=args.verbose,
         )
         if error:
@@ -498,6 +512,7 @@ def run_cli() -> None:
                     analysis=args.analysis,
                     run_disp=args.displacement,
                     save_frames=args.intermediate,
+                    preview=args.preview,
                     verbose=args.verbose,
                 ): name
                 for name in preset_names
