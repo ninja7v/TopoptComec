@@ -45,8 +45,8 @@ def save_as_png(
         (success, error_message) - True if successful, error string otherwise.
     """
     try:
-        nelx, nely, nelz = nelxyz
-        is_3d = nelz > 0
+        nx, ny, nz = nelxyz
+        is_3d = nz > 0
         is_multi = xPhys.ndim == 2
 
         fig = plt.figure()
@@ -59,9 +59,9 @@ def save_as_png(
                 visible_elements_mask = eff_density > 0.01
                 visible_indices = np.where(visible_elements_mask)[0]
 
-                z = visible_indices // (nelx * nely)
-                x = (visible_indices % (nelx * nely)) // nely
-                y = visible_indices % nely
+                z = visible_indices // (nx * ny)
+                x = (visible_indices % (nx * ny)) // ny
+                y = visible_indices % ny
 
                 n_mat = xPhys.shape[0]
                 voxel_colors = np.ones((len(visible_indices), 4))
@@ -78,9 +78,9 @@ def save_as_png(
                 visible_indices = np.where(visible_elements_mask)[0]
                 densities = xPhys[visible_indices]
 
-                z = visible_indices // (nelx * nely)
-                x = (visible_indices % (nelx * nely)) // nely
-                y = visible_indices % nely
+                z = visible_indices // (nx * ny)
+                x = (visible_indices % (nx * ny)) // ny
+                y = visible_indices % ny
 
                 voxel_colors = np.zeros((len(densities), 4))
                 base_color_rgb = to_rgb(colors[0] if colors else "black")
@@ -91,12 +91,12 @@ def save_as_png(
                 x + 0.5,
                 y + 0.5,
                 z + 0.5,
-                s=6000 / max(nelx, nely, nelz),
+                s=6000 / max(nx, ny, nz),
                 marker="s",
                 c=voxel_colors,
                 alpha=None,
             )
-            ax.set_box_aspect([nelx, nely, nelz])
+            ax.set_box_aspect([nx, ny, nz])
             # Hide axes for cleaner output
             ax.set_axis_off()
         else:
@@ -112,7 +112,7 @@ def save_as_png(
                     )
                     rgb_image += xPhys[i, :, np.newaxis] * (mat_rgb - 1.0)
                 rgb_image = np.clip(rgb_image, 0.0, 1.0)
-                rgb_image = rgb_image.reshape((nelx, nely, 3)).transpose(1, 0, 2)
+                rgb_image = rgb_image.reshape((nx, ny, 3)).transpose(1, 0, 2)
 
                 ax.imshow(
                     rgb_image,
@@ -125,7 +125,7 @@ def save_as_png(
                     "custom_cmap", ["white", mat_color]
                 )
                 ax.imshow(
-                    xPhys.reshape((nelx, nely)).T,
+                    xPhys.reshape((nx, ny)).T,
                     cmap=cmap,
                     interpolation="nearest",
                     origin="lower",
@@ -164,21 +164,19 @@ def save_as_vti(
     try:
         nx, ny, nz = nelxyz
         is_multi = xPhys.ndim == 2
-
-        eff_xPhys = xPhys.sum(axis=0) if is_multi else xPhys
-
+        field = xPhys.sum(axis=0) if is_multi else xPhys
         if nz > 0:
-            density_field = eff_xPhys.reshape((nz, nx, ny)).transpose(1, 2, 0)
+            field = field.reshape((nz, nx, ny)).transpose(1, 2, 0)
         else:
             nz = 1  # Extrude to a single layer
             # Reshape 2D data and add a new axis for the Z dimension
-            density_field = eff_xPhys.reshape((nx, ny))[np.newaxis, :, :]
+            field = field.reshape((nx, ny))[np.newaxis, :, :]
 
         # VTK requires data to be flattened in Fortran order ('F')
         vtk_array = numpy_to_vtk(
-            num_array=density_field.flatten("F"),
+            num_array=field.flatten("F"),
             deep=True,
-            array_type=get_vtk_array_type(density_field.dtype),
+            array_type=get_vtk_array_type(field.dtype),
         )
 
         image_data = vtk.vtkImageData()
@@ -236,21 +234,18 @@ def save_as_stl(
     try:
         nx, ny, nz = nelxyz
         is_multi = xPhys.ndim == 2
-        eff_xPhys = xPhys.sum(axis=0) if is_multi else xPhys
-
+        field = xPhys.sum(axis=0) if is_multi else xPhys
         if nz > 0:
-            density_field = eff_xPhys.reshape((nz, nx, ny)).transpose(1, 2, 0)
+            field = field.reshape((nz, nx, ny)).transpose(1, 2, 0)
         else:
             nz = 1  # Extrude to a single layer
             # Reshape 2D data and add a new axis for the Z dimension
-            density_field = eff_xPhys.reshape((nx, ny)).T[np.newaxis, :, :]
+            field = field.reshape((nx, ny)).T[np.newaxis, :, :]
 
         # Add 1-voxel padding to avoid border loss in marching cubes
-        density_field = np.pad(
-            density_field, pad_width=1, mode="constant", constant_values=0
-        )
+        field = np.pad(field, pad_width=1, mode="constant", constant_values=0)
         # Run marching cubes
-        vertices, triangles = mcubes.marching_cubes(density_field, 0.5)
+        vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
         # Build STL mesh
         stl_mesh = mesh.Mesh(np.zeros(triangles.shape[0], dtype=mesh.Mesh.dtype))
         stl_mesh.vectors = vertices[triangles]
@@ -285,17 +280,17 @@ def save_as_3mf(
     try:
         nx, ny, nz = nelxyz
         is_multi = xPhys.ndim == 2
-        eff = xPhys.sum(axis=0) if is_multi else xPhys
+        field = xPhys.sum(axis=0) if is_multi else xPhys
         if nz > 0:
-            field = eff.reshape((nz, nx, ny)).transpose(1, 2, 0)
+            field = field.reshape((nz, nx, ny)).transpose(1, 2, 0)
         else:
             nz = 1  # Extrude to a single layer
             # Reshape 2D data and add a new axis for the Z dimension
-            field = eff.reshape((nx, ny)).T[np.newaxis, :, :]
+            field = field.reshape((nx, ny)).T[np.newaxis, :, :]
 
         # Add 1-voxel padding to avoid border loss in marching cubes
         field = np.pad(field, pad_width=1, mode="constant", constant_values=0)
-        vertices, triangles = mcubes.marching_cubes(field, 0.5)
+        vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
 
         wrapper = lib3mf.get_wrapper()
         model = wrapper.CreateModel()
