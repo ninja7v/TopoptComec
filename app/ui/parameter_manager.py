@@ -155,7 +155,9 @@ class ParameterManagerMixin:
         nelx: int
         nely: int
         nelz: int
-        nelx, nely, nelz = self.last_params.get("Dimensions", {}).get("nelxyz", [1, 1, 1])
+        nelx, nely, nelz = self.last_params.get("Dimensions", {}).get(
+            "nelxyz", [1, 1, 1]
+        )
         is_3d: bool = nelz > 0
         dim = 3 if is_3d else 2
 
