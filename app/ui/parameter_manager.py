@@ -23,6 +23,9 @@ class ParameterManagerMixin:
         params = {}
 
         # --- Dimensions ---
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = (
             self.dim_widget.nx.value(),
             self.dim_widget.ny.value(),
@@ -147,21 +150,25 @@ class ParameterManagerMixin:
             (color, tooltip_text) - Color hex code and tooltip description
             indicating estimated runtime.
         """
-        dims = self.last_params.get("Dimensions", {}).get("nelxyz", [1, 1, 1])
-        nelx, nely, nelz = dims[0], dims[1], dims[2]
-        is_3d = nelz > 0
+        nelx: int
+        nely: int
+        nelz: int
+        nelx, nely, nelz = self.last_params.get("Dimensions", {}).get(
+            "nelxyz", [1, 1, 1]
+        )
+        is_3d: bool = nelz > 0
         dim = 3 if is_3d else 2
 
         # Get sizeMatrix (get number of fixed dofs for it)
-        supports = self.last_params.get("Supports", {})
-        fixed_dofs = 0
+        supports: dict = self.last_params.get("Supports", {})
+        fixed_dofs: int = 0
         if supports:
-            sx = supports.get("sx", [])
-            sy = supports.get("sy", [])
-            sz = supports.get("sz", [])
-            sr = supports.get("sr", [0] * len(sx))
-            sdim = supports.get("sdim", [])
-            active_sup = [i for i, val in enumerate(sdim) if val != "-"]
+            sx: list = supports.get("sx", [])
+            sy: list = supports.get("sy", [])
+            sz: list = supports.get("sz", [])
+            sr: list = supports.get("sr", [0] * len(sx))
+            sdim: list = supports.get("sdim", [])
+            active_sup: list = [i for i, val in enumerate(sdim) if val != "-"]
 
             for i in active_sup:
                 fixed_dofs += 1
@@ -204,18 +211,18 @@ class ParameterManagerMixin:
                     coef += 1
                 fixed_dofs *= coef
 
-        sizeMatrix = (nelx + 1) * (nely + 1) * (nelz + 1 if is_3d else 1) * dim
+        sizeMatrix: int = (nelx + 1) * (nely + 1) * (nelz + 1 if is_3d else 1) * dim
         if sizeMatrix < 0:
             sizeMatrix = 0
 
         # Get nbIteration
-        forces = self.last_params.get("Forces", {})
-        nbIteration = len([d for d in forces.get("fidir", []) if d != "-"]) + len(
+        forces: dict = self.last_params.get("Forces", {})
+        nbIteration: int = len([d for d in forces.get("fidir", []) if d != "-"]) + len(
             [d for d in forces.get("fodir", []) if d != "-"]
         )
 
         # Get nbSolves
-        nbSolves = self.last_params.get("Optimizer", {}).get("n_it", 50)
+        nbSolves: int = self.last_params.get("Optimizer", {}).get("n_it", 50)
 
         def time_estimated(nbIter: int, nbSolves: int, sMatrix: int) -> float:
             # 1.1 to add 10% of the time to consider filtering, ...
@@ -322,9 +329,9 @@ class ParameterManagerMixin:
         p : dict
             Parameters dictionary to normalize (modified in place).
         """
-        pd = p["Dimensions"]
+        pd: dict = p["Dimensions"]
         if "nelxyz" in pd:
-            is_2d = len(pd["nelxyz"]) < 3 or pd["nelxyz"][2] == 0.0
+            is_2d: bool = len(pd["nelxyz"]) < 3 or pd["nelxyz"][2] == 0.0
             if is_2d:
                 pd["nelxyz"] = pd["nelxyz"][:2]
 
@@ -349,7 +356,7 @@ class ParameterManagerMixin:
             Whether this is a 2D problem.
         """
         if "Regions" in p:
-            pr = p["Regions"]
+            pr: dict = p["Regions"]
             if "rshape" in pr:
                 zipped = zip(
                     pr.get("rshape", []),
@@ -388,7 +395,7 @@ class ParameterManagerMixin:
             Whether this is a 2D problem.
         """
         if "Supports" in p:
-            ps = p["Supports"]
+            ps: dict = p["Supports"]
             if "sdim" in ps:
                 zipped = zip(
                     ps.get("sx", []),
@@ -418,9 +425,9 @@ class ParameterManagerMixin:
         is_2d : bool
             Whether this is a 2D problem.
         """
-        pf = p["Forces"]
+        pf: dict = p["Forces"]
         for prefix in ["fi", "fo"]:
-            dir_key = f"{prefix}dir"
+            dir_key: str = f"{prefix}dir"
             if dir_key in pf:
                 keys = [
                     f"{prefix}x",
@@ -429,14 +436,14 @@ class ParameterManagerMixin:
                     f"{prefix}dir",
                     f"{prefix}norm",
                 ]
-                vals = [pf.get(k, []) for k in keys]
-                zipped = zip(*vals)
-                active = []
+                vals: list = [pf.get(k, []) for k in keys]
+                zipped: tuple = zip(*vals)
+                active: list = []
                 # Keep if direction is not "-"
-                active = [item for item in zipped if item[3] != "-"]
+                active: list = [item for item in zipped if item[3] != "-"]
 
                 if active:
-                    unzipped = list(zip(*active))
+                    unzipped: list = list(zip(*active))
                     for i, k in enumerate(keys):
                         pf[k] = list(unzipped[i])
                 else:
@@ -456,7 +463,7 @@ class ParameterManagerMixin:
             Parameters dictionary containing Materials.
         """
         if "Materials" in p:
-            pm = p["Materials"]
+            pm: dict = p["Materials"]
             if len(pm["E"]) == 1:
                 # If only one material, ignore the percentage
                 pm["percent"] = [100]
@@ -485,6 +492,9 @@ class ParameterManagerMixin:
             Error message describing the invalid parameter, or `None` when
             validation passes.
         """
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = params["Dimensions"]["nelxyz"]
         if nelx <= 0 or nely <= 0 or nelz < 0:
             return "Nx, Ny, Nz must be positive."
@@ -494,8 +504,8 @@ class ParameterManagerMixin:
             last_x = getattr(self, "last_successful_xPhys", None)
             if last_x is None:
                 return "No current result available to initialize from."
-            nel = nelx * nely * (nelz if nelz > 0 else 1)
-            last_x_nel = last_x.shape[1] if last_x.ndim == 2 else last_x.size
+            nel: int = nelx * nely * (nelz if nelz > 0 else 1)
+            last_x_nel: int = last_x.shape[1] if last_x.ndim == 2 else last_x.size
             if last_x_nel != nel:
                 return f"Current result grid size ({last_x_nel}) does not match the active grid dimensions ({nel})."
 
@@ -513,11 +523,14 @@ class ParameterManagerMixin:
         """
         Validate domain-related configuration values.
         """
-        pd = params.get("Dimensions", {})
+        pd: dict = params.get("Dimensions", {})
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = pd.get("nelxyz", [0, 0, 0])
         if nelx < 0 or nely < 0 or nelz < 0:
             return "Dimensions must not be negative."
-        volfrac = pd.get("volfrac", 0.0)
+        volfrac: float = pd.get("volfrac", 0.0)
         if volfrac <= 0.0 or volfrac > 1.0:
             return "Volume fraction must be between 0 and 1."
 
@@ -525,15 +538,15 @@ class ParameterManagerMixin:
         """
         Validate optimizer-related parameters.
         """
-        po = params.get("Optimizer", {})
+        po: dict = params.get("Optimizer", {})
         if po.get("filter_radius_min", 0.0) < 0.0:
             return "Filter radius must be non-negative."
-        eta = po.get("eta", 0.0)
+        eta: float = po.get("eta", 0.0)
         if eta <= 0.0:
             return "Optimizer eta must be positive."
         if eta > 1.0:
             return "Optimizer eta must be at most 1.0."
-        penal = po.get("penal", 0.0)
+        penal: float = po.get("penal", 0.0)
         if penal < 1.0:
             return "Penalization must be at least 1.0."
         if penal > 10.0:
@@ -584,8 +597,8 @@ class ParameterManagerMixin:
         str or None
             Error message if validation fails, None otherwise.
         """
-        pf = params["Forces"]
-        ps = params.get("Supports", {})
+        pf: dict = params["Forces"]
+        ps: dict = params.get("Supports", {})
 
         if not any(d != "-" for d in pf["fidir"]):
             return "At least one input force must be active"
@@ -595,7 +608,7 @@ class ParameterManagerMixin:
         ):
             return "At least one output force (for compliant mechanisms) or support (for rigid mechanisms) must be active"
 
-        err = self._check_duplicates(
+        err: str | None = self._check_duplicates(
             [i for i, d in enumerate(pf["fidir"]) if d != "-"],
             lambda i: (pf["fix"][i], pf["fiy"][i], pf["fiz"][i], pf["fidir"][i]),
             lambda a, b: f"Input forces {a + 1} and {b + 1} are identical.",
@@ -623,7 +636,7 @@ class ParameterManagerMixin:
         str or None
             Error message if duplicate found, None otherwise.
         """
-        pr = params.get("Region")
+        pr: dict = params.get("Region")
         if not pr:
             return
 
@@ -655,11 +668,11 @@ class ParameterManagerMixin:
         str or None
             Error message if duplicate found, None otherwise.
         """
-        ps = params.get("Supports")
+        ps: dict = params.get("Supports")
         if not ps:
             return
 
-        idx = [i for i, s in enumerate(ps["sdim"]) if s != "-"]
+        idx: list = [i for i, s in enumerate(ps["sdim"]) if s != "-"]
 
         return self._check_duplicates(
             idx,
@@ -681,7 +694,7 @@ class ParameterManagerMixin:
         str or None
             Error message if validation fails, None otherwise.
         """
-        pm = params["Materials"]
+        pm: dict = params["Materials"]
 
         err = self._check_duplicates(
             range(len(pm["E"])),
@@ -737,21 +750,21 @@ class ParameterManagerMixin:
         Shows error if scaling would move values out of range, and warning
         if rounding would lose proportions.
         """
-        scale = self.dim_widget.scale.value()
+        scale: float = self.dim_widget.scale.value()
         if scale == 1.0:
             self.status_bar.showMessage("Scale is 1.0, nothing to do.", 3000)
             return
 
-        is_3d = self.dim_widget.nz.value() > 0
-        axes = ["x", "y", "z"] if is_3d else ["x", "y"]
+        is_3d: bool = self.dim_widget.nz.value() > 0
+        axes: list = ["x", "y", "z"] if is_3d else ["x", "y"]
 
         # Track dimensions separately so they can be scaled BEFORE positions
-        dims_to_scale = [self.dim_widget.nx, self.dim_widget.ny]
+        dims_to_scale: list = [self.dim_widget.nx, self.dim_widget.ny]
         if is_3d:
             dims_to_scale.append(self.dim_widget.nz)
 
-        pos_to_validate = []
-        pos_to_scale = []
+        pos_to_validate: list = []
+        pos_to_scale: list = []
 
         def register(widget, active: bool, is_radius: bool = False) -> None:
             if active:
@@ -780,16 +793,17 @@ class ParameterManagerMixin:
 
         # Gather Supports
         for sw in self.supports_widget.inputs:
-            active = sw["sdim"].currentText() != "-"
+            active: bool = sw["sdim"].currentText() != "-"
             for ax in axes:
                 register(sw["s" + ax], active)
 
         # --- Validation ---
-        proceed_impossible, warn_needed = False, False
+        proceed_impossible: bool = False
+        warn_needed: bool = False
 
         for w in dims_to_scale + pos_to_validate:
-            val = w.value() * scale
-            if (val < 1 or val > 1000) and w.value() > 0:
+            val: float = w.value() * scale
+            if (val < 1.0 or val > 1000.0) and w.value() > 0.0:
                 proceed_impossible = True
             elif abs(val - round(val)) > 1e-6:
                 warn_needed = True
