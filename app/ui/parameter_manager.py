@@ -3,6 +3,8 @@
 # Manage parameters (json file to UI, comparison, ...).
 
 import copy
+import os
+import numpy as np
 from PySide6.QtWidgets import QMessageBox
 from matplotlib.colors import to_hex
 
@@ -286,11 +288,8 @@ class ParameterManagerMixin:
                 "Parameters changed. Please run 'Create' for a new result.", 3000
             )
 
-        # Replot
-        self.last_params = self._gather_parameters()
-        self.replot()
-
         # Play the animation and update tooltip
+        self.last_params = self._gather_parameters()
         color, tooltip_text = self._get_time_estimation_indicators(self.last_params)
         self.footer.start_create_button_effect(color_hex=color)
         self.footer.create_button.setToolTip(tooltip_text)
@@ -308,6 +307,29 @@ class ParameterManagerMixin:
                 )  # Set to "Select a preset..."
                 self.preset.presets_combo.blockSignals(False)
                 self.preset.delete_preset_button.setEnabled(False)
+        else:  # Check if the current state matches any preset
+            for preset_name, preset_params in self.presets.items():
+                if self._are_parameters_equivalent(preset_params, self.last_params):
+                    # Found a matching preset, select it
+                    self.preset.presets_combo.blockSignals(True)
+                    index = self.preset.presets_combo.findText(preset_name)
+                    if index != -1:
+                        self.preset.presets_combo.setCurrentIndex(index)
+                        self.preset.delete_preset_button.setEnabled(True)
+                    self.preset.presets_combo.blockSignals(False)
+                    # Apply the exising result if available
+                    cache_file = os.path.join(
+                        "results", preset_name, f"{preset_name}_density_field.npz"
+                    )
+                    if os.path.exists(cache_file):
+                        try:
+                            data = np.load(cache_file)
+                            self.xPhys, self.u = data["xPhys"], data["u"]
+                        except Exception as e:
+                            print(f"Failed to load cache: {e}")
+                    break
+
+        self.replot()
 
     def _are_parameters_equivalent(self, params1: dict, params2: dict) -> bool:
         """Compares two parameter dictionaries, ignoring irrelevant data."""
