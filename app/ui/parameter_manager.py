@@ -3,8 +3,6 @@
 # Manage parameters (json file to UI, comparison, ...).
 
 import copy
-import os
-import numpy as np
 from PySide6.QtWidgets import QMessageBox
 from matplotlib.colors import to_hex
 
