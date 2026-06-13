@@ -16,14 +16,14 @@ IntArray = npt.NDArray[np.int64]
 
 
 def single_linear_displacement(
-    u: np.ndarray, nelx: int, nely: int, nelz: int, disp_factor: float
-) -> tuple[np.ndarray, ...]:
+    u: FloatArray, nelx: int, nely: int, nelz: int, disp_factor: float
+) -> tuple[FloatArray, ...]:
     """
     Computes the deformed mesh grid for a single-frame plot.
 
     Parameters
     ----------
-    u : np.ndarray
+    u : FloatArray
         Displacement vector from FEM solve, shape (ndof,) or (ndof, n_forces).
     nelx, nely, nelz : int
         Number of elements in each dimension.
@@ -32,31 +32,31 @@ def single_linear_displacement(
 
     Returns
     -------
-    tuple[np.ndarray, ...]
+    tuple[FloatArray, ...]
         X, Y, Z meshgrid arrays for plotting deformed geometry.
     """
     is_3d: bool = nelz > 0
-    nodes_flat: np.ndarray = np.arange(
+    nodes_flat: FloatArray = np.arange(
         (nelx + 1) * (nely + 1) * (nelz + 1 if is_3d else 1)
     )
 
     # Generate grid coordinates
     if is_3d:
         slice_size = (nelx + 1) * (nely + 1)
-        z_coords: np.ndarray = nodes_flat // slice_size
-        rem: np.ndarray = nodes_flat % slice_size
-        x_coords: np.ndarray = rem // (nely + 1)
-        y_coords: np.ndarray = rem % (nely + 1)
+        z_coords: FloatArray = nodes_flat // slice_size
+        rem: FloatArray = nodes_flat % slice_size
+        x_coords: FloatArray = rem // (nely + 1)
+        y_coords: FloatArray = rem % (nely + 1)
     else:
-        x_coords = nodes_flat // (nely + 1)
-        y_coords = nodes_flat % (nely + 1)
+        x_coords: FloatArray = nodes_flat // (nely + 1)
+        y_coords: FloatArray = nodes_flat % (nely + 1)
 
     # Calculate average displacement
     # u shape is (ndof, n_forces) or (ndof,)
     if u.ndim > 1:
-        u_vec: np.ndarray = np.mean(u, axis=1)
+        u_vec: FloatArray = np.mean(u, axis=1)
     else:
-        u_vec = u
+        u_vec: FloatArray = u
 
     # Map DOF indices to Node indices
     elemndof: int = 3 if is_3d else 2
@@ -75,14 +75,14 @@ def single_linear_displacement(
 
         # Reshape to (Z, X, Y) then transpose to (X, Y, Z) for standard plotting tools
         shape: tuple[int, int, int] = (nelz + 1, nelx + 1, nely + 1)
-        X: np.ndarray = X_flat.reshape(shape).transpose(1, 2, 0)
-        Y: np.ndarray = Y_flat.reshape(shape).transpose(1, 2, 0)
-        Z: np.ndarray = Z_flat.reshape(shape).transpose(1, 2, 0)
+        X: FloatArray = X_flat.reshape(shape).transpose(1, 2, 0)
+        Y: FloatArray = Y_flat.reshape(shape).transpose(1, 2, 0)
+        Z: FloatArray = Z_flat.reshape(shape).transpose(1, 2, 0)
         return X, Y, Z
     else:
-        shape = (nelx + 1, nely + 1)
-        X = X_flat.reshape(shape)
-        Y = Y_flat.reshape(shape)
+        shape: tuple[int, int] = (nelx + 1, nely + 1)
+        X: FloatArray = X_flat.reshape(shape)
+        Y: FloatArray = Y_flat.reshape(shape)
         return X, Y
 
 
