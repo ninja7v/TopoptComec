@@ -19,6 +19,7 @@ None of the existing competing solutions combine all of these features in a sing
 
 ## 🚀Quick Start
 ### 1. Clone the repo
+Open the folder you want TopoptComec to be in a terminal and run:
 ```cmd
 git clone https://github.com/ninja7V/topoptcomec.git
 cd topoptcomec
