@@ -3,11 +3,9 @@
 # Tests for the main window.
 
 import pytest
-
+import numpy as np
 from app.ui.main_window import MainWindow
-
 from PySide6.QtWidgets import QCheckBox
-
 from unittest.mock import patch
 
 # --- Test Cases for the Intelligent Comparison ---
@@ -358,7 +356,7 @@ def test_save_result(qt_app):
     window: MainWindow = MainWindow()
 
     # Mock result data
-    window.xPhys: list = [0.5] * 100
+    window.xPhys: np.ndarray = np.array([0.5] * 100)
     window.last_params["Dimensions"]: dict = {"nelxyz": (10, 10, 0)}
     window.figure: object = type("Fig", (), {"savefig": lambda *a, **k: None})()
 
@@ -540,6 +538,8 @@ def test_low_density_validation(qt_app):
     assert window.xPhys_valid == (window.xPhys is not None)
 
     # 1. Test handle results with low density (< 1%)
+    nelx: int
+    nely: int
     nelx, nely = window.last_params["Dimensions"]["nelxyz"][:2]
     nel: int = nelx * nely
     mock_xPhys_empty: np.ndarray = np.zeros(nel)
