@@ -454,7 +454,7 @@ def run_cli() -> None:
         "-v",
         "--verbose",
         action="store_true",
-        help="Suppress intermediate optimizer output (useful for parallel runs)",
+        help="Print intermediate optimizer output during optimization",
     )
 
     args: argparse.Namespace = parser.parse_args()
