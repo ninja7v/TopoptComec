@@ -18,3 +18,4 @@ __pycache__/
 # Build (when an executable is created)
 /dist/
 /build/
+*.egg-info/

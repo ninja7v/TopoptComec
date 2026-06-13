@@ -18,16 +18,16 @@ None of the existing competing solutions combine all of these features in a sing
 - 🔓 **Open source** — Transparent, extensible. No black boxes.
 
 ## 🚀Quick Start
-### Clone/Download the repo
+### 1. Clone the repo
 ```cmd
 git clone https://github.com/ninja7V/topoptcomec.git
 cd topoptcomec
 ```
-### Install dependencies
+### 2. Set up the environment (once)
+Create and activate a virtual environment:
 ```bash
 python -m venv .venv
 ```
-Then activate the virtual environment:
 - macOS / Linux:
 ```bash
 source .venv/bin/activate
@@ -40,19 +40,23 @@ source .venv/bin/activate
 ```cmd
 .\.venv\Scripts\activate.bat
 ```
-Install requirements:
+Then install:
 ```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
-### Run
+
+### 3. Run
+> **Note:** Always activate the virtual environment first (see step 2) before running `topoptcomec`.
+
 GUI:
 ```bash
-python main.py
+topoptcomec
 ```
 CLI:
 ```bash
-python main.py -p ForceInverter_2Sup_2D --preview
+topoptcomec -p ForceInverter_2Sup_2D --preview
 ```
 ### Create
 Tweak the parameters or choose a preset and hit "Create"!

@@ -9,7 +9,8 @@ TopoptComec has two front doors built on the same core engine:
 
 ### Entry Points
 
-- `main.py`: chooses GUI when no arguments are passed, otherwise runs the CLI
+- `app/__main__.py`: chooses GUI when no arguments are passed, otherwise runs the CLI
+- `main.py`: convenience wrapper, delegates to `app/__main__:main`
 - `app/cli.py`: loads presets, runs optimization, exports results
 - `app/ui/main_window.py`: owns the main GUI workflow
 

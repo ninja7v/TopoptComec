@@ -3,7 +3,7 @@
 ## GUI
 
 ```bash
-py main.py
+topoptcomec
 ```
 
 Typical flow:
@@ -20,25 +20,25 @@ If you change parameters after a run, create the result again.
 Run one preset:
 
 ```bash
-py main.py -p ForceInverter_2Sup_2D
+topoptcomec -p ForceInverter_2Sup_2D
 ```
 
 Export only PNG:
 
 ```bash
-py main.py -p ForceInverter_2Sup_2D -f png
+topoptcomec -p ForceInverter_2Sup_2D -f png
 ```
 
 Threshold before export:
 
 ```bash
-py main.py -p ForceInverter_2Sup_2D -f png -t
+topoptcomec -p ForceInverter_2Sup_2D -f png -t
 ```
 
 Run several presets in parallel:
 
 ```bash
-py main.py -p ForceInverter_2Sup_2D,Gripper_2D -f png
+topoptcomec -p ForceInverter_2Sup_2D,Gripper_2D -f png
 ```
 
 ## Notes
