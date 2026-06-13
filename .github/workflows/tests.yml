@@ -28,7 +28,7 @@ jobs:
         run: ruff format --check .
 
       - name: Lizard (complexity & length)
-        run: lizard -L 150 -C 30 -w app main.py
+        run: lizard -L 150 -C 30 -w app tests
 
   tests:
     runs-on: ubuntu-latest
@@ -54,6 +54,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -e .
           pip install pytest pytest-cov
 
       - name: Run tests

@@ -4,7 +4,8 @@ Quick map of the repository.
 
 ## Root
 
-- `main.py`: application entry point
+- `main.py`: convenience wrapper, delegates to `app/__main__:main`
+- `app/__main__.py`: application entry point (console script target)
 - `presets.json`: built-in preset definitions
 - `requirements.txt`: dependencies
 - `README.md`: user-facing overview
@@ -52,11 +53,11 @@ Quick map of the repository.
 
 ## Documentation
 
-- `doc/ARCHITECTURE.md`: high-level system design
-- `doc/CODEMAP.md`: this file
-- `doc/GLOSSARY.md`: terminology
-- `doc/EXAMPLE.md`: usage examples
-- `doc/SKILL.md`: agent-oriented repo guide
+- `docs/ARCHITECTURE.md`: high-level system design
+- `docs/CODEMAP.md`: this file
+- `docs/GLOSSARY.md`: terminology
+- `docs/EXAMPLE.md`: usage examples
+- `docs/SKILL.md`: agent-oriented repo guide
 
 ## Assets and Output
 

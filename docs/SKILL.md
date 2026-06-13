@@ -1,6 +1,6 @@
 # TopoptComec Agent Skill
 
-TopoptComec is a Python topology optimization app with a GUI (`py main.py`) and a CLI (`py main.py -p <preset>`).
+TopoptComec is a Python topology optimization app with a GUI (`topoptcomec`) and a CLI (`topoptcomec -p <preset>`).
 
 ## Edit Map
 
@@ -35,6 +35,6 @@ Useful tests:
 ```bash
 ruff format --check .
 ruff check .
-lizard -L 150 -C 30 -w app main.py
+lizard -L 150 -C 30 -w app tests
 pytest
 ```
