@@ -308,12 +308,12 @@ class PlottingMixin:
                         indices: np.ndarray = kk + jj * nelz + ii * nely * nelz
                     elif not is_3d:
                         i_grid, j_grid = np.meshgrid(idx_x, idx_y, indexing="ij")
-                        mask: np.ndarray = (i_grid - pr["rx"][i]) ** 2 + (
+                        mask = (i_grid - pr["rx"][i]) ** 2 + (
                             j_grid - pr["ry"][i]
                         ) ** 2 <= pr["rradius"][i] ** 2
-                        ii: np.ndarray
-                        jj: np.ndarray = i_grid[mask], j_grid[mask]
-                        indices: np.ndarray = jj + ii * nely
+                        ii = i_grid[mask]
+                        jj = j_grid[mask]
+                        indices = jj + ii * nely
 
             if indices is not None:
                 value: float = 1e-6 if pr["rstate"][i] == "Void" else 1.0
@@ -969,7 +969,7 @@ class PlottingMixin:
 
             else:
                 if shape == "□":  # Square/Cube
-                    rec = plt.Rectangle(
+                    rect: plt.Rectangle = plt.Rectangle(
                         (rx - r, ry - r),
                         2 * r,
                         2 * r,
@@ -979,7 +979,7 @@ class PlottingMixin:
                     )
                     ax.add_patch(rect)
                 elif shape == "◯":  # Circle/Sphere
-                    circ = plt.Circle(
+                    circ: plt.Circle = plt.Circle(
                         (rx, ry), r, fill=False, edgecolor="green", linestyle=":"
                     )
                     ax.add_patch(circ)
