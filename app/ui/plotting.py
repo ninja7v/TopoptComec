@@ -49,17 +49,17 @@ class PlottingMixin:
         ):  # Single-frame grid plot
             if is_3d:
                 # Compute original element centers
-                nel = nelx * nely * nelz
-                visible_indices = np.arange(nel)  # all of them
-                z_idx = visible_indices // (nelx * nely)
-                x_idx = (visible_indices % (nelx * nely)) // nely
-                y_idx = visible_indices % nely
+                nel: int = nelx * nely * nelz
+                visible_indices: np.ndarray = np.arange(nel)  # all of them
+                z_idx: np.ndarray = visible_indices // (nelx * nely)
+                x_idx: np.ndarray = (visible_indices % (nelx * nely)) // nely
+                y_idx: np.ndarray = visible_indices % nely
 
                 # Compute displaced centers from node positions
                 X, Y, Z = self.last_displayed_frame_data  # displaced node coords
 
                 # Take mean of the 8 node positions for each voxel center
-                cx = (
+                cx: np.ndarray = (
                     X[x_idx, y_idx, z_idx]
                     + X[x_idx + 1, y_idx, z_idx]
                     + X[x_idx, y_idx + 1, z_idx]
@@ -70,7 +70,7 @@ class PlottingMixin:
                     + X[x_idx + 1, y_idx + 1, z_idx + 1]
                 ) / 8.0
 
-                cy = (
+                cy: np.ndarray = (
                     Y[x_idx, y_idx, z_idx]
                     + Y[x_idx + 1, y_idx, z_idx]
                     + Y[x_idx, y_idx + 1, z_idx]
@@ -81,7 +81,7 @@ class PlottingMixin:
                     + Y[x_idx + 1, y_idx + 1, z_idx + 1]
                 ) / 8.0
 
-                cz = (
+                cz: np.ndarray = (
                     Z[x_idx, y_idx, z_idx]
                     + Z[x_idx + 1, y_idx, z_idx]
                     + Z[x_idx, y_idx + 1, z_idx]
@@ -93,7 +93,7 @@ class PlottingMixin:
                 ) / 8.0
 
                 # Colors with alpha = density
-                colors = np.zeros((nel, 4))
+                colors: np.ndarray = np.zeros((nel, 4))
                 colors[:, :3] = to_rgb(
                     self.materials_widget.inputs[0]["color"].get_color()
                 )
@@ -114,13 +114,13 @@ class PlottingMixin:
             else:
                 X, Y = self.last_displayed_frame_data
 
-                is_multi = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
+                is_multi: bool = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
                 if is_multi:
                     n_mat, nel = self.xPhys.shape
-                    rgb_image = np.ones((nel, 3))  # Start white
+                    rgb_image: np.ndarray = np.ones((nel, 3))  # Start white
 
                     for i in range(n_mat):
-                        mat_rgb = np.array(
+                        mat_rgb: np.ndarray = np.array(
                             to_rgb(self.materials_widget.inputs[i]["color"].get_color())
                         )
                         # Blend: pixel = sum(rho_i * color_i)
@@ -139,12 +139,14 @@ class PlottingMixin:
 
                 else:
                     # Single-material logic
-                    hex_color = to_hex(
+                    hex_color: str = to_hex(
                         self.materials_widget.inputs[0]["color"].get_color()
                     )
-                    color_cmap = LinearSegmentedColormap.from_list(
-                        "material_shades",
-                        [hex_color, "#ffffff"],  # selected material color → white
+                    color_cmap: LinearSegmentedColormap = (
+                        LinearSegmentedColormap.from_list(
+                            "material_shades",
+                            [hex_color, "#ffffff"],  # selected material color → white
+                        )
                     )
                     ax.pcolormesh(
                         X,
@@ -175,10 +177,12 @@ class PlottingMixin:
         """
         from app.core import initializers  # Import here to avoid circular
 
-        pm = self.last_params["Materials"]
-        pd = self.last_params["Dimensions"]
-        pf = self.last_params["Forces"]
-        ps = self.last_params["Supports"] if "Supports" in self.last_params else None
+        pm: dict = self.last_params["Materials"]
+        pd: dict = self.last_params["Dimensions"]
+        pf: dict = self.last_params["Forces"]
+        ps: dict = (
+            self.last_params["Supports"] if "Supports" in self.last_params else None
+        )
 
         active_iforces_indices = [
             i for i in range(len(pf["fidir"])) if np.array(pf["fidir"])[i] != "-"
@@ -192,34 +196,34 @@ class PlottingMixin:
             else []
         )
 
-        fix_active = np.array(pf["fix"])[active_iforces_indices]
-        fiy_active = np.array(pf["fiy"])[active_iforces_indices]
-        fox_active = np.array(pf["fox"])[active_oforces_indices]
-        foy_active = np.array(pf["foy"])[active_oforces_indices]
-        sx_active = (
+        fix_active: np.ndarray = np.array(pf["fix"])[active_iforces_indices]
+        fiy_active: np.ndarray = np.array(pf["fiy"])[active_iforces_indices]
+        fox_active: np.ndarray = np.array(pf["fox"])[active_oforces_indices]
+        foy_active: np.ndarray = np.array(pf["foy"])[active_oforces_indices]
+        sx_active: np.ndarray = (
             np.array(ps["sx"])[active_supports_indices]
             if ps is not None
             else np.array([])
         )
-        sy_active = (
+        sy_active: np.ndarray = (
             np.array(ps["sy"])[active_supports_indices]
             if ps is not None
             else np.array([])
         )
-        all_x = np.concatenate([fix_active, fox_active, sx_active])
-        all_y = np.concatenate([fiy_active, foy_active, sy_active])
+        all_x: np.ndarray = np.concatenate([fix_active, fox_active, sx_active])
+        all_y: np.ndarray = np.concatenate([fiy_active, foy_active, sy_active])
 
         if is_3d:
-            fiz_active = np.array(pf["fiz"])[active_iforces_indices]
-            foz_active = np.array(pf["foz"])[active_oforces_indices]
-            sz_active = np.array(ps["sz"])[active_supports_indices]
-        all_z = (
+            fiz_active: np.ndarray = np.array(pf["fiz"])[active_iforces_indices]
+            foz_active: np.ndarray = np.array(pf["foz"])[active_oforces_indices]
+            sz_active: np.ndarray = np.array(ps["sz"])[active_supports_indices]
+        all_z: np.ndarray = (
             np.concatenate([fiz_active, foz_active, sz_active])
             if is_3d
             else np.array([0] * len(all_x))
         )
 
-        current_x = getattr(self, "last_successful_xPhys", None)
+        current_x: np.ndarray = getattr(self, "last_successful_xPhys", None)
         if len(pm["E"]) == 1:
             self.xPhys = initializers.initialize_material(
                 pm["init_type"],
@@ -260,25 +264,25 @@ class PlottingMixin:
         is_3d : bool
             Whether this is a 3D problem.
         """
-        pr = self.last_params["Regions"]
+        pr: dict = self.last_params["Regions"]
         for i, shape in enumerate(pr["rshape"]):
             if shape == "-":
                 continue
 
-            x_min = max(0, int(pr["rx"][i] - pr["rradius"][i]))
-            x_max = min(nelx, int(pr["rx"][i] + pr["rradius"][i]))
-            y_min = max(0, int(pr["ry"][i] - pr["rradius"][i]))
-            y_max = min(nely, int(pr["ry"][i] + pr["rradius"][i]))
+            x_min: int = max(0, int(pr["rx"][i] - pr["rradius"][i]))
+            x_max: int = min(nelx, int(pr["rx"][i] + pr["rradius"][i]))
+            y_min: int = max(0, int(pr["ry"][i] - pr["rradius"][i]))
+            y_max: int = min(nely, int(pr["ry"][i] + pr["rradius"][i]))
             if is_3d:
-                z_min = max(0, int(pr["rz"][i] - pr["rradius"][i]))
-                z_max = min(nelz, int(pr["rz"][i] + pr["rradius"][i]))
+                z_min: int = max(0, int(pr["rz"][i] - pr["rradius"][i]))
+                z_max: int = min(nelz, int(pr["rz"][i] + pr["rradius"][i]))
 
-            idx_x = np.arange(x_min, x_max)
-            idx_y = np.arange(y_min, y_max)
+            idx_x: np.ndarray = np.arange(x_min, x_max)
+            idx_y: np.ndarray = np.arange(y_min, y_max)
             if is_3d:
-                idx_z = np.arange(z_min, z_max)
+                idx_z: np.ndarray = np.arange(z_min, z_max)
 
-            indices = None
+            indices: np.ndarray | None = None
 
             if pr["rshape"][i] == "□":  # Square/Cube
                 if len(idx_x) > 0 and len(idx_y) > 0:
@@ -295,22 +299,25 @@ class PlottingMixin:
                         i_grid, j_grid, k_grid = np.meshgrid(
                             idx_x, idx_y, idx_z, indexing="ij"
                         )
-                        mask = (i_grid - pr["rx"][i]) ** 2 + (
+                        mask: np.ndarray = (i_grid - pr["rx"][i]) ** 2 + (
                             j_grid - pr["ry"][i]
                         ) ** 2 + (k_grid - pr["rz"][i]) ** 2 <= pr["rradius"][i] ** 2
-                        ii, jj, kk = i_grid[mask], j_grid[mask], k_grid[mask]
-                        indices = kk + jj * nelz + ii * nely * nelz
+                        ii: np.ndarray = i_grid[mask]
+                        jj: np.ndarray = j_grid[mask]
+                        kk: np.ndarray = k_grid[mask]
+                        indices: np.ndarray = kk + jj * nelz + ii * nely * nelz
                     elif not is_3d:
                         i_grid, j_grid = np.meshgrid(idx_x, idx_y, indexing="ij")
                         mask = (i_grid - pr["rx"][i]) ** 2 + (
                             j_grid - pr["ry"][i]
                         ) ** 2 <= pr["rradius"][i] ** 2
-                        ii, jj = i_grid[mask], j_grid[mask]
+                        ii = i_grid[mask]
+                        jj = j_grid[mask]
                         indices = jj + ii * nely
 
             if indices is not None:
-                value = 1e-6 if pr["rstate"][i] == "Void" else 1.0
-                flat_idx = indices.flatten()
+                value: float = 1e-6 if pr["rstate"][i] == "Void" else 1.0
+                flat_idx: np.ndarray = indices.flatten()
                 if self.xPhys.ndim == 1:
                     self.xPhys[flat_idx] = value
                 else:
@@ -328,7 +335,7 @@ class PlottingMixin:
             Whether this is a 3D plot.
         """
         if self.footer.create_button.graphicsEffect() is not None:
-            init_message = 'Configure parameters and press "Create"'
+            init_message: str = 'Configure parameters and press "Create"'
             if is_3d:
                 ax.text2D(
                     0.5,
@@ -365,8 +372,11 @@ class PlottingMixin:
             return  # Do nothing if triggerd in sections initialization
         self.figure.clear()
         self.figure.patch.set_facecolor("white")
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
-        is_3d = nelz > 0
+        is_3d: bool = nelz > 0
         if is_3d:
             ax = self.figure.add_subplot(111, projection="3d", facecolor="white")
         else:
@@ -407,13 +417,16 @@ class PlottingMixin:
         xPhys_data : np.ndarray, optional
             Density data to plot. Uses self.xPhys if None.
         """
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
-        data_to_plot = self.xPhys if xPhys_data is None else xPhys_data
+        data_to_plot: np.ndarray = self.xPhys if xPhys_data is None else xPhys_data
         if data_to_plot is None:
             return
 
         # Detect multi-material: shape (n_mat, nel)
-        is_multi = data_to_plot.ndim == 2
+        is_multi: bool = data_to_plot.ndim == 2
 
         ax.clear()
         if is_3d:
@@ -439,10 +452,12 @@ class PlottingMixin:
             Whether this is multi-material data.
         """
         if is_multi:
+            n_mat: int
+            nel: int
             n_mat, nel = data.shape
-            rgb_image = np.ones((nel, 3))  # Start white
+            rgb_image: np.ndarray = np.ones((nel, 3))  # Start white
             for i in range(n_mat):
-                mat_rgb = np.array(
+                mat_rgb: np.ndarray = np.array(
                     to_rgb(self.materials_widget.inputs[i]["color"].get_color())
                 )
                 # Blend: pixel = sum(rho_i * color_i)
@@ -461,8 +476,9 @@ class PlottingMixin:
             cmap = LinearSegmentedColormap.from_list(
                 "custom_cmap", ["white", mat_color]
             )
+            image = data.reshape((nelx, nely)).T
             ax.imshow(
-                data.reshape((nelx, nely)).T,
+                image,
                 cmap=cmap,
                 interpolation="nearest",
                 origin="lower",
@@ -493,45 +509,32 @@ class PlottingMixin:
         is_multi : bool
             Whether this is multi-material data.
         """
+        eff_density: np.ndarray = data.sum(axis=0) if is_multi else data
+        visible_mask: np.ndarray = eff_density > 0.01
+        visible_idx: np.ndarray = np.where(visible_mask)[0]
+        if len(visible_idx) == 0:
+            return
+
+        z: np.ndarray = visible_idx // (nelx * nely)
+        x: np.ndarray = (visible_idx % (nelx * nely)) // nely
+        y: np.ndarray = visible_idx % nely
+        colors: np.ndarray = np.ones((len(visible_idx), 4))  # RGBA, start white
         if is_multi:
-            # Effective density for visibility
-            eff_density = data.sum(axis=0)
-            visible_mask = eff_density > 0.01
-            visible_idx = np.where(visible_mask)[0]
-            if len(visible_idx) == 0:
-                return
-
-            z = visible_idx // (nelx * nely)
-            x = (visible_idx % (nelx * nely)) // nely
-            y = visible_idx % nely
-
-            n_mat = data.shape[0]
-            colors = np.ones((len(visible_idx), 4))  # RGBA, start white
+            n_mat: int = data.shape[0]
             for i in range(n_mat):
-                mat_rgb = np.array(
+                mat_rgb: np.ndarray = np.array(
                     to_rgb(self.materials_widget.inputs[i]["color"].get_color())
                 )
-                rho_vis = data[i, visible_idx]
+                rho_vis: np.ndarray = data[i, visible_idx]
                 colors[:, :3] += rho_vis[:, np.newaxis] * (mat_rgb - 1.0)
             colors[:, :3] = np.clip(colors[:, :3], 0.0, 1.0)
             colors[:, 3] = np.clip(eff_density[visible_idx], 0.0, 1.0)
         else:
-            visible_mask = data > 0.01
-            visible_idx = np.where(visible_mask)[0]
-            if len(visible_idx) == 0:
-                return
-
-            densities = data[visible_idx]
-            z = visible_idx // (nelx * nely)
-            x = (visible_idx % (nelx * nely)) // nely
-            y = visible_idx % nely
-
-            colors = np.zeros((len(densities), 4))
-            base_color_rgb = to_rgb(
+            base_color_rgb: np.ndarray = to_rgb(
                 self.materials_widget.inputs[0]["color"].get_color()
             )
             colors[:, :3] = base_color_rgb
-            colors[:, 3] = densities
+            colors[:, 3] = eff_density[visible_idx]
 
         ax.scatter(
             x + 0.5,
@@ -587,11 +590,14 @@ class PlottingMixin:
                 spine.set_visible(False)
             return
 
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
 
         if is_3d:
             # Define the 8 vertices of the box
-            verts = [
+            verts: list[tuple[int, int, int]] = [
                 (0, 0, 0),
                 (nelx, 0, 0),
                 (nelx, nely, 0),
@@ -602,7 +608,7 @@ class PlottingMixin:
                 (0, nely, nelz),
             ]
             # Define the 12 edges by connecting the vertices
-            edges = [
+            edges: list[tuple[int, int]] = [
                 (0, 1),
                 (1, 2),
                 (2, 3),
@@ -621,7 +627,7 @@ class PlottingMixin:
                 x, y, z = zip(*points)
                 ax.plot(x, y, z, color="gray", linestyle=":", linewidth=1.5)
         else:
-            rect = Rectangle(
+            rect: Rectangle = Rectangle(
                 (0, 0),
                 nelx,
                 nely,
@@ -661,9 +667,9 @@ class PlottingMixin:
         if not self.last_params or "Forces" not in self.last_params:
             return
 
-        pf = self.last_params["Forces"]
-        pd = self.last_params["Dimensions"]
-        length = np.mean(pd["nelxyz"][:2]) / 6
+        pf: dict = self.last_params["Forces"]
+        pd: dict = self.last_params["Dimensions"]
+        length: float = np.mean(pd["nelxyz"][:2]) / 6.0
 
         if (
             self.is_displaying_deformation
@@ -694,12 +700,12 @@ class PlottingMixin:
         tuple
             (dx, dy, dz) - Direction vector components.
         """
-        dx = np.zeros(len(dirs))
-        dy = np.zeros(len(dirs))
-        dz = np.zeros(len(dirs)) if is_3d else None
+        dx: np.ndarray = np.zeros(len(dirs))
+        dy: np.ndarray = np.zeros(len(dirs))
+        dz: np.ndarray | None = np.zeros(len(dirs)) if is_3d else None
 
         for i, d in enumerate(dirs):
-            c = d.split(":")[1]
+            c: str = d.split(":")[1]
             if c == "→":
                 dx[i] = length
             elif c == "←":
@@ -733,15 +739,20 @@ class PlottingMixin:
             Arrow length scaling factor.
         """
         for prefix, color in [("fi", "r"), ("fo", "b")]:
-            dirs = np.array(pf[f"{prefix}dir"])
-            active = dirs != "-"
+            dirs: np.ndarray = np.array(pf[f"{prefix}dir"])
+            active: np.ndarray = dirs != "-"
             if not np.any(active):
                 continue
 
-            x = np.array(pf[f"{prefix}x"])[active]
-            y = np.array(pf[f"{prefix}y"])[active]
-            z = np.array(pf.get(f"{prefix}z", []))[active] if is_3d else None
+            x: np.ndarray = np.array(pf[f"{prefix}x"])[active]
+            y: np.ndarray = np.array(pf[f"{prefix}y"])[active]
+            z: np.ndarray | None = (
+                np.array(pf.get(f"{prefix}z", []))[active] if is_3d else None
+            )
 
+            dx: np.ndarray
+            dy: np.ndarray
+            dz: np.ndarray | None
             dx, dy, dz = self._arrow_vectors(dirs[active], length, is_3d)
 
             if is_3d:
@@ -777,14 +788,14 @@ class PlottingMixin:
         length : float
             Arrow length scaling factor.
         """
-        nely = pd["nelxyz"][1]
-        disp_factor = self.displacement_widget.mov_disp.value()
+        nely: int = pd["nelxyz"][1]
+        disp_factor: float = self.displacement_widget.mov_disp.value()
 
         for xk, yk, zk, dk, color in [
             ("fix", "fiy", "fiz", "fidir", "r"),
             ("fox", "foy", "foz", "fodir", "b"),
         ]:
-            active = [
+            active: list = [
                 g
                 for g in self.forces_widget.inputs
                 if dk in g and g[dk].currentText() != "-"
@@ -792,27 +803,34 @@ class PlottingMixin:
             if not active:
                 continue
 
-            fx = np.array([g[xk].value() for g in active])
-            fy = np.array([g[yk].value() for g in active])
-            fz = np.array([g[zk].value() for g in active]) if is_3d else None
-            dirs = [g[dk].currentText() for g in active]
+            fx: np.ndarray = np.array([g[xk].value() for g in active])
+            fy: np.ndarray = np.array([g[yk].value() for g in active])
+            fz: np.ndarray | None = (
+                np.array([g[zk].value() for g in active]) if is_3d else None
+            )
+            dirs: list = [g[dk].currentText() for g in active]
 
-            idx = (
+            idx: np.ndarray = (
                 (fz * (fx + 1) * (nely + 1) + fx * (nely + 1) + fy)
                 if is_3d
                 else (fx * (nely + 1) + fy)
             )
 
-            dof = 3 if is_3d else 2
-            ux = self.u[dof * idx, 0] * disp_factor
-            uy = self.u[dof * idx + 1, 0] * disp_factor
-            uz = self.u[dof * idx + 2, 0] * disp_factor if is_3d else None
+            dof: int = 3 if is_3d else 2
+            ux: np.ndarray = self.u[dof * idx, 0] * disp_factor
+            uy: np.ndarray = self.u[dof * idx + 1, 0] * disp_factor
+            uz: np.ndarray | None = (
+                self.u[dof * idx + 2, 0] * disp_factor if is_3d else None
+            )
 
-            fx = fx + ux  # using += will give an error
-            fy = fy + uy if is_3d else fy - uy
+            fx: np.ndarray = fx + ux  # using += will give an error
+            fy: np.ndarray = fy + uy if is_3d else fy - uy
             if is_3d:
-                fz = fz + uz
+                fz: np.ndarray = fz + uz
 
+            dx: np.ndarray
+            dy: np.ndarray
+            dz: np.ndarray | None
             dx, dy, dz = self._arrow_vectors(dirs, length, is_3d)
 
             if is_3d:
@@ -848,12 +866,12 @@ class PlottingMixin:
         if not self.last_params or "Supports" not in self.last_params:
             return
         # No need to consider the case is_displaying_deformation since the supports don't move
-        ps = self.last_params["Supports"]
+        ps: dict = self.last_params["Supports"]
         for i, d in enumerate(ps["sdim"]):
             if d == "-":
                 continue
-            pos = [ps["sx"][i], ps["sy"][i], ps["sz"][i]]
-            size = 80 + 200 * ps["sr"][i] ** 2
+            pos: list = [ps["sx"][i], ps["sy"][i], ps["sz"][i]]
+            size: int = 80 + 200 * ps["sr"][i] ** 2
             if is_3d:
                 ax.scatter(
                     pos[0],
@@ -888,16 +906,17 @@ class PlottingMixin:
             return  # Region are not relevant in deformation view
         if not self.last_params or "Regions" not in self.last_params:
             return
-        pr = self.last_params["Regions"]
+        pr: dict = self.last_params["Regions"]
         for i, shape in enumerate(pr["rshape"]):
             if shape == "-":
                 continue
 
-            r = pr["rradius"][i]
-            rx, ry = pr["rx"][i], pr["ry"][i]
+            r: int = pr["rradius"][i]
+            rx: int = pr["rx"][i]
+            ry: int = pr["ry"][i]
 
             if is_3d:
-                rz = pr["rz"][i]
+                rz: int = pr["rz"][i]
                 if shape == "□":  # Square/Cube
                     # Define the 8 vertices of the cube
                     verts = np.array(
@@ -950,7 +969,7 @@ class PlottingMixin:
 
             else:
                 if shape == "□":  # Square/Cube
-                    rect = plt.Rectangle(
+                    rect: plt.Rectangle = plt.Rectangle(
                         (rx - r, ry - r),
                         2 * r,
                         2 * r,
@@ -960,7 +979,7 @@ class PlottingMixin:
                     )
                     ax.add_patch(rect)
                 elif shape == "◯":  # Circle/Sphere
-                    circ = plt.Circle(
+                    circ: plt.Circle = plt.Circle(
                         (rx, ry), r, fill=False, edgecolor="green", linestyle=":"
                     )
                     ax.add_patch(circ)
@@ -987,19 +1006,19 @@ class PlottingMixin:
             return  # The displacement vector doesn't match the deformed shape
         if self.u is None or self.xPhys is None:
             return
-        pf = self.last_params["Forces"]
-        disp_factor = self.displacement_widget.mov_disp.value()
-        factor = (
-            disp_factor / np.mean(pf["finorm"][0])
-            if np.mean(pf["finorm"][0]) != 0
-            else disp_factor
-        )
+        pf: dict = self.last_params["Forces"]
+        disp_factor: float = self.displacement_widget.mov_disp.value()
+        mean_force: float = np.mean(pf["finorm"][0])
+        factor: float = disp_factor / mean_force if mean_force != 0 else disp_factor
 
+        nelx: int
+        nely: int
+        nelz: int
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        step: int = (
+            max(nelx, nely, nelz) / 10
+        )  # number of elements to skip between 2 arrows
         if is_3d:
-            step = max(
-                1, int((nelx + nely + nelz) / 15)
-            )  # number of elements to skip between 2 arrows
             x_coords, y_coords, z_coords = np.meshgrid(
                 np.arange(0, nelx, step),
                 np.arange(0, nely, step),
@@ -1007,27 +1026,27 @@ class PlottingMixin:
                 indexing="xy",
             )
 
-            el_indices = (
+            el_indices: np.ndarray = (
                 z_coords * (nelx * nely) + x_coords * nely + y_coords
             ).flatten()
-            node_indices = (
+            node_indices: np.ndarray = (
                 z_coords * ((nelx + 1) * (nely + 1)) + x_coords * (nely + 1) + y_coords
             ).flatten()
-            material_mask = (
+            material_mask: np.ndarray = (
                 self.xPhys[el_indices] > 0.5
                 if self.xPhys.ndim == 1
                 else np.any(self.xPhys[:, el_indices] > 0.5, axis=0)
             )  # Only show arrows in material regions
 
-            # Get the coordinates and displacement vectors for the valid points
-            x_valid = x_coords.flatten()[material_mask] + 0.5  # Center of element
-            y_valid = y_coords.flatten()[material_mask] + 0.5
-            z_valid = z_coords.flatten()[material_mask] + 0.5
-            node_valid = node_indices[material_mask]
+            # Get the coordinates and displacement vectors at elements center for the valid points
+            x_valid: np.ndarray = x_coords.flatten()[material_mask] + 0.5
+            y_valid: np.ndarray = y_coords.flatten()[material_mask] + 0.5
+            z_valid: np.ndarray = z_coords.flatten()[material_mask] + 0.5
+            node_valid: np.ndarray = node_indices[material_mask]
 
-            ux = self.u[3 * node_valid, 0] * factor
-            uy = -self.u[3 * node_valid + 1, 0] * factor
-            uz = self.u[3 * node_valid + 2, 0] * factor
+            ux: np.ndarray = self.u[3 * node_valid, 0] * factor
+            uy: np.ndarray = -self.u[3 * node_valid + 1, 0] * factor
+            uz: np.ndarray = self.u[3 * node_valid + 2, 0] * factor
 
             ax.quiver(
                 x_valid,
@@ -1037,13 +1056,10 @@ class PlottingMixin:
                 uy,
                 uz,
                 color="red",
-                length=disp_factor / 4,
+                length=disp_factor / 4.0,
                 normalize=True,
             )
         else:
-            step = max(
-                1, int((nelx + nely) / 25)
-            )  # number of elements to skip between 2 arrows
             x_coords, y_coords = np.meshgrid(
                 np.arange(0, nelx, step), np.arange(0, nely, step), indexing="xy"
             )
