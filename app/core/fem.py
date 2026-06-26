@@ -21,6 +21,19 @@ class FEM:
     Supports 2D (Q4) and 3D (H8) continuum elements with multiple load cases,
     SIMP-based material interpolation, and sensitivity filtering.
 
+    The discrete equilibrium equation solved for each load case is:
+
+    .. math::
+
+        \\mathbf{K}(\\boldsymbol{\\rho})\\mathbf{u} = \\mathbf{f}
+
+    with the assembled stiffness matrix:
+
+    .. math::
+
+        \\mathbf{K}(\\boldsymbol{\\rho}) =
+        \\sum_{e=1}^{n_e} E_e(\\rho_e) \\mathbf{K}_e^0
+
     Parameters
     ----------
     Dimensions : Dict
@@ -193,6 +206,15 @@ class FEM:
         """
         Apply geometric constraints (Regions) to the density field.
 
+        .. math::
+
+            \\rho_e =
+            \\begin{cases}
+                \\rho_{\\min}, & e \\in \\Omega_{void} \\\\
+                1, & e \\in \\Omega_{solid} \\\\
+                \\rho_e, & \\text{otherwise}
+            \\end{cases}
+
         Parameters
         ----------
         x : FloatArray
@@ -253,6 +275,21 @@ class FEM:
         """
         Assemble stiffness matrix and solve for displacements.
 
+        The effective stiffness per element follows SIMP interpolation. For
+        several materials, contributions are summed:
+
+        .. math::
+
+            E_e = \\sum_{m=1}^{n_m}
+            \\left(E_{\\min,m} + \\rho_{m,e}^{p}
+            (E_{0,m} - E_{\\min,m})\\right)
+
+        The finite element system is then solved on the free DOFs:
+
+        .. math::
+
+            \\mathbf{K}_{ff}\\mathbf{u}_f = \\mathbf{f}_f
+
         Parameters
         ----------
         xPhys : FloatArray
@@ -289,10 +326,31 @@ class FEM:
 
     def compute_ce(self, ui: FloatArray, uo: FloatArray) -> FloatArray:
         """
-        Compute element-wise compliance contribution ce = u^T * KE * u.
+        Compute element-wise energy terms used by the objective sensitivities.
 
-        For rigid mechanisms: ce = sum_i u_i^T * KE * u_i
-        For compliant mechanisms: ce = sum_i sum_o u_in^T * KE * u_out
+        For rigid structures:
+
+        .. math::
+
+            c_e =
+            \\sum_{i=1}^{n_i}
+            (\\mathbf{u}_{e,i}^{in})^T
+            \\mathbf{K}_e^0
+            \\mathbf{u}_{e,i}^{in}
+
+        For compliant mechanisms:
+
+        .. math::
+
+            c_e =
+            \\sum_{i=1}^{n_i}\\sum_{o=1}^{n_o}
+            (\\mathbf{u}_{e,i}^{in})^T
+            \\mathbf{K}_e^0
+            \\mathbf{u}_{e,o}^{out}
+
+        In both expressions :math:`\\mathbf{K}_e^0` is the normalized element
+        stiffness matrix. The SIMP stiffness factor is applied later when the
+        objective or sensitivity is assembled.
 
         Parameters
         ----------
@@ -328,6 +386,22 @@ class FEM:
         """
         Calculate sensitivity derivatives for optimization.
 
+        For compliance minimization with SIMP interpolation, the density
+        derivative has the standard form:
+
+        .. math::
+
+            \\frac{\\partial C}{\\partial \\rho_e}
+            = -p\\rho_e^{p-1}(E_0 - E_{\\min})c_e
+
+        The implemented sign is reversed for the compliant-mechanism objective,
+        where output motion is maximized rather than compliance minimized. The
+        volume derivative is:
+
+        .. math::
+
+            \\frac{\\partial V}{\\partial \\rho_e} = 1
+
         Parameters
         ----------
         xPhys : FloatArray
@@ -361,8 +435,19 @@ class FEM:
         """
         Compute objective function value.
 
-        For rigid mechanisms: total compliance
-        For compliant mechanisms: sum of output displacements
+        Rigid designs minimize compliance:
+
+        .. math::
+
+            C(\\boldsymbol{\\rho}) =
+            \\sum_{e=1}^{n_e} E_e(\\rho_e)c_e
+
+        Compliant mechanisms use an output-displacement objective:
+
+        .. math::
+
+            J(\\boldsymbol{\\rho}) =
+            \\frac{1}{n_o}\\sum_{i=1}^{n_o}|u_{o,i}|
 
         Parameters
         ----------
@@ -381,7 +466,9 @@ class FEM:
                 E_eff += xPhys[i] ** self.penal * (E_i - self.E_min[i])
             ce_total = self.compute_ce(ui, uo)
             return float((E_eff * ce_total).sum())
-
+        r"""
+        E(\rho) = E_{min} + \rho^p (E_0 - E_{min})
+        """
         # Compliant Mechanism: maximize average output displacement
         return float(
             np.mean([abs(uo[dof, idx]) for idx, dof in enumerate(self.do_indices)])
@@ -479,6 +566,10 @@ class FEM:
         """
         Add artificial spring stiffness at force locations.
 
+        .. math::
+
+            K_{ii} \\leftarrow K_{ii} + k_s
+
         Parameters
         ----------
         K : csc_matrix
@@ -504,6 +595,13 @@ class FEM:
     ) -> None:
         """
         Solve the linear system Ku = F using direct or iterative methods.
+
+        Boundary conditions reduce the full system to free DOFs:
+
+        .. math::
+
+            \\mathbf{K}_{ff}\\mathbf{U}_f = \\mathbf{F}_f,
+            \\qquad \\mathbf{U}_c = \\mathbf{0}
 
         Parameters
         ----------
@@ -562,6 +660,20 @@ class FEM:
         """
         Apply sensitivity or density filtering to sensitivities.
 
+        Sensitivity filtering uses:
+
+        .. math::
+
+            \\widehat{\\frac{\\partial C}{\\partial x_i}} =
+            \\frac{1}{\\max(\\gamma, x_i)\\sum_j H_{ij}}
+            \\sum_j H_{ij}x_j\\frac{\\partial C}{\\partial x_j}
+
+        Density filtering applies the normalized filter directly:
+
+        .. math::
+
+            \\widehat{x}_i = \\frac{\\sum_j H_{ij}x_j}{\\sum_j H_{ij}}
+
         Parameters
         ----------
         x : FloatArray
@@ -590,6 +702,11 @@ class FEM:
         """
         Calculate physical density from design variables using filter.
 
+        .. math::
+
+            \\rho_i =
+            \\frac{\\sum_j H_{ij}x_j}{\\sum_j H_{ij}}
+
         Parameters
         ----------
         x : FloatArray
@@ -607,6 +724,11 @@ class FEM:
     def _get_lk_stiffness(self) -> FloatArray:
         """
         Compute the element stiffness matrix for Q4 (2D) or H8 (3D) elements.
+
+        .. math::
+
+            \\mathbf{K}_e^0 =
+            \\int_{\\Omega_e} \\mathbf{B}^T\\mathbf{D}\\mathbf{B}\\,d\\Omega
 
         Returns
         -------
@@ -807,6 +929,11 @@ class FEM:
     def _build_filter(self) -> tuple[csc_matrix, FloatArray]:
         """
         Build the sensitivity/density filter matrix.
+
+        .. math::
+
+            H_{ij} = \\max(0, r_{\\min} - \\lVert \\mathbf{x}_i -
+            \\mathbf{x}_j \\rVert)
 
         Returns
         -------

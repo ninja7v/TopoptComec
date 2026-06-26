@@ -23,6 +23,19 @@ def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     """
     Rescale densities so their mean equals volfrac while keeping values in [0,1].
 
+    The routine searches for a scalar :math:`\\alpha` in a smooth perturbation:
+
+    .. math::
+
+        \\rho_e(\\alpha) =
+        d_e + \\alpha(-4d_e^2 + 4d_e)
+
+    so that:
+
+    .. math::
+
+        \\frac{1}{n_e}\\sum_e \\rho_e(\\alpha) = V^*
+
     Parameters
     ----------
     d : FloatArray
@@ -72,6 +85,23 @@ def initialize_material(
 ) -> FloatArray:
     """
     Initialize a single-material density field according to a chosen strategy.
+
+    Uniform initialization starts from:
+
+    .. math::
+
+        \\rho_e = V^*
+
+    Distance initialization maps element-center distance to active supports or
+    loads into a density seed:
+
+    .. math::
+
+        \\rho_e^{raw} =
+        \\frac{d_{max} - \\min_i \\lVert \\mathbf{x}_e -
+        \\mathbf{x}_i \\rVert}{d_{max}}
+
+    and then rescales it to satisfy the requested volume fraction.
 
     Parameters
     ----------
@@ -172,6 +202,18 @@ def initialize_materials(
     current_xPhys: FloatArray | None = None,
 ) -> FloatArray | None:
     """Initialize multi-material density fields.
+
+    Per-material target fractions are derived from the total volume fraction:
+
+    .. math::
+
+        V_m^* = V^*\\frac{p_m}{100}
+
+    The initialized field is normalized toward a partition of material volume:
+
+    .. math::
+
+        \\sum_{m=1}^{n_m}\\rho_{m,e} \\approx V^*
 
     Args:
         init_type: Initialization strategy (0=Uniform, 1=Distance, 2=Random, 3=Current).
