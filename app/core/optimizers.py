@@ -27,6 +27,24 @@ def _oc(
     """
     Optimality Criterion (OC) update scheme.
 
+    The update approximates the KKT stationarity condition through a bisection
+    search on the Lagrange multiplier:
+
+    .. math::
+
+        x_e^{new} =
+        \\operatorname{clip}_{[x_e-m, x_e+m]}
+        \\left(
+            x_e\\left(-\\frac{\\partial C / \\partial x_e}
+            {\\lambda\\,\\partial V / \\partial x_e}\\right)^\\eta
+        \\right)
+
+    followed by the density bounds:
+
+    .. math::
+
+        \\rho_{\\min} \\leq x_e^{new} \\leq 1
+
     Args:
         nel: Total number of elements.
         x: Current design variables (densities).
@@ -78,6 +96,15 @@ def optimize(
 ) -> tuple[FloatArray, FloatArray]:
     """
     Topology optimization
+
+    The single-material loop alternates finite element analysis, sensitivity
+    analysis, filtering, and OC updates for:
+
+    .. math::
+
+        \\min_{\\boldsymbol{\\rho}} C(\\boldsymbol{\\rho})
+        \\quad \\text{s.t.} \\quad
+        \\bar{\\rho} = \\frac{1}{n_e}\\sum_e \\rho_e \\leq V^*
 
     Args:
         All parameters split per section.
@@ -235,6 +262,19 @@ def optimize_multimaterial(
     Uses per-material density fields. Each material is updated via OC
     with its own volume constraint, and then projected to ensure the
     sum of densities does not exceed 1 in any element.
+
+    Multi-material densities satisfy a local partition constraint:
+
+    .. math::
+
+        \\sum_{m=1}^{n_m}\\rho_{m,e} \\leq 1,
+        \\qquad 0 \\leq \\rho_{m,e} \\leq 1
+
+    The effective stiffness is the additive SIMP interpolation:
+
+    .. math::
+
+        E_e = \\sum_{m=1}^{n_m}\\rho_{m,e}^{p}E_{0,m}
 
     Args:
         all parameters splited per section.

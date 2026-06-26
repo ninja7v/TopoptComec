@@ -89,6 +89,12 @@ def _thresholded(xPhys: FloatArray) -> bool:
     """
     Determine whether the density field is mostly near binary values.
 
+    .. math::
+
+        g = \\frac{1}{n_e}\\sum_e \\min(\\rho_e, 1 - \\rho_e)
+
+    Values near zero indicate a near-discrete topology.
+
     Parameters
     ----------
     xPhys : FloatArray
@@ -113,6 +119,21 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     ratio. For rigid mechanisms (no output forces) it checks that input
     displacements remain acceptably small. The thresholds are heuristic and
     chosen to provide a quick indicator.
+
+    For compliant mechanisms, this compares total input travel to useful output
+    travel:
+
+    .. math::
+
+        \\eta_u = \\frac{\\sum_i |u_{in,i}|}
+        {\\max(\\sum_o u_{out,o}^{+}, \\epsilon)}
+
+    For rigid structures, input compliance is approximated by normalized input
+    displacement:
+
+    .. math::
+
+        \\eta_r = \\sum_i \\frac{|u_{in,i}|}{\\max(|f_i|, \\epsilon)}
 
     Parameters
     ----------

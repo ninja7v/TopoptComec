@@ -21,6 +21,12 @@ def single_linear_displacement(
     """
     Computes the deformed mesh grid for a single-frame plot.
 
+    .. math::
+
+        \\mathbf{x}'_i = \\mathbf{x}_i + s\\mathbf{u}_i
+
+    where :math:`s` is `disp_factor`.
+
     Parameters
     ----------
     u : FloatArray
@@ -101,6 +107,14 @@ def _embed_material(
     """
     Embed initial density into the expanded domain.
 
+    .. math::
+
+        \\rho^{large}_{m,e} =
+        \\begin{cases}
+            \\rho_{m,e}, & e \\in \\Omega_{original} \\\\
+            0, & e \\in \\Omega_{padding}
+        \\end{cases}
+
     Parameters
     ----------
     xPhys_initial : FloatArray
@@ -149,6 +163,14 @@ def _reposition_forces(
 ) -> None:
     """
     Move force application points following the full nodal displacement.
+
+    .. math::
+
+        \\mathbf{x}_{f}^{k+1} =
+        \\Pi_{\\Omega}\\left(\\mathbf{x}_{f}^{k} +
+        \\operatorname{round}(\\Delta s\\,\\mathbf{u}_f^k)\\right)
+
+    where :math:`\\Pi_{\\Omega}` clips the point to the simulation domain.
 
     Parameters
     ----------
@@ -215,6 +237,20 @@ def _warp_density(
     """
     Interpolate density onto the warped grid and renormalize.
 
+    Densities are interpolated from displaced element centers and sharpened
+    with a smooth Heaviside-like sigmoid:
+
+    .. math::
+
+        \\tilde{\\rho}_e =
+        \\frac{a}{1 + \\exp(-k(\\rho_e - 0.5))} + c
+
+    A volume correction then enforces:
+
+    .. math::
+
+        \\frac{1}{n_e}\\sum_e \\tilde{\\rho}_{m,e} = V_m^*
+
     Parameters
     ----------
     xPhys : FloatArray
@@ -270,6 +306,10 @@ def _crop_density(
     """
     Crop the expanded density field back to the original domain size.
 
+    .. math::
+
+        \\rho = \\rho^{large}\\rvert_{\\Omega_{original}}
+
     Parameters
     ----------
     xPhys : FloatArray
@@ -311,6 +351,18 @@ def run_iterative_displacement(
 ) -> FloatArray:
     """
     Performs iterative FE analysis to simulate displacement.
+
+    Each iteration solves the linear state equation, moves element centers by
+    average nodal displacement, and transports density:
+
+    .. math::
+
+        \\mathbf{x}_e^{k+1} =
+        \\mathbf{x}_e^k + \\Delta s\\,
+        \\frac{1}{n_n}\\sum_{i \\in e}\\mathbf{u}_i^k
+
+    The density is then interpolated back onto the Eulerian grid and clipped to
+    preserve admissible topology variables.
 
     Parameters
     ----------
