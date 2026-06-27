@@ -13,6 +13,8 @@ __pycache__/
 # Test outputs
 /tests/test_output*
 /tests/*/*.npz
+!/tests/references/
+!/tests/references/*.npz
 .coverage
 
 # Build (when an executable is created)

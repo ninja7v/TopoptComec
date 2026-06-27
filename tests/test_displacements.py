@@ -3,12 +3,19 @@
 # Tests for the displacements.
 
 import json
+import copy
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from app.core import displacements
+
+
+REFERENCES_DIR = Path(__file__).parent / "references"
+REFERENCE_RTOL = 1e-6
+REFERENCE_ATOL = 1e-6
 
 
 # Helper function to load the presets file for the test
@@ -27,15 +34,15 @@ def _load_presets():
 def test_displacement_with_presets(preset_name: str, preset_params: dict):
     """Unit Test: Runs the 2D/3D optimizer with a given preset."""
     # Prepare the parameters for the optimizer function
-    disp_params = preset_params.copy()
-    nelx, nely, nelz = disp_params["Dimensions"]["nelxyz"]
+    params = copy.deepcopy(preset_params)
+    nelx, nely, nelz = params["Dimensions"]["nelxyz"]
     is_3d = nelz > 0
     # Remove all keys that are not part of the optimizer's function signature
     keys_to_remove = ["filter_type", "filter_radius_min", "max_change", "n_it"]
     if not is_3d:
         keys_to_remove = keys_to_remove + ["rz", "fz", "sz"]
     for key in keys_to_remove:
-        disp_params.pop(key, None)
+        params.pop(key, None)
 
     # Generate a mock result and displacement vector
     nel = nelx * nely * (nelz if is_3d else 1)
@@ -44,13 +51,11 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         1 / preset_params["Dimensions"]["volfrac"] - 1
     )  # f(x) = (x/volfrac)^p -> integral(f(x)) from 0 to nel = volfrac * nel
     x = np.linspace(0, 1, nel)
+    # Don't use np.random.rand() here to ensure reproducibility across test runs
     densities = x**p
-    np.random.seed(42)
-    np.random.shuffle(densities)
-    result = densities
-    u_vec = np.random.rand(
-        ndof, sum(1 for fdir in disp_params["Forces"]["fidir"] if fdir != "-")
-    )
+    result = densities[::-1]
+    n_forces = sum(1 for fdir in params["Forces"]["fidir"] if fdir != "-")
+    u_vec = np.linspace(0.0, 1.0, ndof * n_forces, dtype=float).reshape(ndof, n_forces)
 
     # Check if not empty
     assert result is not None, "Optimizer returned None"
@@ -62,15 +67,17 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         assert not (X is None or Y is None or Z is None), (
             "Displacement function returned None arrays"
         )
+        linear_arrays = (X, Y, Z)
     else:
         X, Y = displacements.single_linear_displacement(u_vec, nelx, nely, nelz, 1.0)
         assert not (X is None or Y is None), (
             "Displacement function returned None arrays"
         )
+        linear_arrays = (X, Y)
 
     # Test iterative displacement function
-    disp_params["Displacement"]["disp_iterations"] = 2
-    for frame in displacements.run_iterative_displacement(disp_params, result):
+    params["Displacement"]["disp_iterations"] = 2
+    for frame in displacements.run_iterative_displacement(params, result):
         last_result_displaced = frame
     assert last_result_displaced is not None, (
         "Iterative displacement function returned None"
@@ -87,9 +94,34 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         f"Final volume ({last_result_displaced.mean():.3f}) is far to target ({preset_params['Dimensions']['volfrac']:.3f})"
     )
 
-    disp_params["Displacement"]["disp_factor"] = 0.0
-    for frame in displacements.run_iterative_displacement(disp_params, result):
-        last_result_displaced = frame
-    assert np.array_equal(last_result_displaced, result), (
+    params["Displacement"]["disp_factor"] = 0.0
+    for frame in displacements.run_iterative_displacement(params, result):
+        zero_factor_result_displaced = frame
+    assert np.array_equal(zero_factor_result_displaced, result), (
         "Iterative displacement with factor 0 should return the same result"
     )
+    # Compare with reference data if not random initialization
+    # Note: We skip this check in CI environments because it failes on GitHub Actions
+    # (maybe due to difference in library versions).
+    if params["Materials"]["init_type"] != 2 and os.getenv("CI") == "false":
+        reference_path = (
+            REFERENCES_DIR / f"test_displacement_with_presets_{preset_name}.npz"
+        )
+        if reference_path.exists():
+            with np.load(reference_path) as reference:
+                for index, actual in enumerate(linear_arrays):
+                    np.testing.assert_array_equal(actual, reference[f"linear_{index}"])
+                np.testing.assert_allclose(
+                    last_result_displaced,
+                    reference["last_result_displaced"],
+                    rtol=REFERENCE_RTOL,
+                    atol=REFERENCE_ATOL,
+                    err_msg=f"Displaced density mismatch for preset {preset_name}",
+                )
+                np.testing.assert_allclose(
+                    zero_factor_result_displaced,
+                    reference["zero_factor_result_displaced"],
+                    rtol=REFERENCE_RTOL,
+                    atol=REFERENCE_ATOL,
+                    err_msg=f"Zero-factor displacement mismatch for preset {preset_name}",
+                )
