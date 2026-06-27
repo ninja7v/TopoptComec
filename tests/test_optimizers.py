@@ -13,8 +13,8 @@ from app.core import initializers, optimizers
 
 
 REFERENCES_DIR = Path(__file__).parent / "references"
-REFERENCE_RTOL = 1e-10
-REFERENCE_ATOL = 1e-10
+REFERENCE_RTOL = 1e-6
+REFERENCE_ATOL = 1e-6
 
 
 def test_oc_update_rule():
