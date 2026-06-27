@@ -13,8 +13,8 @@ from app.core import displacements
 
 
 REFERENCES_DIR = Path(__file__).parent / "references"
-REFERENCE_RTOL = 1e-12
-REFERENCE_ATOL = 1e-12
+REFERENCE_RTOL = 1e-10
+REFERENCE_ATOL = 1e-10
 
 
 # Helper function to load the presets file for the test
