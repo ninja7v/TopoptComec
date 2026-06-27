@@ -244,8 +244,14 @@ def save_as_stl(
 
         # Add 1-voxel padding to avoid border loss in marching cubes
         field = np.pad(field, pad_width=1, mode="constant", constant_values=0)
-        # Run marching cubes
-        vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
+        # Run marching cubes; mcubes can emit a NumPy 2.5 deprecation warning
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=DeprecationWarning,
+                message="Setting the shape on a NumPy array has been deprecated in NumPy 2.5.*",
+            )
+            vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
         # Build STL mesh
         stl_mesh = mesh.Mesh(np.zeros(triangles.shape[0], dtype=mesh.Mesh.dtype))
         stl_mesh.vectors = vertices[triangles]
@@ -290,7 +296,13 @@ def save_as_3mf(
 
         # Add 1-voxel padding to avoid border loss in marching cubes
         field = np.pad(field, pad_width=1, mode="constant", constant_values=0)
-        vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=DeprecationWarning,
+                message="Setting the shape on a NumPy array has been deprecated in NumPy 2.5.*",
+            )
+            vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
 
         wrapper = lib3mf.get_wrapper()
         model = wrapper.CreateModel()
