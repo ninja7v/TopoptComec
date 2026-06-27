@@ -1,5 +1,5 @@
 pyside6
-numpy==2.5.0
+numpy==2.2.6
 scipy==1.18.0
 matplotlib
 vtk
