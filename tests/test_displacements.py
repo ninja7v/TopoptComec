@@ -51,12 +51,9 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
     )  # f(x) = (x/volfrac)^p -> integral(f(x)) from 0 to nel = volfrac * nel
     x = np.linspace(0, 1, nel)
     densities = x**p
-    np.random.seed(42)
-    np.random.shuffle(densities)
-    result = densities
-    u_vec = np.random.rand(
-        ndof, sum(1 for fdir in params["Forces"]["fidir"] if fdir != "-")
-    )
+    result = densities[::-1]
+    n_forces = sum(1 for fdir in params["Forces"]["fidir"] if fdir != "-")
+    u_vec = np.linspace(0.0, 1.0, ndof * n_forces, dtype=float).reshape(ndof, n_forces)
 
     # Check if not empty
     assert result is not None, "Optimizer returned None"
