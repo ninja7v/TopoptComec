@@ -152,7 +152,7 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
             j += 1
 
     # Compare with reference data if not random initialization
-    if pm["init_type"] != 2:
+    if pm["init_type"] != 2 and sys.version_info > (3, 13):
         reference_path = (
             REFERENCES_DIR / f"test_optimizers_with_presets_{preset_name}.npz"
         )

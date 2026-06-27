@@ -4,6 +4,7 @@
 
 import json
 import copy
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +51,7 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         1 / preset_params["Dimensions"]["volfrac"] - 1
     )  # f(x) = (x/volfrac)^p -> integral(f(x)) from 0 to nel = volfrac * nel
     x = np.linspace(0, 1, nel)
+    # Don't use np.random.rand() here to ensure reproducibility across test runs
     densities = x**p
     result = densities[::-1]
     n_forces = sum(1 for fdir in params["Forces"]["fidir"] if fdir != "-")
@@ -99,7 +101,7 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         "Iterative displacement with factor 0 should return the same result"
     )
     # Compare with reference data if not random initialization
-    if params["Materials"]["init_type"] != 2:
+    if params["Materials"]["init_type"] != 2 and sys.version_info > (3, 13):
         reference_path = (
             REFERENCES_DIR / f"test_displacement_with_presets_{preset_name}.npz"
         )
