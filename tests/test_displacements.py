@@ -3,12 +3,18 @@
 # Tests for the displacements.
 
 import json
+import copy
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from app.core import displacements
+
+
+REFERENCES_DIR = Path(__file__).parent / "references"
+REFERENCE_RTOL = 1e-12
+REFERENCE_ATOL = 1e-12
 
 
 # Helper function to load the presets file for the test
@@ -27,7 +33,7 @@ def _load_presets():
 def test_displacement_with_presets(preset_name: str, preset_params: dict):
     """Unit Test: Runs the 2D/3D optimizer with a given preset."""
     # Prepare the parameters for the optimizer function
-    disp_params = preset_params.copy()
+    disp_params = copy.deepcopy(preset_params)
     nelx, nely, nelz = disp_params["Dimensions"]["nelxyz"]
     is_3d = nelz > 0
     # Remove all keys that are not part of the optimizer's function signature
@@ -62,11 +68,13 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         assert not (X is None or Y is None or Z is None), (
             "Displacement function returned None arrays"
         )
+        linear_arrays = (X, Y, Z)
     else:
         X, Y = displacements.single_linear_displacement(u_vec, nelx, nely, nelz, 1.0)
         assert not (X is None or Y is None), (
             "Displacement function returned None arrays"
         )
+        linear_arrays = (X, Y)
 
     # Test iterative displacement function
     disp_params["Displacement"]["disp_iterations"] = 2
@@ -89,7 +97,29 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
 
     disp_params["Displacement"]["disp_factor"] = 0.0
     for frame in displacements.run_iterative_displacement(disp_params, result):
-        last_result_displaced = frame
-    assert np.array_equal(last_result_displaced, result), (
+        zero_factor_result_displaced = frame
+    assert np.array_equal(zero_factor_result_displaced, result), (
         "Iterative displacement with factor 0 should return the same result"
     )
+
+    reference_path = (
+        REFERENCES_DIR / f"test_displacement_with_presets_{preset_name}.npz"
+    )
+    assert reference_path.exists(), f"Missing reference file: {reference_path}"
+    with np.load(reference_path) as reference:
+        for index, actual in enumerate(linear_arrays):
+            np.testing.assert_array_equal(actual, reference[f"linear_{index}"])
+        np.testing.assert_allclose(
+            last_result_displaced,
+            reference["last_result_displaced"],
+            rtol=REFERENCE_RTOL,
+            atol=REFERENCE_ATOL,
+            err_msg=f"Displaced density mismatch for preset {preset_name}",
+        )
+        np.testing.assert_allclose(
+            zero_factor_result_displaced,
+            reference["zero_factor_result_displaced"],
+            rtol=REFERENCE_RTOL,
+            atol=REFERENCE_ATOL,
+            err_msg=f"Zero-factor displacement mismatch for preset {preset_name}",
+        )

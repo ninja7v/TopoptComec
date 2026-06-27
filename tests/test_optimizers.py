@@ -3,12 +3,18 @@
 # Tests for the optimizers.
 
 import json
+import copy
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from app.core import initializers, optimizers
+
+
+REFERENCES_DIR = Path(__file__).parent / "references"
+REFERENCE_RTOL = 1e-10
+REFERENCE_ATOL = 1e-10
 
 
 def test_oc_update_rule():
@@ -63,7 +69,7 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
     is_multi = _is_multimaterial(preset_params)
 
     # Prepare the parameters for the optimizer function
-    params = preset_params.copy()
+    params = copy.deepcopy(preset_params)
     if "Displacement" in params:
         params.pop("Displacement", None)
     if "Materials" in params:
@@ -149,6 +155,24 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
             assert u_vec[idx, j] * direction_sign > 0
             j += 1
 
+    reference_path = REFERENCES_DIR / f"test_optimizers_with_presets_{preset_name}.npz"
+    assert reference_path.exists(), f"Missing reference file: {reference_path}"
+    with np.load(reference_path) as reference:
+        np.testing.assert_allclose(
+            result,
+            reference["result"],
+            rtol=REFERENCE_RTOL,
+            atol=REFERENCE_ATOL,
+            err_msg=f"Result mismatch for preset {preset_name}",
+        )
+        np.testing.assert_allclose(
+            u_vec,
+            reference["u_vec"],
+            rtol=REFERENCE_RTOL,
+            atol=REFERENCE_ATOL,
+            err_msg=f"Displacement vector mismatch for preset {preset_name}",
+        )
+
 
 def test_initialize_materials():
     """Unit Test: Checks that initialize_materials returns correct shape and constraints."""
@@ -186,6 +210,7 @@ def test_initialize_materials():
         )
 
 
+# Specific test not covered by presets
 def test_multimaterial_bridge_2d():
     """Unit Test: Runs a small 2-material bridge optimization."""
     params = {
