@@ -153,7 +153,9 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
 
     # Compare with reference data if not random initialization
     if pm["init_type"] != 2:
-        reference_path = REFERENCES_DIR / f"test_optimizers_with_presets_{preset_name}.npz"
+        reference_path = (
+            REFERENCES_DIR / f"test_optimizers_with_presets_{preset_name}.npz"
+        )
         if reference_path.exists():
             with np.load(reference_path) as reference:
                 np.testing.assert_allclose(
