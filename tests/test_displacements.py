@@ -4,7 +4,6 @@
 
 import json
 import copy
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -101,7 +100,7 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
         "Iterative displacement with factor 0 should return the same result"
     )
     # Compare with reference data if not random initialization
-    if params["Materials"]["init_type"] != 2 and sys.version_info > (3, 13):
+    if params["Materials"]["init_type"] != 2:
         reference_path = (
             REFERENCES_DIR / f"test_displacement_with_presets_{preset_name}.npz"
         )

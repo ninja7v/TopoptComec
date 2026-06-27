@@ -1,6 +1,6 @@
 pyside6
-numpy
-scipy
+numpy==2.5.0
+scipy==1.18.0
 matplotlib
 vtk
 PyMCubes
