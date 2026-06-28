@@ -59,6 +59,8 @@ CLI:
 ```bash
 topoptcomec -p ForceInverter_2Sup_2D --preview
 ```
+<img width="500" alt="image" src="https://github.com/user-attachments/assets/da6c85da-66ff-459b-b7fd-63d62f638839" />
+
 ### Create
 Tweak the parameters or choose a preset and hit "Create"!
 
