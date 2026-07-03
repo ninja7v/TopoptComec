@@ -14,7 +14,9 @@ import numpy as np
 import numpy.typing as npt
 
 from app.core import analyzers, optimizers
-from app.ui import exporters
+from app import exporters
+from app.parameter_check import ParameterCheck
+from app.time_estimation import TimeEstimation
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -53,15 +55,24 @@ def _load_or_run_optimization(
     """
     cache_file: Path = Path(base_dir) / preset_name / f"{preset_name}_density_field.npz"
 
+    last_xPhys: FloatArray | None = None
     if cache_file.exists():
         if verbose:
             print(f"[{preset_name}] Loading cached density field...")
         try:
             data: np.lib.npyio.NpzFile = np.load(cache_file)
-            return data["xPhys"], data["u"], None
+            last_xPhys = data["xPhys"]
+            # Reuse cached result directly unless the user explicitly requested
+            # initialization from the last result (init_type == 3).
+            if params.get("Materials", {}).get("init_type") != 3:
+                return data["xPhys"], data["u"], None
         except Exception as e:
             if verbose:
                 print(f"[{preset_name}] Failed to load cache: {e}")
+
+    error: str | None = ParameterCheck(last_xPhys).validate(params)
+    if error:
+        return None, None, error
 
     if save_frames:
 
@@ -77,9 +88,7 @@ def _load_or_run_optimization(
             )
             return False
 
-        optimizer_params["progress_callback"] = progress_callback(
-            preset_name, base_dir, params
-        )
+        optimizer_params["progress_callback"] = progress_callback
 
     is_multimaterial: bool = (
         len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
@@ -328,6 +337,9 @@ def _run_single_preset(
     xPhys: FloatArray | None
     u: FloatArray | None
     error: str | None
+    if verbose:
+        _, label = TimeEstimation(params).optimization_indicators()
+        print(f"[{preset_name}] Estimated optimization time: {label}")
     xPhys, u, error = _load_or_run_optimization(
         preset_name, params, optimizer_params, base_dir, save_frames, verbose
     )
@@ -352,7 +364,7 @@ def _run_single_preset(
         xPhys = np.where(xPhys > 0.5, 1.0, 0.0)
 
     if preview:
-        from app.cli_preview import render_preview
+        from app.cli.cli_preview import render_preview
 
         print(render_preview(xPhys, params["Dimensions"]["nelxyz"]))
 

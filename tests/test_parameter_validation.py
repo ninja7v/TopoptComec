@@ -4,7 +4,13 @@
 
 import numpy as np
 from unittest.mock import patch
-from app.ui.main_window import MainWindow
+from app.gui.main_window import MainWindow
+from app.parameter_check import ParameterCheck
+
+
+def _validate(window: MainWindow, params: dict) -> str | None:
+    """Helper to validate params using the window's last successful result."""
+    return ParameterCheck(window.last_successful_xPhys).validate(params)
 
 
 # --- validate_parameters tests ---
@@ -15,7 +21,7 @@ def test_validate_invalid_dimensions(qt_app):
     window: MainWindow = MainWindow()
     params: dict = window._gather_parameters()
     params["Dimensions"]["nelxyz"] = [0, 10, 0]
-    err = window._validate_parameters(params)
+    err = _validate(window, params)
     assert err is not None
     assert "positive" in err.lower() or "Nx" in err
     window.close()
@@ -26,7 +32,7 @@ def test_validate_negative_nelz(qt_app):
     window: MainWindow = MainWindow()
     params: dict = window._gather_parameters()
     params["Dimensions"]["nelxyz"] = [10, 10, -1]
-    err = window._validate_parameters(params)
+    err = _validate(window, params)
     assert err is not None
     window.close()
 
@@ -37,7 +43,7 @@ def test_validate_no_active_input_forces(qt_app):
     params: dict = window._gather_parameters()
     # Set all input force directions to inactive
     params["Forces"]["fidir"] = ["-"] * len(params["Forces"]["fidir"])
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "input force" in err.lower()
     window.close()
@@ -61,7 +67,7 @@ def test_validate_no_active_output_or_supports(qt_app):
     params["Forces"]["fonorm"] = [0.0]
     # No active supports
     params["Supports"] = {"sdim": ["-"], "sx": [0], "sy": [0], "sz": [0], "sr": [0]}
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "output force" in err.lower() or "support" in err.lower()
     window.close()
@@ -78,7 +84,7 @@ def test_validate_duplicate_input_forces(qt_app):
     params["Forces"]["finorm"] = [0.01, 0.01]
     # Need some valid output/support
     params["Supports"] = {"sdim": ["Y"], "sx": [0], "sy": [0], "sz": [0], "sr": [0]}
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "identical" in err.lower()
     window.close()
@@ -93,7 +99,7 @@ def test_validate_duplicate_output_forces(qt_app):
     params["Forces"]["foy"] = [5, 5]
     params["Forces"]["foz"] = [0, 0]
     params["Forces"]["fonorm"] = [0.01, 0.01]
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "identical" in err.lower()
     window.close()
@@ -110,7 +116,7 @@ def test_validate_duplicate_supports(qt_app):
         "sz": [0, 0],
         "sr": [0, 0],
     }
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "identical" in err.lower()
     window.close()
@@ -123,7 +129,7 @@ def test_validate_duplicate_materials(qt_app):
     params["Materials"]["E"] = [1.0, 1.0]
     params["Materials"]["nu"] = [0.3, 0.3]
     params["Materials"]["percent"] = [50, 50]
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "identical" in err.lower()
     window.close()
@@ -136,7 +142,7 @@ def test_validate_materials_percent_not_100(qt_app):
     params["Materials"]["E"] = [1.0, 2.0]
     params["Materials"]["nu"] = [0.3, 0.4]
     params["Materials"]["percent"] = [30, 40]  # Sum = 70, not 100
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is not None
     assert "100" in err
     window.close()
@@ -146,7 +152,7 @@ def test_validate_valid_params(qt_app):
     """Test that validate_parameters returns None for valid parameters."""
     window: MainWindow = MainWindow()
     params: dict = window._gather_parameters()
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is None
     window.close()
 
@@ -265,14 +271,14 @@ def test_validate_init_type_from_current_result(qt_app):
 
     # 1. No current result exists
     window.last_successful_xPhys: np.ndarray | None = None
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err == "No current result available to initialize from."
 
     # 2. Result exists but dimensions mismatch
     window.last_successful_xPhys: np.ndarray | None = np.ones(
         17
     )  # Prime number to make sure it won't match
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert "does not match the active grid dimensions" in err
 
     # 3. Valid matching result
@@ -282,6 +288,6 @@ def test_validate_init_type_from_current_result(qt_app):
     nelx, nely, nelz = params["Dimensions"]["nelxyz"]
     nel: int = nelx * nely * (nelz if nelz > 0 else 1)
     window.last_successful_xPhys: np.ndarray | None = np.ones(nel)
-    err: str | None = window._validate_parameters(params)
+    err: str | None = _validate(window, params)
     assert err is None
     window.close()

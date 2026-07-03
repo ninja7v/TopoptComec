@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.ui import exporters
+from app import exporters
 
 
 def test_exporters():

@@ -8,11 +8,13 @@ TopoptComec is a Python topology optimization app with a GUI (`topoptcomec`) and
 - `app/core/optimizers.py`: optimization loops
 - `app/core/displacements.py`: post-run displacement simulation
 - `app/core/analyzers.py`: result checks
-- `app/ui/main_window.py`: GUI flow
-- `app/ui/parameter_manager.py`: parameter gathering and validation
-- `app/ui/widgets.py`: GUI inputs
-- `app/ui/exporters.py`: file export
-- `app/cli.py`: CLI runs
+- `app/gui/main_window.py`: GUI flow
+- `app/gui/parameter_manager.py`: parameter gathering, normalization, and scaling
+- `app/gui/widgets.py`: GUI inputs
+- `app/exporters.py`: file export (shared by GUI and CLI)
+- `app/parameter_check.py`: parameter validation (shared)
+- `app/time_estimation.py`: runtime estimation (shared)
+- `app/cli/cli.py`: CLI runs
 - `presets.json`: preset definitions
 
 ## Rules

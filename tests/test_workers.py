@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from app.ui.workers import OptimizerWorker, DisplacementWorker, AnalysisWorker
+from app.gui.workers import OptimizerWorker, DisplacementWorker, AnalysisWorker
 
 
 def test_optimizer_worker(monkeypatch):
@@ -16,7 +16,7 @@ def test_optimizer_worker(monkeypatch):
         progress_cb(1, 3.14, 0.01, np.array([[42]]))
         return np.array([0.5]), np.array([0.1])
 
-    monkeypatch.setattr("app.ui.workers.optimizers.optimize", dummy_optimize)
+    monkeypatch.setattr("app.gui.workers.optimizers.optimize", dummy_optimize)
 
     worker = OptimizerWorker({"some_param": 1})
 
@@ -50,7 +50,7 @@ def test_displacement_worker(monkeypatch):
                 break
 
     monkeypatch.setattr(
-        "app.ui.workers.displacements.run_iterative_displacement", dummy_generator
+        "app.gui.workers.displacements.run_iterative_displacement", dummy_generator
     )
 
     recorded = {"progress": [], "frames": [], "finished": None, "error": None}
@@ -81,7 +81,7 @@ def test_optimizer_worker_error(monkeypatch):
     def failing_optimize(**kwargs):
         raise RuntimeError("Optimization exploded")
 
-    monkeypatch.setattr("app.ui.workers.optimizers.optimize", failing_optimize)
+    monkeypatch.setattr("app.gui.workers.optimizers.optimize", failing_optimize)
 
     recorded = {"error": None}
     worker = OptimizerWorker({"some_param": 1})
@@ -104,7 +104,7 @@ def test_optimizer_worker_multimaterial(monkeypatch):
         return np.array([0.5]), np.array([0.1])
 
     monkeypatch.setattr(
-        "app.ui.workers.optimizers.optimize_multimaterial", dummy_optimize_multi
+        "app.gui.workers.optimizers.optimize_multimaterial", dummy_optimize_multi
     )
 
     params = {
@@ -143,7 +143,7 @@ def test_displacement_worker_stop(monkeypatch):
             yield f
 
     monkeypatch.setattr(
-        "app.ui.workers.displacements.run_iterative_displacement", dummy_generator
+        "app.gui.workers.displacements.run_iterative_displacement", dummy_generator
     )
 
     recorded = {"frames": [], "finished": None}
@@ -171,7 +171,7 @@ def test_displacement_worker_error(monkeypatch):
         yield  # pragma: no cover
 
     monkeypatch.setattr(
-        "app.ui.workers.displacements.run_iterative_displacement", failing_generator
+        "app.gui.workers.displacements.run_iterative_displacement", failing_generator
     )
 
     recorded = {"error": None}
@@ -196,7 +196,7 @@ def test_analysis_worker(monkeypatch):
             cb(1)
         return True, False, True, False
 
-    monkeypatch.setattr("app.ui.workers.analyzers.analyze", dummy_analyze)
+    monkeypatch.setattr("app.gui.workers.analyzers.analyze", dummy_analyze)
 
     recorded = {"finished": None, "error": None}
     params = {
@@ -239,7 +239,7 @@ def test_analysis_worker_error(monkeypatch):
     def failing_analyze(**kwargs):
         raise RuntimeError("Analysis exploded")
 
-    monkeypatch.setattr("app.ui.workers.analyzers.analyze", failing_analyze)
+    monkeypatch.setattr("app.gui.workers.analyzers.analyze", failing_analyze)
 
     recorded = {"error": None}
     params = {
