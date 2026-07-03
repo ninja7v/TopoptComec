@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (
 from typing import Tuple
 
 # import mcubes
-from app.ui import exporters
+from app import exporters
+from app.parameter_check import ParameterCheck
 
 from .icons import icons
 from .themes import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
@@ -372,7 +373,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 "A worker is already running.",
             )
             return
-        error = self._validate_parameters(self.last_params)
+        error = ParameterCheck(self.last_successful_xPhys).validate(self.last_params)
         if error:
             QMessageBox.critical(self, "Input Error", error)
             return

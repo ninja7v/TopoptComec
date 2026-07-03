@@ -10,14 +10,14 @@ from PySide6.QtWidgets import QApplication, QStyle
 from PySide6.QtSvg import (  # noqa: F401
     QSvgRenderer,
 )  # make sure SVG support is available
-from app.ui.resource_path_finder import resource_path
+from app.gui.resource_path_finder import resource_path
 
 
 def main() -> None:
     """Initializes and runs the Qt application."""
     if len(sys.argv) > 1:
         # CLI mode
-        from app.cli import run_cli
+        from app.cli.cli import run_cli
 
         run_cli()
     else:
@@ -39,7 +39,7 @@ def main() -> None:
             app.setWindowIcon(fallback_icon)
 
         # Now that the app exists, import the main window
-        from app.ui.main_window import MainWindow
+        from app.gui.main_window import MainWindow
 
         window: MainWindow = MainWindow()
         window.show()

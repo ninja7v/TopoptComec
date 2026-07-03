@@ -8,8 +8,8 @@ from unittest.mock import patch
 import pytest
 import numpy as np
 from pathlib import Path
-from app.cli import run_cli
-from app.cli_preview import (
+from app.cli.cli import run_cli
+from app.cli.cli_preview import (
     _density_to_2d,
     _downscale,
     _render_lines_ascii,
@@ -34,10 +34,10 @@ def test_cli_help():
         assert cm.value.code == 0
 
 
-@patch("app.cli.np.savez_compressed")
-@patch("app.cli.Path.mkdir")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.savez_compressed")
+@patch("app.cli.cli.Path.mkdir")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -82,10 +82,10 @@ def test_run_cli_valid_png(
     assert str(args[2]).endswith(f"{preset_name}.png")
 
 
-@patch("app.cli.np.savez_compressed")
-@patch("app.cli.Path.mkdir")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.savez_compressed")
+@patch("app.cli.cli.Path.mkdir")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -118,10 +118,10 @@ def test_run_cli_all_formats(
     mock_exporters.save_as_3mf.assert_called_once()
 
 
-@patch("app.cli.np.savez_compressed")
-@patch("app.cli.Path.mkdir")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.savez_compressed")
+@patch("app.cli.cli.Path.mkdir")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -198,7 +198,7 @@ def test_run_cli_json_decode_error(mock_exists, mock_open):
             assert cm.value.code == 1
 
 
-@patch("app.cli.optimizers.optimize")
+@patch("app.cli.cli.optimizers.optimize")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -217,10 +217,10 @@ def test_run_cli_optimization_failure(
         assert cm.value.code == 1
 
 
-@patch("app.cli.np.savez_compressed")
-@patch("app.cli.Path.mkdir")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.savez_compressed")
+@patch("app.cli.cli.Path.mkdir")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -270,11 +270,11 @@ class MockExecutor:
         return MockFuture(fn(*args, **kwargs))
 
 
-@patch("app.cli.np.savez_compressed")
-@patch("app.cli.Path.mkdir")
-@patch("app.cli.ProcessPoolExecutor", MockExecutor)
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.savez_compressed")
+@patch("app.cli.cli.Path.mkdir")
+@patch("app.cli.cli.ProcessPoolExecutor", MockExecutor)
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -325,12 +325,12 @@ def test_run_cli_multiple_presets_one_invalid(
         assert cm.value.code == 1
 
 
-@patch("app.cli.np.load")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.load")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.Path.exists")
+@patch("app.cli.cli.Path.exists")
 def test_run_cli_cache_hit(
     mock_exists,
     mock_json_load,
@@ -358,12 +358,12 @@ def test_run_cli_cache_hit(
     mock_exporters.save_as_png.assert_called_once()
 
 
-@patch("app.cli.np.savez_compressed")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.savez_compressed")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.Path.exists")
+@patch("app.cli.cli.Path.exists")
 def test_run_cli_saving_cache(
     mock_exists,
     mock_json_load,
@@ -391,13 +391,13 @@ def test_run_cli_saving_cache(
     mock_exporters.save_as_png.assert_called_once()
 
 
-@patch("app.cli.analyzers.analyze")
-@patch("app.cli.np.load")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.analyzers.analyze")
+@patch("app.cli.cli.np.load")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.Path.exists")
+@patch("app.cli.cli.Path.exists")
 def test_run_cli_analysis_flag(
     mock_exists,
     mock_json_load,
@@ -426,12 +426,12 @@ def test_run_cli_analysis_flag(
 
 
 @patch("app.core.displacements.run_iterative_displacement")
-@patch("app.cli.np.load")
-@patch("app.cli.optimizers.optimize")
-@patch("app.cli.exporters")
+@patch("app.cli.cli.np.load")
+@patch("app.cli.cli.optimizers.optimize")
+@patch("app.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.Path.exists")
+@patch("app.cli.cli.Path.exists")
 def test_run_cli_displacement_flag(
     mock_exists,
     mock_json_load,

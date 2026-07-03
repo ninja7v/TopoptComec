@@ -14,8 +14,11 @@ Quick map of the repository.
 
 ## Source
 
-- `app/cli.py`: CLI execution, preset loading, parallel runs, export dispatch
-- `app/cli_preview.py`: CLI execution, preset loading, parallel runs, export dispatch
+### `app/`
+- `__main__.py`: application entry point (console script target)
+- `exporters.py`: PNG, STL, VTI, 3MF export (shared by GUI and CLI)
+- `parameter_check.py`: `ParameterCheck` class, parameter validation (shared)
+- `time_estimation.py`: `TimeEstimation` class, runtime estimation (shared)
 
 ### `app/core/`
 - `fem.py`: FEM model and solves
@@ -24,13 +27,16 @@ Quick map of the repository.
 - `displacements.py`: displacement simulation
 - `analyzers.py`: result checks
 
-### `app/ui/`
+### `app/cli/`
+- `cli.py`: CLI execution, preset loading, parallel runs, export dispatch
+- `cli_preview.py`: terminal rendering of density fields
+
+### `app/gui/`
 - `main_window.py`: main window and action flow
-- `parameter_manager.py`: parameter gathering and validation
+- `parameter_manager.py`: parameter gathering, normalization, and scaling
 - `widgets.py`: GUI widgets
 - `plotting.py`: plotting and visualization
 - `workers.py`: background workers
-- `exporters.py`: PNG, STL, VTI, 3MF export
 - `themes.py`: stylesheets
 - `icons.py`: icon handling
 - `resource_path_finder.py`: path getter

@@ -4,7 +4,7 @@
 
 import pytest
 import numpy as np
-from app.ui.main_window import MainWindow
+from app.gui.main_window import MainWindow
 from PySide6.QtWidgets import QCheckBox
 from unittest.mock import patch
 
@@ -376,8 +376,8 @@ def test__on_visibility_toggled(qt_app):
     window.close()
 
 
-@patch("app.ui.main_window.np.savez_compressed")
-@patch("app.ui.main_window.os.makedirs")
+@patch("app.gui.main_window.np.savez_compressed")
+@patch("app.gui.main_window.os.makedirs")
 def test_handle_optimization_results(mock_makedirs, mock_savez, qt_app):
     """Test that _handle_optimization_results sets xPhys and enables buttons."""
     import numpy as np
@@ -564,7 +564,7 @@ def test_low_density_validation(qt_app):
 
     # 3. Test handle results with valid density (>= 1%)
     mock_xPhys_valid = np.ones(nel)
-    with patch("app.ui.main_window.np.savez_compressed"):
+    with patch("app.gui.main_window.np.savez_compressed"):
         window._handle_optimization_results((mock_xPhys_valid, mock_u))
 
     assert window.xPhys_valid is True
