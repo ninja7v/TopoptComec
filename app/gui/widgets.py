@@ -436,12 +436,11 @@ class DimensionsWidget(QWidget):
         # Line 3: "Scale:" [Spin]   Scale Button
         scale_layout = QHBoxLayout()
         scale_layout.addWidget(QLabel("Scale:"))
-        scale_layout.addSpacing(15)  # Align with line above
         self.scale = _make_dspin(
             0.5, 5, 1.0, 0.5, "Scale every component by this factor"
         )
         scale_layout.addWidget(self.scale)
-        self.scale_button = QPushButton("Scale")
+        self.scale_button = QPushButton()
         self.scale_button.setIcon(icons._get("scale"))
         self.scale_button.setToolTip("Scale elements")
         scale_layout.addWidget(self.scale_button)

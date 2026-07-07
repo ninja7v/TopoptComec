@@ -142,6 +142,47 @@ class ParameterManagerMixin:
 
     def on_parameter_changed(self) -> None:
         """React when a parameter is changed."""
+        # Scale last_successful_xPhys if option is "From current result" and size mismatches
+        if hasattr(self, "materials_widget") and self.materials_widget is not None:
+            init_type = self.materials_widget.mat_init_type.currentIndex()
+            if (
+                init_type == 3
+                and getattr(self, "last_successful_xPhys", None) is not None
+            ):
+                new_res = tuple(self._gather_parameters()["Dimensions"]["nelxyz"])
+                old_res = None
+                if hasattr(self, "last_params") and "Dimensions" in self.last_params:
+                    old_res = tuple(self.last_params["Dimensions"]["nelxyz"])
+                xphys = self.last_successful_xPhys
+                nel_count = xphys.shape[1] if xphys.ndim == 2 else xphys.size
+                if old_res is None or (
+                    old_res[0] * old_res[1] * (old_res[2] if old_res[2] > 0 else 1)
+                    != nel_count
+                ):
+                    old_res = self._infer_old_res(xphys, new_res)
+
+                if old_res != new_res:
+                    # Adjust 2D/3D mismatch so that nelz is at least 1 if the other is 3D
+                    nelz_old = old_res[2]
+                    nelz_new = new_res[2]
+                    if nelz_old == 0 and nelz_new > 0:
+                        old_res_adjusted = (old_res[0], old_res[1], 1)
+                        new_res_adjusted = new_res
+                    elif nelz_old > 0 and nelz_new == 0:
+                        old_res_adjusted = old_res
+                        new_res_adjusted = (new_res[0], new_res[1], 1)
+                    else:
+                        old_res_adjusted = old_res
+                        new_res_adjusted = new_res
+
+                    from app.core.post_processing import rescale_density_field
+
+                    scaled = rescale_density_field(
+                        self.last_successful_xPhys, old_res_adjusted, new_res_adjusted
+                    )
+                    if scaled is not None:
+                        self.last_successful_xPhys = scaled
+
         # First, check if a valid result from a previous run exists.
         if self.xPhys is not None:
             self.xPhys = None
