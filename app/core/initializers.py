@@ -176,12 +176,18 @@ def initialize_material(
 
         case InitType.CURRENT:
             if current_xPhys is not None:
+                res = None
                 if current_xPhys.ndim == 2:
                     if current_xPhys.shape[1] == nel:
-                        return current_xPhys[0].copy()
+                        res = current_xPhys[0].copy()
 
                 elif current_xPhys.ndim == 1 and current_xPhys.size == nel:
-                    return current_xPhys.copy()
+                    res = current_xPhys.copy()
+
+                if res is not None:
+                    if not np.isclose(np.mean(res), volfrac, atol=1e-4):
+                        res = _rescale_densities(res, volfrac)
+                    return res
 
             return np.full(nel, volfrac, dtype=np.float64)
 
@@ -203,76 +209,112 @@ def initialize_materials(
 ) -> FloatArray | None:
     """Initialize multi-material density fields.
 
-    Per-material target fractions are derived from the total volume fraction:
+    A single shared spatial pattern :math:`p(\\mathbf{x}_e)\\in[0,1]` with
+    :math:`\\bar p = V^*` is built from the requested strategy, then split
+    across materials proportionally to their volume shares:
 
     .. math::
 
-        V_m^* = V^*\\frac{p_m}{100}
+        \\rho_{m,e} = \\frac{p_m}{100}\\,p_e,
+        \\qquad \\sum_m \\frac{p_m}{100} = 1
 
-    The initialized field is normalized toward a partition of material volume:
+    so that per-material targets and the element-wise total budget are met
+    simultaneously:
 
     .. math::
 
-        \\sum_{m=1}^{n_m}\\rho_{m,e} \\approx V^*
+        \\frac{1}{n_e}\\sum_e \\rho_{m,e} = V^*\\frac{p_m}{100} = V_m^*,
+        \\qquad \\sum_m \\rho_{m,e} = p_e \\le 1.
+
+    For ``init_type=3`` (current result), each material row is rescaled
+    independently to its new target fraction :math:`V_m^*`, so a previous
+    field can be reused with a different volume split.
 
     Args:
         init_type: Initialization strategy (0=Uniform, 1=Distance, 2=Random, 3=Current).
         materials_percentage: List of percentage of each material (sum to 100).
-        volfrac: Total target volume fractions.
+        volfrac: Total target volume fraction.
         nelx, nely, nelz: Grid dimensions.
         all_x, all_y, all_z: Active coordinate arrays for distance-based init.
         current_xPhys: Current density field to initialize from if init_type is 3.
 
     Returns:
-        Array of shape (n_mat, nel) with per-material densities.
-        Columns sum to 1 (partition of unity) and each row's mean
-        approximates the corresponding volume fraction.
+        Array of shape (n_mat, nel) with per-material densities. Each row's
+        mean approximates the corresponding volume fraction and per-element
+        column sums stay within [0, 1].
     """
     if sum(materials_percentage) != 100:
         return None
 
     n_mat: int = len(materials_percentage)
-    materials_frac: FloatArray = (
-        volfrac * np.array(materials_percentage, dtype=np.float64) / 100
-    )
-    nel: int = nelx * nely * (nelz if nelz > 0 else 1)
+    shares: FloatArray = np.array(materials_percentage, dtype=np.float64) / 100.0
+    materials_frac: FloatArray = volfrac * shares
+    is_3d: bool = nelz > 0
+    nel: int = nelx * nely * (nelz if is_3d else 1)
+    rho: FloatArray | None = None
+    pattern: FloatArray
 
-    if init_type == 3 and current_xPhys is not None:
-        if current_xPhys.ndim == 2 and current_xPhys.shape == (n_mat, nel):
-            return current_xPhys.copy()
+    match init_type:
+        case InitType.UNIFORM:
+            pattern = np.full(nel, volfrac, dtype=np.float64)
 
-    # Start from the single-material spatial pattern for material 0
-    base: FloatArray = initialize_material(
-        init_type=init_type,
-        volfrac=materials_frac[0],
-        nelx=nelx,
-        nely=nely,
-        nelz=nelz,
-        all_x=all_x,
-        all_y=all_y,
-        all_z=all_z,
-        current_xPhys=current_xPhys,
-    )
+        case InitType.DISTANCE:
+            points: FloatArray = np.column_stack(
+                [all_x, all_y, all_z] if is_3d else [all_x, all_y]
+            )
+            if len(points) == 0:
+                pattern = np.full(nel, volfrac, dtype=np.float64)
+            else:
+                if is_3d:
+                    Z: FloatArray = np.repeat(np.arange(nelz), nelx * nely)
+                    X: FloatArray = np.tile(np.repeat(np.arange(nelx), nely), nelz)
+                    Y: FloatArray = np.tile(np.arange(nely), nelx * nelz)
+                    coords: FloatArray = np.column_stack((X, Y, Z))
+                else:
+                    X = np.repeat(np.arange(nelx), nely)
+                    Y = np.tile(np.arange(nely), nelx)
+                    coords = np.column_stack((X, Y))
 
-    rho: FloatArray = np.zeros((n_mat, nel), dtype=np.float64)
-    rho[0] = base
+                dists: FloatArray = cdist(coords, points, metric="euclidean")
+                min_dist: FloatArray = dists.min(axis=1)
+                distance_max: float = float(
+                    np.sqrt(nelx**2 + nely**2 + (nelz**2 if is_3d else 0))
+                )
+                raw: FloatArray = (distance_max - min_dist) / distance_max
+                pattern = _rescale_densities(d=raw, volfrac=volfrac)
 
-    # Material 1 gets the complement
-    if n_mat > 1:
-        rho[1] = _rescale_densities(d=volfrac - base, volfrac=materials_frac[1])
+        case InitType.RANDOM:
+            np.random.seed(42)
+            raw = np.random.rand(nel)
+            pattern = _rescale_densities(d=raw, volfrac=volfrac)
 
-    # Normalize columns so sum = volfrac (partition of unity)
-    col_sums: FloatArray = rho.sum(axis=0)
-    col_sums[col_sums == 0] = volfrac  # avoid division by zero
-    rho *= volfrac / col_sums
+        case InitType.CURRENT:
+            if (
+                current_xPhys is not None
+                and current_xPhys.ndim == 2
+                and current_xPhys.shape == (n_mat, nel)
+            ):
+                # Reuse a full per-material field: rescale each row to its
+                # new target, preserving per-material spatial structure.
+                rho = current_xPhys.copy()
+                for i in range(n_mat):
+                    rho[i] = _rescale_densities(d=rho[i], volfrac=materials_frac[i])
+            else:
+                # Reuse a single-material field as the shared pattern.
+                if (
+                    current_xPhys is not None
+                    and current_xPhys.ndim == 1
+                    and current_xPhys.size == nel
+                ):
+                    pattern = _rescale_densities(d=current_xPhys, volfrac=volfrac)
+                else:  # fallback to uniform pattern
+                    pattern = np.full(nel, volfrac, dtype=np.float64)
 
-    # Re-scale rows to hit target volume fractions
-    for i in range(n_mat):
-        rho[i] = _rescale_densities(d=rho[i], volfrac=materials_frac[i])
+        case _:
+            raise ValueError(f"Invalid init_type: {init_type}")
 
-    # Final normalization pass
-    col_sums = rho.sum(axis=0)
-    col_sums[col_sums == 0] = volfrac
-    rho *= volfrac / col_sums
+    # Shared-pattern cases: split the spatial pattern across materials.
+    if rho is None:
+        rho = shares[:, None] * pattern[None, :]
 
     return np.clip(rho, 1e-6, 1.0)

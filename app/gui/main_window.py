@@ -3,6 +3,7 @@
 # Main window for the TopoptComec application using PySide6.
 
 import json
+import math
 import os
 
 import matplotlib.pyplot as plt
@@ -69,7 +70,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.xPhys: FloatArray = None
         self.u: FloatArray = None
         self.xPhys_valid: bool = False
-        self.last_successful_xPhys: FloatArray = None
+        self.last_successful_xPhys: FloatArray = (
+            None  # Used for initialization from current result
+        )
         self.last_params: dict = {}
         self.current_theme: str = "dark"
         self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
@@ -97,6 +100,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.last_displayed_frame_data: FloatArray = None
 
         self._create_control_panel()
+        self.update_mat_init_type_state()
         self.splitter.addWidget(self.control_panel_frame)
         self.splitter.setSizes([800, 480])
 
@@ -506,6 +510,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.last_successful_xPhys = (
             self.xPhys.copy() if self.xPhys is not None else None
         )
+        self.update_mat_init_type_state()
         self.last_displayed_frame_data = None
         self.worker = None
         self.status_bar.showMessage("Optimization finished successfully.", 5000)
@@ -1046,6 +1051,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         Apply the selected preset to the UI widgets and, if a cached result
         exists under `results/<preset>/`, load it into the viewer.
         """
+        self.last_successful_xPhys = None
+        self.update_mat_init_type_state()
         preset_name = self.preset.presets_combo.currentText()
         if preset_name in self.presets:
             self.footer.start_create_button_effect()
@@ -1311,11 +1318,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         # Define a threshold. Values below this are considered "white".
         threshold = 0.5
 
-        # Use NumPy's fast vectorized 'where' function
         self.xPhys = np.where(self.xPhys > threshold, 1.0, 0.0)
         self.last_successful_xPhys = (
             self.xPhys.copy() if self.xPhys is not None else None
         )
+        self.update_mat_init_type_state()
 
         self.replot()
         self.status_bar.showMessage("View binarized.", 3000)
@@ -1420,6 +1427,56 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         """Opens the specified URL in the user's default web browser."""
         url = QUrl("https://github.com/ninja7v/TopoptComec/issues")
         QDesktopServices.openUrl(url)
+
+    def update_mat_init_type_state(self) -> None:
+        """Enable or disable the 'From current result' option in the materials initialization combobox."""
+        if not hasattr(self, "materials_widget") or self.materials_widget is None:
+            return
+        has_result = self.last_successful_xPhys is not None
+        combo = self.materials_widget.mat_init_type
+        model = combo.model()
+        if model is not None and hasattr(model, "item"):
+            item = model.item(3)
+            if item is not None:
+                item.setEnabled(has_result)
+        if not has_result and combo.currentIndex() == 3:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(0)
+            combo.blockSignals(False)
+
+    def _infer_old_res(
+        self, arr: np.ndarray, new_res: tuple[int, int, int]
+    ) -> tuple[int, int, int]:
+        """Infer the old resolution of a density array given the new resolution."""
+        arr_size = arr.shape[1] if arr.ndim == 2 else arr.size
+        nx_new, ny_new, nz_new = new_res
+        is_3d = nz_new > 0
+        nel_new = nx_new * ny_new * (nz_new if is_3d else 1)
+        if arr_size == nel_new:
+            return new_res
+
+        if is_3d:
+            factor = (arr_size / nel_new) ** (1 / 3)
+            nx_old = max(1, int(round(nx_new * factor)))
+            ny_old = max(1, int(round(ny_new * factor)))
+            nz_old = max(1, int(round(nz_new * factor)))
+            return (nx_old, ny_old, nz_old)
+        else:
+            target_ny = np.sqrt(arr_size * ny_new / nx_new)
+            # Search divisors of arr_size for the one closest to the aspect
+            # ratio implied by new_res. Guarantees nx_old * ny_old == arr_size.
+            best_ny = 1
+            best_err = float("inf")
+            for dy in range(1, math.isqrt(arr_size) + 1):
+                if arr_size % dy == 0:
+                    for cand in (dy, arr_size // dy):
+                        err = abs(cand - target_ny)
+                        if err < best_err:
+                            best_err = err
+                            best_ny = cand
+            ny_old = best_ny
+            nx_old = arr_size // ny_old
+            return (nx_old, ny_old, 0)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Close figure when the app is closed"""
