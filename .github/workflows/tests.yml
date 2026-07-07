@@ -47,8 +47,7 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.list
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
+          sudo grep -Rl "packages.microsoft.com" /etc/apt/sources.list.d/ | xargs -r sudo rm -f
           sudo apt-get update
           sudo apt-get install -y libegl1 libegl-mesa0 libxkbcommon-x11-0
 
