@@ -79,10 +79,7 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
             params["Materials"].pop("percent", None)
 
     # Run the entire optimization
-    if is_multi:
-        result, u_vec = optimizers.optimize_multimaterial(**params)
-    else:
-        result, u_vec = optimizers.optimize(**params)
+    result, u_vec = optimizers.optimize(**params, multimaterial=is_multi)
 
     # Check if not empty
     assert result is not None, "Optimizer returned None"

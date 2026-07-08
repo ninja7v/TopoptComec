@@ -127,12 +127,9 @@ def _load_or_run_optimization(
         len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
     )
     try:
-        if is_multimaterial:
-            xPhys, u = optimizers.optimize_multimaterial(
-                **optimizer_params, verbose=verbose
-            )
-        else:
-            xPhys, u = optimizers.optimize(**optimizer_params, verbose=verbose)
+        xPhys, u = optimizers.optimize(
+            **optimizer_params, multimaterial=is_multimaterial, verbose=verbose
+        )
 
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(cache_file, xPhys=xPhys, u=u, params_hash=current_hash)

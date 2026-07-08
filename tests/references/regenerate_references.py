@@ -36,10 +36,9 @@ def regenerate_optimizer_references() -> None:
         if not is_multi:
             params["Materials"].pop("percent", None)
 
-        if is_multi:
-            result, u_vec = optimizers.optimize_multimaterial(**params, verbose=False)
-        else:
-            result, u_vec = optimizers.optimize(**params, verbose=False)
+        result, u_vec = optimizers.optimize(
+            **params, multimaterial=is_multi, verbose=False
+        )
 
         out = REFERENCES_DIR / f"test_optimizers_with_presets_{preset_name}.npz"
         np.savez_compressed(out, result=result, u_vec=u_vec)

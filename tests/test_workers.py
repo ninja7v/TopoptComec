@@ -95,18 +95,19 @@ def test_optimizer_worker_error(monkeypatch):
 
 
 def test_optimizer_worker_multimaterial(monkeypatch):
-    """Test that OptimizerWorker dispatches to optimize_multimaterial for multi-material."""
+    """Test that OptimizerWorker dispatches to optimize with multimaterial=True."""
     recorded = {"called": None}
 
-    def dummy_optimize_multi(**kwargs):
+    def dummy_optimize(**kwargs):
+        assert kwargs.get("multimaterial") is True
         recorded["called"] = "multi"
         cb = kwargs.get("progress_callback")
         cb(1, 1.0, 0.01, np.array([0.5]))
         return np.array([0.5]), np.array([0.1])
 
     monkeypatch.setattr(
-        "topoptcomec.gui.workers.optimizers.optimize_multimaterial",
-        dummy_optimize_multi,
+        "topoptcomec.gui.workers.optimizers.optimize",
+        dummy_optimize,
     )
 
     params = {

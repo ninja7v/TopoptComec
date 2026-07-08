@@ -86,14 +86,12 @@ class OptimizerWorker(QThread, Worker):
 
             optimizer_params["progress_callback"] = _progress_callback
 
-            if is_multimaterial:
-                print("Dispatching to multi-material optimizer...")
-                result: FloatArray
-                u: FloatArray
-                result, u = optimizers.optimize_multimaterial(**optimizer_params)
-            else:
-                print("Dispatching to optimizer...")
-                result, u = optimizers.optimize(**optimizer_params)
+            print("Dispatching to optimizer...")
+            result: FloatArray
+            u: FloatArray
+            result, u = optimizers.optimize(
+                **optimizer_params, multimaterial=is_multimaterial
+            )
 
             self.resultsReady.emit((result, u))  # Emit the tuple (xPhys, u)
         except Exception as e:

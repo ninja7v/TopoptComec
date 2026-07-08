@@ -172,12 +172,14 @@ def optimize(
     progress_callback: Callable[[int, float, float, FloatArray], bool] | None = None,
     verbose: bool = True,
     current_xPhys: FloatArray | None = None,
+    multimaterial: bool = False,
 ) -> tuple[FloatArray, FloatArray]:
     """
-    Single-material topology optimization.
+    Topology optimization (single- or multi-material).
 
     The loop alternates finite element analysis, sensitivity
-    analysis, filtering, and OC updates for:
+    analysis, filtering, and OC updates. For the single-material case
+    it minimises compliance subject to a volume constraint:
 
     .. math::
 
@@ -185,48 +187,10 @@ def optimize(
         \\quad \\text{s.t.} \\quad
         \\bar{\\rho} = \\frac{1}{n_e}\\sum_e \\rho_e \\leq V^*
 
-    Args:
-        All parameters split per section (legacy preset dictionaries).
-        progress_callback: A function called with (iteration, objective,
-            change, xPhys) for UI updates; returning True stops the run.
-
-    Returns:
-        xPhys: Final physical densities after optimization.
-        ui: Associated displacement vector.
-    """
-    xPhys, ui = _optimize_common(
-        Dimensions,
-        Forces,
-        Materials,
-        Optimizer,
-        Supports,
-        Regions,
-        progress_callback,
-        verbose,
-        current_xPhys,
-        multimaterial=False,
-    )
-    return xPhys[0], ui
-
-
-def optimize_multimaterial(
-    Dimensions: dict,
-    Forces: dict,
-    Materials: dict,
-    Optimizer: dict,
-    Supports: dict | None = None,
-    Regions: dict | None = None,
-    progress_callback: Callable[[int, float, float, FloatArray], bool] | None = None,
-    verbose: bool = True,
-    current_xPhys: FloatArray | None = None,
-) -> tuple[FloatArray, FloatArray]:
-    """Multi-material topology optimization.
-
-    Uses per-material density fields. Each material is updated via OC
-    with its own volume constraint, and then projected to ensure the
-    sum of densities does not exceed 1 in any element.
-
-    Multi-material densities satisfy a local partition constraint:
+    When ``multimaterial`` is True, per-material density fields are
+    used. Each material is updated via OC with its own volume
+    constraint, then projected to ensure the sum of densities does not
+    exceed 1 in any element:
 
     .. math::
 
@@ -241,39 +205,17 @@ def optimize_multimaterial(
 
     Args:
         All parameters split per section (legacy preset dictionaries).
-        progress_callback: A function called with (iteration, objective, change, xPhys_multi).
+        progress_callback: A function called with (iteration, objective,
+            change, xPhys) for UI updates; returning True stops the run.
+        multimaterial: If True, run the multi-material loop and return
+            the full (n_mat, nel) density array; otherwise return the
+            single-material (nel,) density array.
 
     Returns:
-        xPhys_multi: Final densities, shape (n_mat, nel).
-        ui: Displacement vector from the final solve.
+        xPhys: Final physical densities after optimization (shape
+            (nel,) when single-material, (n_mat, nel) when multi).
+        ui: Associated displacement vector.
     """
-    return _optimize_common(
-        Dimensions,
-        Forces,
-        Materials,
-        Optimizer,
-        Supports,
-        Regions,
-        progress_callback,
-        verbose,
-        current_xPhys,
-        multimaterial=True,
-    )
-
-
-def _optimize_common(
-    Dimensions: dict,
-    Forces: dict,
-    Materials: dict,
-    Optimizer: dict,
-    Supports: dict | None,
-    Regions: dict | None,
-    progress_callback: Callable[[int, float, float, FloatArray], bool] | None,
-    verbose: bool,
-    current_xPhys: FloatArray | None,
-    multimaterial: bool,
-) -> tuple[FloatArray, FloatArray]:
-    """Shared optimization loop for single- and multi-material problems."""
     if verbose:
         print("Optimizer starting...")
 
@@ -295,7 +237,7 @@ def _optimize_common(
     volfrac: float = Dimensions.get("volfrac", 0.5)
     all_x, all_y, all_z = _active_coords(loads_in, loads_out, supports)
 
-    # Initialize Material
+    # Initialize Material(s)
     if multimaterial:
         percents: list[int] = Materials.get("percent", [100])
         x = initializers.initialize_materials(
@@ -391,4 +333,4 @@ def _optimize_common(
 
     if verbose:
         print("Optimizer finished.")
-    return xPhys, ui
+    return (xPhys if multimaterial else xPhys[0]), ui
