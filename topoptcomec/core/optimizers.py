@@ -175,46 +175,27 @@ def optimize(
     multimaterial: bool = False,
 ) -> tuple[FloatArray, FloatArray]:
     """
-    Topology optimization (single- or multi-material).
+    Run single- or multi-material topology optimization.
 
-    The loop alternates finite element analysis, sensitivity
-    analysis, filtering, and OC updates. For the single-material case
-    it minimises compliance subject to a volume constraint:
-
-    .. math::
-
-        \\min_{\\boldsymbol{\\rho}} C(\\boldsymbol{\\rho})
-        \\quad \\text{s.t.} \\quad
-        \\bar{\\rho} = \\frac{1}{n_e}\\sum_e \\rho_e \\leq V^*
-
-    When ``multimaterial`` is True, per-material density fields are
-    used. Each material is updated via OC with its own volume
-    constraint, then projected to ensure the sum of densities does not
-    exceed 1 in any element:
-
-    .. math::
-
-        \\sum_{m=1}^{n_m}\\rho_{m,e} \\leq 1,
-        \\qquad 0 \\leq \\rho_{m,e} \\leq 1
-
-    The effective stiffness is the additive SIMP interpolation:
-
-    .. math::
-
-        E_e = \\sum_{m=1}^{n_m}\\rho_{m,e}^{p}E_{0,m}
+    Performs finite element analysis, sensitivity analysis, filtering,
+    and Optimality Criteria (OC) updates until convergence.
 
     Args:
-        All parameters split per section (legacy preset dictionaries).
-        progress_callback: A function called with (iteration, objective,
-            change, xPhys) for UI updates; returning True stops the run.
-        multimaterial: If True, run the multi-material loop and return
-            the full (n_mat, nel) density array; otherwise return the
-            single-material (nel,) density array.
+        Dimensions: Geometry and mesh parameters.
+        Forces: Applied loads.
+        Materials: Material properties.
+        Optimizer: Optimization parameters.
+        Supports: Boundary conditions.
+        Regions: Passive/active regions.
+        progress_callback: Called with (iteration, objective, change,
+            xPhys); return True to stop early.
+        verbose: Print optimization progress.
+        current_xPhys: Optional initial density field.
+        multimaterial: Run the multi-material optimizer.
 
     Returns:
-        xPhys: Final physical densities after optimization (shape
-            (nel,) when single-material, (n_mat, nel) when multi).
-        ui: Associated displacement vector.
+        xPhys: Final physical density field.
+        ui: Final displacement vector.
     """
     if verbose:
         print("Optimizer starting...")
@@ -275,8 +256,6 @@ def optimize(
     max_change: float = Optimizer.get("max_change", 0.1)
     n_it: int = Optimizer.get("n_it", 30)
 
-    if verbose:
-        print("   Preparation done -> Optimization loop starting...")
     loop: int = 0
     change: float = 1.0
     ui: FloatArray = np.zeros((fem.ndof, len(loads_in)), dtype=np.float64)
@@ -309,7 +288,6 @@ def optimize(
             x[i], g[i] = _oc(fem.nel, x[i], eta, max_change, dc_i, dv_i, g[i])
             xPhys[i] = fem.update_xPhys(x[i])
             xPhys[i] = fem.apply_regions(xPhys[i], regions)
-
         if multimaterial:
             # Partition-of-unity constraint: sum of densities <= 1 per element
             col_sums: FloatArray = xPhys.sum(axis=0)
