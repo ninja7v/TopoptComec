@@ -56,9 +56,9 @@ def test_run_cli_valid_png(
     mock_exists.return_value = True
     mock_json_load.return_value = mock_presets_data
 
-    # Mock result from optimize
+    # Mock result from optimize (valid non-zero density)
     # ForceInverter_2Sup_2D has nelxyz = [15, 10, 0] -> nel = 150
-    mock_xPhys = np.zeros(150)
+    mock_xPhys = np.ones(150)
     mock_optimize.return_value = (mock_xPhys, None)
 
     # Mock exporters success
@@ -102,7 +102,7 @@ def test_run_cli_all_formats(
     """Test running CLI with default format (all)."""
     mock_exists.return_value = True
     mock_json_load.return_value = mock_presets_data
-    mock_optimize.return_value = (np.zeros(150), None)
+    mock_optimize.return_value = (np.ones(150), None)
     mock_exporters.save_as_png.return_value = (True, None)
     mock_exporters.save_as_vti.return_value = (True, None)
     mock_exporters.save_as_stl.return_value = (True, None)
@@ -218,6 +218,39 @@ def test_run_cli_optimization_failure(
 
 
 @patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
+@patch("builtins.open")
+@patch("json.load")
+@patch.object(Path, "exists")
+def test_run_cli_optimization_empty_structure(
+    mock_exists,
+    mock_json_load,
+    mock_open,
+    mock_exporters,
+    mock_optimize,
+    mock_savez,
+    mock_presets_data,
+):
+    """Test behavior when the optimizer produces an empty (invalid) structure."""
+    mock_exists.return_value = True
+    mock_json_load.return_value = mock_presets_data
+    mock_optimize.return_value = (np.zeros(150), None)
+    mock_exporters.save_as_png.return_value = (True, None)
+
+    preset_name = "ForceInverter_2Sup_2D"
+    with patch.object(sys, "argv", ["main.py", "-p", preset_name, "-f", "png"]):
+        with pytest.raises(SystemExit) as cm:
+            run_cli()
+        assert cm.value.code == 1
+
+    # Exporter must not be called for an invalid result
+    mock_exporters.save_as_png.assert_not_called()
+    # Invalid result must not be cached
+    mock_savez.assert_not_called()
+
+
+@patch("topoptcomec.cli.cli.np.savez_compressed")
 @patch("topoptcomec.cli.cli.Path.mkdir")
 @patch("topoptcomec.cli.cli.optimizers.optimize")
 @patch("topoptcomec.cli.cli.exporters")
@@ -237,7 +270,7 @@ def test_run_cli_export_failure(
     """Test behavior when an exporter returns failure."""
     mock_exists.return_value = True
     mock_json_load.return_value = mock_presets_data
-    mock_optimize.return_value = (np.zeros(150), None)
+    mock_optimize.return_value = (np.ones(150), None)
     mock_exporters.save_as_png.return_value = (False, "Disk full")
 
     preset_name = "ForceInverter_2Sup_2D"
@@ -291,7 +324,7 @@ def test_run_cli_multiple_presets(
     """Test running CLI with multiple comma-separated presets."""
     mock_exists.return_value = True
     mock_json_load.return_value = mock_presets_data
-    mock_optimize.return_value = (np.zeros(150), None)
+    mock_optimize.return_value = (np.ones(150), None)
     mock_exporters.save_as_png.return_value = (True, None)
 
     with patch.object(
@@ -382,7 +415,7 @@ def test_run_cli_saving_cache(
     mock_exists.side_effect = [True, False]
     mock_json_load.return_value = mock_presets_data
 
-    mock_optimize.return_value = (np.zeros(150), np.zeros(300))
+    mock_optimize.return_value = (np.ones(150), np.zeros(300))
     mock_exporters.save_as_png.return_value = (True, None)
 
     with patch.object(

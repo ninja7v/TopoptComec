@@ -131,6 +131,16 @@ def _load_or_run_optimization(
             **optimizer_params, multimaterial=is_multimaterial, verbose=verbose
         )
 
+        mean_density: float = (
+            np.mean(xPhys.sum(axis=0)) if xPhys.ndim == 2 else np.mean(xPhys)
+        )
+        if mean_density < 0.01:
+            return (
+                None,
+                None,
+                "No valid structure was found. Please adjust your parameters and try again.",
+            )
+
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(cache_file, xPhys=xPhys, u=u, params_hash=current_hash)
         if verbose:
