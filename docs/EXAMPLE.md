@@ -41,8 +41,18 @@ Run several presets in parallel:
 topoptcomec -p ForceInverter_2Sup_2D,Gripper_2D -f png
 ```
 
+Use a custom presets file and output directory:
+
+```bash
+topoptcomec -p MyPreset --presets /path/to/presets.json -o /path/to/output
+```
+
 ## Notes
 
-- Run commands from the repository root.
-- CLI outputs are written to `results/`.
+- The CLI can run from any directory. Presets are resolved in this order:
+  `--presets` path, `./presets.json`, `~/.topoptcomec/presets.json`, then
+  the packaged example presets.
+- CLI outputs are written to `results/` by default (override with `-o`).
+- Results are cached per preset; the cache is invalidated automatically when
+  the preset parameters change.
 - Install dependencies with `pip install -r requirements.txt` if needed.

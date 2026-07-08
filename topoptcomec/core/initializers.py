@@ -1,4 +1,4 @@
-# app/core/initializers.py
+# topoptcomec/core/initializers.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Material initializers.
 

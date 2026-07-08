@@ -4,17 +4,17 @@
 
 import json
 import copy
-import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from app.core import displacements
+from topoptcomec.core import displacements
 
 
 REFERENCES_DIR = Path(__file__).parent / "references"
-REFERENCE_RTOL = 1e-6
+# Loose enough to absorb BLAS/library differences across platforms.
+REFERENCE_RTOL = 1e-3
 REFERENCE_ATOL = 1e-6
 
 
@@ -100,17 +100,19 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
     assert np.array_equal(zero_factor_result_displaced, result), (
         "Iterative displacement with factor 0 should return the same result"
     )
-    # Compare with reference data if not random initialization
-    # Note: We skip this check in CI environments because it failes on GitHub Actions
-    # (maybe due to difference in library versions).
-    if params["Materials"]["init_type"] != 2 and os.getenv("CI") == "false":
+    # Compare with reference data if not random initialization.
+    # Regenerate with tests/references/regenerate_references.py after any
+    # intentional numerical change.
+    if params["Materials"]["init_type"] != 2:
         reference_path = (
             REFERENCES_DIR / f"test_displacement_with_presets_{preset_name}.npz"
         )
         if reference_path.exists():
             with np.load(reference_path) as reference:
                 for index, actual in enumerate(linear_arrays):
-                    np.testing.assert_array_equal(actual, reference[f"linear_{index}"])
+                    np.testing.assert_allclose(
+                        actual, reference[f"linear_{index}"], rtol=1e-10, atol=1e-12
+                    )
                 np.testing.assert_allclose(
                     last_result_displaced,
                     reference["last_result_displaced"],
@@ -125,3 +127,32 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
                     atol=REFERENCE_ATOL,
                     err_msg=f"Zero-factor displacement mismatch for preset {preset_name}",
                 )
+
+
+def test_embed_crop_3d_preserves_fem_ordering():
+    """Embedding must use the FEM flat ordering.
+
+    The historic implementation reshaped 3D fields as (nelx, nely, nelz)
+    while the FEM flat ordering is z-major (nelz, nelx, nely), scrambling
+    every 3D displacement simulation.
+    """
+    from topoptcomec.core.displacements import _crop_density, _embed_material
+    from topoptcomec.core.grid import StructuredGrid
+
+    small = StructuredGrid(4, 3, 2)
+    large = StructuredGrid(6, 5, 4)
+    mx, my, mz = 1, 1, 1
+
+    x = np.arange(small.nel, dtype=float)
+    embedded, n_mat, _ = _embed_material(x, False, small, large, mx, my, mz)
+    assert n_mat == 1
+
+    # The value of element (ex, ey, ez) must land at (ex+mx, ey+my, ez+mz).
+    ex, ey, ez = 1, 2, 0
+    src = small.element_index(ex, ey, ez)
+    dst = large.element_index(ex + mx, ey + my, ez + mz)
+    assert embedded[0, dst] == x[src]
+
+    # Round trip must be the identity.
+    cropped = _crop_density(embedded, 1, small, large, mx, my, mz)
+    np.testing.assert_array_equal(cropped[0], x)

@@ -4,17 +4,17 @@ TopoptComec is a Python topology optimization app with a GUI (`topoptcomec`) and
 
 ## Edit Map
 
-- `app/core/fem.py`: FEM, boundary conditions, solves, sensitivities
-- `app/core/optimizers.py`: optimization loops
-- `app/core/displacements.py`: post-run displacement simulation
-- `app/core/analyzers.py`: result checks
-- `app/gui/main_window.py`: GUI flow
-- `app/gui/parameter_manager.py`: parameter gathering, normalization, and scaling
-- `app/gui/widgets.py`: GUI inputs
-- `app/exporters.py`: file export (shared by GUI and CLI)
-- `app/parameter_check.py`: parameter validation (shared)
-- `app/time_estimation.py`: runtime estimation (shared)
-- `app/cli/cli.py`: CLI runs
+- `topoptcomec/core/fem.py`: FEM, boundary conditions, solves, sensitivities
+- `topoptcomec/core/optimizers.py`: optimization loops
+- `topoptcomec/core/displacements.py`: post-run displacement simulation
+- `topoptcomec/core/analyzers.py`: result checks
+- `topoptcomec/gui/main_window.py`: GUI flow
+- `topoptcomec/gui/parameter_manager.py`: parameter gathering, normalization, and scaling
+- `topoptcomec/gui/widgets.py`: GUI inputs
+- `topoptcomec/exporters.py`: file export (shared by GUI and CLI)
+- `topoptcomec/parameter_check.py`: parameter validation (shared)
+- `topoptcomec/time_estimation.py`: runtime estimation (shared)
+- `topoptcomec/cli/cli.py`: CLI runs
 - `presets.json`: preset definitions
 
 ## Rules
@@ -37,6 +37,6 @@ Useful tests:
 ```bash
 ruff format --check .
 ruff check .
-lizard -L 150 -C 30 -w app tests
+lizard -L 150 -C 30 -w topoptcomec tests
 pytest
 ```

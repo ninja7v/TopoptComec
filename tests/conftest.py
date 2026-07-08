@@ -14,6 +14,13 @@ matplotlib.use("Agg")
 from PySide6.QtWidgets import QApplication
 
 
+@pytest.fixture(autouse=True)
+def _isolated_user_presets(tmp_path, monkeypatch):
+    """Keep tests from reading or writing ~/.topoptcomec/presets.json."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # Windows
+
+
 @pytest.fixture(scope="session")
 def qt_app() -> QApplication:
     """Fixture to create a QApplication instance for the test session."""

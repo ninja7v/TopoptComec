@@ -1,4 +1,4 @@
-# app/ui/workers.py
+# topoptcomec/ui/workers.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # QThread worker for running optimizers and displacements in the background.
 
@@ -13,7 +13,7 @@ import numpy.typing as npt
 import copy
 from PySide6.QtCore import QThread, Signal
 from abc import abstractmethod
-from app.core import analyzers, displacements, optimizers
+from topoptcomec.core import analyzers, displacements, optimizers
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -38,7 +38,9 @@ class OptimizerWorker(QThread, Worker):
 
     progress = Signal(int, float, float)
     frameReady = Signal(object)
-    finished = Signal(np.ndarray)
+    #: Emitted with the (xPhys, u) result tuple. Named resultsReady to avoid
+    #: shadowing the built-in QThread.finished signal.
+    resultsReady = Signal(object)
     error = Signal(str)
 
     def __init__(self, params: dict) -> None:
@@ -93,7 +95,7 @@ class OptimizerWorker(QThread, Worker):
                 print("Dispatching to optimizer...")
                 result, u = optimizers.optimize(**optimizer_params)
 
-            self.finished.emit((result, u))  # Emit the tuple (xPhys, u)
+            self.resultsReady.emit((result, u))  # Emit the tuple (xPhys, u)
         except Exception as e:
             import traceback
 
@@ -107,7 +109,9 @@ class DisplacementWorker(QThread, Worker):
     progress = Signal(int)
     frameReady = Signal(np.ndarray)
     linearResultReady = Signal(object)
-    finished = Signal(str, bool)
+    #: Emitted when the simulation completes or is stopped (message, success).
+    #: Named simulationFinished to avoid shadowing QThread.finished.
+    simulationFinished = Signal(str, bool)
     error = Signal(str)
 
     def __init__(self, params: dict, xPhys: FloatArray, u: FloatArray) -> None:
@@ -150,7 +154,7 @@ class DisplacementWorker(QThread, Worker):
                     print("Displacement stopped by user.")
                     break
 
-            self.finished.emit("Displacement finished or stopped.", True)
+            self.simulationFinished.emit("Displacement finished or stopped.", True)
         except Exception as e:
             import traceback
 
@@ -163,8 +167,9 @@ class AnalysisWorker(QThread, Worker):
 
     progress = Signal(int)
     frameReady = Signal(np.ndarray)
-    analysis_finished = Signal(object)
-    finished = Signal(np.ndarray)
+    #: Emitted with the 4-tuple of analysis booleans. Named analysisFinished
+    #: to avoid shadowing QThread.finished.
+    analysisFinished = Signal(object)
     error = Signal(str)
 
     def __init__(self, params: dict, xPhys: FloatArray, u: FloatArray) -> None:
@@ -193,38 +198,27 @@ class AnalysisWorker(QThread, Worker):
     def run(self) -> None:
         """Execute the mechanism analysis based on provided parameters."""
         try:
-            analysis_params: dict = self.params.copy()
-            analysis_params["xPhys"] = self.xPhys
-            analysis_params["u"] = self.u
-
-            # Remove unneeded parameters for the analysis
-            if "Displacement" in analysis_params:
-                analysis_params.pop("Displacement", None)
-            if "Materials" in analysis_params:
-                analysis_params.pop("Materials", None)
-
-            if "Optimizer" in analysis_params:
-                analysis_params.pop("Optimizer", None)
-            if "Supports" in analysis_params:
-                analysis_params.pop("Supports", None)
-            if "Regions" in analysis_params:
-                analysis_params.pop("Regions", None)
 
             def _progress_callback(iteration: int) -> bool:
                 self.progress.emit(iteration)
                 return self._stop_requested
 
-            analysis_params["progress_callback"] = _progress_callback
-
-            # The function is a generator, yielding each frame
+            # Pass exactly what analyze() expects (the params dict may carry
+            # optimizer-only keys such as 'current_xPhys').
             checkerboard: bool
             watertight: bool
             thresholded: bool
             efficient: bool
             checkerboard, watertight, thresholded, efficient = analyzers.analyze(
-                **analysis_params
+                xPhys=self.xPhys,
+                u=self.u,
+                Dimensions=self.params["Dimensions"],
+                Forces=self.params["Forces"],
+                progress_callback=_progress_callback,
             )
-            self.finished.emit((checkerboard, watertight, thresholded, efficient))
+            self.analysisFinished.emit(
+                (checkerboard, watertight, thresholded, efficient)
+            )
 
         except Exception as e:
             import traceback

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from app.core import analyzers
+from topoptcomec.core import analyzers
 
 
 # Helper function to load the presets file for the test

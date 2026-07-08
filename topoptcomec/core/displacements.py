@@ -1,14 +1,18 @@
-# app/core/displacements.py
+# topoptcomec/core/displacements.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Linear displacement computation.
 
 from __future__ import annotations
-import copy
+import dataclasses
 from collections.abc import Callable
 import numpy as np
 import numpy.typing as npt
 from scipy.interpolate import griddata
-from app.core.fem import FEM
+
+from topoptcomec.core import preset_format
+from topoptcomec.core.fem import FEM
+from topoptcomec.core.grid import StructuredGrid
+from topoptcomec.core.model import Load, Support
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -95,14 +99,11 @@ def single_linear_displacement(
 def _embed_material(
     xPhys_initial: FloatArray,
     is_multi: bool,
-    is_3d: bool,
-    nelx: int,
-    nely: int,
-    nelz: int,
+    small: StructuredGrid,
+    large: StructuredGrid,
     mx: int,
     my: int,
     mz: int,
-    fem: FEM,
 ) -> tuple[FloatArray, int, FloatArray]:
     """
     Embed initial density into the expanded domain.
@@ -121,14 +122,12 @@ def _embed_material(
         Initial density field, shape (nel,) or (n_mat, nel).
     is_multi : bool
         Whether this is a multi-material optimization.
-    is_3d : bool
-        Whether this is a 3D problem.
-    nelx, nely, nelz : int
-        Original element counts in each dimension.
+    small : StructuredGrid
+        Original grid.
+    large : StructuredGrid
+        Enlarged (padded) grid.
     mx, my, mz : int
         Padding margins added to each side.
-    fem : FEM
-        FEM solver instance with enlarged domain.
 
     Returns
     -------
@@ -138,31 +137,78 @@ def _embed_material(
     _x_init: FloatArray = xPhys_initial if is_multi else xPhys_initial[np.newaxis, :]
     n_mat: int = _x_init.shape[0]
 
-    full_shape: tuple[int, int, int] = (
-        (fem.nelx, fem.nely, fem.nelz) if is_3d else (fem.nelx, fem.nely)
-    )
-    xPhys_large: FloatArray = np.zeros((n_mat, *full_shape))
-
+    xPhys_large: FloatArray = np.zeros((n_mat, *large.spatial_shape))
     for i in range(n_mat):
-        if is_3d:
-            xPhys_large[i, mx : mx + nelx, my : my + nely, mz : mz + nelz] = _x_init[
-                i
-            ].reshape((nelx, nely, nelz), order="C")
+        spatial = small.to_spatial(_x_init[i])
+        if small.is_3d:
+            # Spatial shape is (nelz, nelx, nely) - the FEM flat ordering.
+            xPhys_large[
+                i, mz : mz + small.nelz, mx : mx + small.nelx, my : my + small.nely
+            ] = spatial
         else:
-            xPhys_large[i, mx : mx + nelx, my : my + nely] = _x_init[i].reshape(
-                (nelx, nely), order="C"
-            )
+            xPhys_large[i, mx : mx + small.nelx, my : my + small.nely] = spatial
 
-    xPhys: FloatArray = xPhys_large.reshape(n_mat, -1, order="C")
+    xPhys: FloatArray = xPhys_large.reshape(n_mat, -1)
     volfrac: FloatArray = np.mean(xPhys, axis=1)
     return xPhys, n_mat, volfrac
 
 
-def _reposition_forces(
-    fem: FEM, sim_params: dict, u_curr: FloatArray, delta_disp: float, is_3d: bool
-) -> None:
+def _crop_density(
+    xPhys: FloatArray,
+    n_mat: int,
+    small: StructuredGrid,
+    large: StructuredGrid,
+    mx: int,
+    my: int,
+    mz: int,
+) -> FloatArray:
     """
-    Move force application points following the full nodal displacement.
+    Crop the expanded density field back to the original domain size.
+
+    .. math::
+
+        \\rho = \\rho^{large}\\rvert_{\\Omega_{original}}
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Expanded density field, shape (n_mat, large.nel).
+    n_mat : int
+        Number of materials.
+    small, large : StructuredGrid
+        Original and enlarged grids.
+    mx, my, mz : int
+        Padding margins to remove.
+
+    Returns
+    -------
+    FloatArray
+        Cropped density field of shape (n_mat, nel).
+    """
+    cropped: FloatArray = np.zeros((n_mat, small.nel))
+    for i in range(n_mat):
+        spatial = large.to_spatial(xPhys[i])
+        if small.is_3d:
+            c = spatial[
+                mz : mz + small.nelz, mx : mx + small.nelx, my : my + small.nely
+            ]
+        else:
+            c = spatial[mx : mx + small.nelx, my : my + small.nely]
+        cropped[i] = small.from_spatial(c)
+    return cropped
+
+
+def _reposition_loads(
+    fem: FEM,
+    loads_in: list[Load],
+    loads_out: list[Load],
+    supports: list[Support],
+    grid: StructuredGrid,
+    u_curr: FloatArray,
+    delta_disp: float,
+) -> list[Load]:
+    """
+    Move input load application points following the nodal displacement.
 
     .. math::
 
@@ -175,51 +221,45 @@ def _reposition_forces(
     Parameters
     ----------
     fem : FEM
-        FEM solver instance.
-    sim_params : dict
-        Simulation parameters to update with new force positions.
+        FEM solver instance (boundary conditions are refreshed in place).
+    loads_in, loads_out : list[Load]
+        Current loads; a new input list is returned.
+    supports : list[Support]
+        Supports (unchanged, needed to refresh the BCs).
+    grid : StructuredGrid
+        Simulation (enlarged) grid used for clipping.
     u_curr : FloatArray
         Current displacement vector.
     delta_disp : float
         Incremental displacement per iteration.
-    is_3d : bool
-        Whether this is a 3D problem.
+
+    Returns
+    -------
+    list[Load]
+        Updated input loads.
     """
-    snelx: int = sim_params["Dimensions"]["nelxyz"][0]
-    snely: int = sim_params["Dimensions"]["nelxyz"][1]
-    snelz: int = sim_params["Dimensions"]["nelxyz"][2]
-    forces_moved: bool = False
-    for i, f_idx in enumerate(fem.fi_indices):
-        dof: int = fem.di_indices[i]
-        fdir: str = sim_params["Forces"]["fidir"][f_idx]
-        if "X" in fdir:
-            dx: int = round(u_curr[dof] * delta_disp)
-            dy: int = -round(u_curr[dof + 1] * delta_disp)
-            dz: int = round(u_curr[dof + 2] * delta_disp) if is_3d else 0
-        elif "Y" in fdir:
-            dx = round(u_curr[dof - 1] * delta_disp)
-            dy = -round(u_curr[dof] * delta_disp)
-            dz = round(u_curr[dof + 1] * delta_disp) if is_3d else 0
-        elif "Z" in fdir:
-            dx = round(u_curr[dof - 2] * delta_disp)
-            dy = -round(u_curr[dof - 1] * delta_disp)
-            dz = round(u_curr[dof] * delta_disp)
-        else:
+    moved = False
+    new_loads: list[Load] = []
+    for i, load in enumerate(loads_in):
+        base = fem.in_dofs[i] - load.axis  # x-DOF of the loaded node
+        dx = round(u_curr[base] * delta_disp)
+        dy = -round(u_curr[base + 1] * delta_disp)
+        dz = round(u_curr[base + 2] * delta_disp) if grid.is_3d else 0
+        if dx == 0 and dy == 0 and dz == 0:
+            new_loads.append(load)
             continue
-        if dx != 0 or dy != 0 or dz != 0:
-            sim_params["Forces"]["fix"][f_idx] = max(
-                0, min(snelx, sim_params["Forces"]["fix"][f_idx] + dx)
+        moved = True
+        new_loads.append(
+            dataclasses.replace(
+                load,
+                x=max(0, min(grid.nelx, load.x + dx)),
+                y=max(0, min(grid.nely, load.y + dy)),
+                z=max(0, min(grid.nelz, load.z + dz)) if grid.is_3d else load.z,
             )
-            sim_params["Forces"]["fiy"][f_idx] = max(
-                0, min(snely, sim_params["Forces"]["fiy"][f_idx] + dy)
-            )
-            if is_3d:
-                sim_params["Forces"]["fiz"][f_idx] = max(
-                    0, min(snelz, sim_params["Forces"]["fiz"][f_idx] + dz)
-                )
-            forces_moved = True
-    if forces_moved:
-        fem.setup_boundary_conditions(sim_params["Forces"], sim_params.get("Supports"))
+        )
+    if moved:
+        fem.setup_boundary_conditions(new_loads, loads_out, supports)
+    return new_loads
 
 
 def _warp_density(
@@ -229,7 +269,7 @@ def _warp_density(
     points: FloatArray,
     points_interp: FloatArray,
     is_multi: bool,
-    fem: FEM,
+    nel: int,
     k: float,
     nominator: float,
     c_val: float,
@@ -265,8 +305,8 @@ def _warp_density(
         Original grid points for interpolation.
     is_multi : bool
         Whether this is multi-material optimization.
-    fem : FEM
-        FEM solver instance.
+    nel : int
+        Number of elements in the simulation grid.
     k, nominator, c_val : float
         Sigmoid filter parameters.
     """
@@ -280,7 +320,7 @@ def _warp_density(
         xPhys[i] = nominator / (1 + np.exp(-k * (xPhys[i] - 0.5))) + c_val
         curr_sum: float = np.sum(xPhys[i])
         if curr_sum > 0:
-            xPhys[i] = volfrac[i] * xPhys[i] / (curr_sum / fem.nel)
+            xPhys[i] = volfrac[i] * xPhys[i] / (curr_sum / nel)
         xPhys[i] = np.clip(xPhys[i], 0.0, 1.0)
 
     # Partition-of-unity constraint for multi-material
@@ -291,57 +331,29 @@ def _warp_density(
             xPhys[:, excess] /= col_sums[excess]
 
 
-def _crop_density(
-    xPhys: FloatArray,
-    n_mat: int,
-    is_3d: bool,
-    fem: FEM,
-    nelx: int,
-    nely: int,
-    nelz: int,
-    mx: int,
-    my: int,
-    mz: int,
-) -> FloatArray:
-    """
-    Crop the expanded density field back to the original domain size.
-
-    .. math::
-
-        \\rho = \\rho^{large}\\rvert_{\\Omega_{original}}
-
-    Parameters
-    ----------
-    xPhys : FloatArray
-        Expanded density field.
-    n_mat : int
-        Number of materials.
-    is_3d : bool
-        Whether this is a 3D problem.
-    fem : FEM
-        FEM solver instance with expanded domain.
-    nelx, nely, nelz : int
-        Original element counts.
-    mx, my, mz : int
-        Padding margins to remove.
-
-    Returns
-    -------
-    FloatArray
-        Cropped density field of shape (n_mat, nel) or (nel,).
-    """
-    cropped: FloatArray = np.zeros((n_mat, nelx * nely * (nelz if is_3d else 1)))
-    for i in range(n_mat):
-        if is_3d:
-            c: np.ndarray = xPhys[i].reshape((fem.nelx, fem.nely, fem.nelz), order="C")[
-                mx : mx + nelx, my : my + nely, mz : mz + nelz
-            ]
-        else:
-            c = xPhys[i].reshape((fem.nelx, fem.nely), order="C")[
-                mx : mx + nelx, my : my + nely
-            ]
-        cropped[i] = c.flatten(order="C")
-    return cropped
+def _translated_bcs(
+    params: dict, is_3d: bool, mx: int, my: int, mz: int
+) -> tuple[list[Load], list[Load], list[Support]]:
+    """Parse boundary conditions and offset them into the enlarged domain."""
+    loads_in = preset_format.parse_loads(
+        params["Forces"], "fix", "fiy", "fiz", "fidir", "finorm", is_3d
+    )
+    loads_out = preset_format.parse_loads(
+        params["Forces"], "fox", "foy", "foz", "fodir", "fonorm", is_3d
+    )
+    supports = preset_format.parse_supports(params.get("Supports"), is_3d)
+    loads_in = [
+        dataclasses.replace(ld, x=ld.x + mx, y=ld.y + my, z=ld.z + mz)
+        for ld in loads_in
+    ]
+    loads_out = [
+        dataclasses.replace(ld, x=ld.x + mx, y=ld.y + my, z=ld.z + mz)
+        for ld in loads_out
+    ]
+    supports = [
+        dataclasses.replace(s, x=s.x + mx, y=s.y + my, z=s.z + mz) for s in supports
+    ]
+    return loads_in, loads_out, supports
 
 
 def run_iterative_displacement(
@@ -379,62 +391,52 @@ def run_iterative_displacement(
         Cropped density field for each iteration.
     """
     dims: dict = params["Dimensions"]
-    nelx: int = dims["nelxyz"][0]
-    nely: int = dims["nelxyz"][1]
-    nelz: int = dims["nelxyz"][2]
-    is_3d: bool = nelz > 0
+    nelx, nely, nelz = (int(v) for v in dims["nelxyz"])
+    small = StructuredGrid(nelx, nely, max(0, nelz))
+    is_3d: bool = small.is_3d
     is_multi: bool = hasattr(xPhys_initial, "ndim") and xPhys_initial.ndim > 1
 
     # Enlarge domain (approx 20% total padding)
     mx: int = nelx // 5
     my: int = nely // 5
     mz: int = nelz // 5 if is_3d else 0
-    sim_params: dict = copy.deepcopy(params)
-    sim_params["Dimensions"]["nelxyz"] = [nelx + 2 * mx, nely + 2 * my, nelz + 2 * mz]
+    large = StructuredGrid(nelx + 2 * mx, nely + 2 * my, nelz + 2 * mz)
 
-    # Offset Supports and Forces coordinates to center the part in the new domain
-    def offset_coords(container: dict, keys: list[str]) -> None:
-        for k, o in zip(keys, [mx, my, mz]):
-            if k in container:
-                container[k] = [val + o for val in container[k]]
+    # Translate boundary conditions and offset them into the enlarged domain
+    loads_in, loads_out, supports = _translated_bcs(params, is_3d, mx, my, mz)
 
-    if "Supports" in sim_params:
-        offset_coords(sim_params["Supports"], ["sx", "sy", "sz"])
-    offset_coords(sim_params["Forces"], ["fix", "fiy", "fiz"])
-
-    # Initialize FEM
+    # Initialize FEM on the enlarged grid
+    materials: dict = params["Materials"]
+    optimizer: dict = params["Optimizer"]
     fem: FEM = FEM(
-        sim_params["Dimensions"], sim_params["Materials"], sim_params["Optimizer"]
+        large,
+        E=materials.get("E", [1.0]),
+        nu=materials.get("nu", [0.3]),
+        penal=float(optimizer.get("penal", 3.0)),
+        solver=optimizer.get("solver", "Auto"),
+        filter_type=optimizer.get("filter_type", "Sensitivity"),
+        filter_radius=float(optimizer.get("filter_radius_min", 0.0)),
     )
-    fem.setup_boundary_conditions(sim_params["Forces"], sim_params.get("Supports"))
+    fem.setup_boundary_conditions(loads_in, loads_out, supports)
 
     # Embed Material into Expanded Domain
-    xPhys: FloatArray
-    n_mat: int
-    volfrac: FloatArray
     xPhys, n_mat, volfrac = _embed_material(
-        xPhys_initial, is_multi, is_3d, nelx, nely, nelz, mx, my, mz, fem
+        xPhys_initial, is_multi, small, large, mx, my, mz
     )
 
     # Simulation Parameters
     pd: dict = params["Displacement"]
     delta_disp: float = pd["disp_factor"] / max(1, pd["disp_iterations"])
 
-    # Points for interpolation (Eulerian grid)
-    shape: tuple[int, int, int] = (
-        (fem.nelz, fem.nelx, fem.nely) if is_3d else (fem.nelx, fem.nely)
-    )
-    unrvld: tuple[np.ndarray, ...] = np.unravel_index(np.arange(fem.nel), shape)
-    points_interp: FloatArray = (
-        np.column_stack((unrvld[1], unrvld[2], unrvld[0]) if is_3d else unrvld) + 0.5
-    )
+    # Points for interpolation (Eulerian grid: element centers)
+    points_interp: FloatArray = large.element_centers()
 
     # Initial Yield
     yield xPhys_initial
     if progress_callback:
         progress_callback(1)
 
-    node_ids: list[int] = [2, 1, 6, 5, 3, 0, 7, 4] if is_3d else [2, 1, 3, 0]
+    n_nodes_per_el: int = 8 if is_3d else 4
 
     # Sigmoid consts (Calculated outside loop for efficiency)
     k: float = 4  # Steepness
@@ -446,19 +448,21 @@ def run_iterative_displacement(
     # Iterative Loop
     for it in range(pd["disp_iterations"]):
         # Solve FEM to get the deformation
-        ui, _ = fem.solve(xPhys)
+        ui, _ = fem.solve(xPhys if is_multi else xPhys[0])
 
         # Collapse multiple load cases to average if necessary
         u_curr: FloatArray = (
             np.mean(ui, axis=1) if ui.shape[1] > 0 else np.zeros(fem.ndof)
         )
 
-        # Replace the Forces
-        _reposition_forces(fem, sim_params, u_curr, delta_disp, is_3d)
+        # Move the input loads with the deforming structure
+        loads_in = _reposition_loads(
+            fem, loads_in, loads_out, supports, large, u_curr, delta_disp
+        )
 
         # Get nodal displacements for every element
         u_elem: FloatArray = u_curr[fem.edofMat].reshape(
-            fem.nel, len(node_ids), fem.elemndof
+            fem.nel, n_nodes_per_el, fem.elemndof
         )
 
         # Displace points
@@ -477,16 +481,14 @@ def run_iterative_displacement(
                 points,
                 points_interp,
                 is_multi,
-                fem,
+                fem.nel,
                 k,
                 nominator,
                 c_val,
             )
 
         # Crop and Yield
-        cropped: FloatArray = _crop_density(
-            xPhys, n_mat, is_3d, fem, nelx, nely, nelz, mx, my, mz
-        )
+        cropped: FloatArray = _crop_density(xPhys, n_mat, small, large, mx, my, mz)
 
         # Strip the extra dimension off if it was just a single material
         yield cropped if is_multi else cropped[0]

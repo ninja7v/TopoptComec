@@ -2,13 +2,51 @@
 
 This glossary defines the main topology-optimization, FEM, and project-specific terms used in TopoptComec.
 
+## Units and Conventions
+
+TopoptComec is unit-agnostic: it never converts units. You must supply a
+*consistent* unit system and interpret results in the same system.
+
+- **Element size**: every element is a unit square (2D) or unit cube (3D).
+  One grid step = one length unit. Choose your length unit accordingly (an
+  exported STL/3MF uses one grid step = 1 mm by convention).
+- **Young's modulus `E`**: any consistent stiffness unit. Because SIMP
+  results are scale-invariant in `E`, only the *ratios* between materials
+  (and between `E` and the spring stiffnesses, see below) affect the design.
+- **Force magnitude (`finorm`, `fonorm`)**: consistent force units.
+- **Displacements**: length units (grid steps) in the chosen system.
+- **Direction glyphs**: `X:→` (+x), `X:←` (−x), `Y:↓` (+y, screen-down),
+  `Y:↑` (−y), `Z:<` (+z), `Z:>` (−z). Internally these are translated to a
+  signed axis by `topoptcomec/core/preset_format.py`; the numerical core
+  never sees glyphs.
+
+### Artificial springs (the `finorm`/`fonorm` double role)
+
+Following the classic compliant-mechanism formulation (Sigmund, 1997), an
+artificial spring is attached to every loaded DOF. **The force magnitude is
+reused as the spring stiffness**: an input force `finorm = 0.01` also adds a
+spring `k = 0.01` at the input node, and each output entry adds a spring
+`k = fonorm` at the output node. Output "forces" additionally serve as the
+adjoint (dummy) loads that define the output direction. Larger output spring
+stiffness models a stiffer workpiece and yields designs that trade output
+displacement for output force. The typed API (`topoptcomec/core/model.py`,
+`Load.spring`) lets library users set the spring independently of the force.
+
+### Objectives
+
+- **Rigid case** (no output force): minimize compliance
+  `C = Σ_e E_e(ρ_e) c_e = fᵀu` (exact when no springs are present).
+- **Compliant case**: maximize the signed output displacement under the
+  input loads, averaged over input/output pairs. Positive objective values
+  mean the output moves in the requested direction.
+
 ## Optimization Terms
 
 ### SIMP
 
 Solid Isotropic Material with Penalization. A standard topology optimization method where element stiffness is interpolated from a density value and penalized to discourage intermediate densities.
 
-In this project, SIMP is the main optimization formulation used by `app/core/optimizers.py`.
+In this project, SIMP is the main optimization formulation used by `topoptcomec/core/optimizers.py`.
 
 ### OC
 
@@ -121,7 +159,7 @@ A target response location and direction used to evaluate compliant mechanism be
 
 ### Efficiency
 
-A heuristic post-analysis metric computed in `app/core/analyzers.py`. It is based on displacement behavior and is used as a quick quality check, not as a rigorous engineering certification.
+A heuristic post-analysis metric computed in `topoptcomec/core/analyzers.py`. It is based on displacement behavior and is used as a quick quality check, not as a rigorous engineering certification.
 
 ## Project-Specific Terms
 
@@ -139,8 +177,12 @@ Typical uses:
 Region fields in the parameter schema:
 
 - `rshape`: shape selector, such as circle or square
-- `rstate`: whether the region is forced to `Void` or `Solid`
+- `rstate`: whether the region is forced to `Void` or `Filled`
 - `rradius`: size control
+
+Coverage convention: a region spans element indices `[int(c - r), int(c + r))`
+per axis (matching the GUI preview); circular/spherical regions additionally
+require the element to lie within distance `r` of the center.
 
 ### Support Radius (`sr`)
 

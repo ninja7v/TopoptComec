@@ -1,4 +1,4 @@
-# app/ui/parameter_manager.py
+# topoptcomec/ui/parameter_manager.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Manage parameters (json file to UI, comparison, ...).
 
@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 from matplotlib.colors import to_hex
 
 
-from app.time_estimation import TimeEstimation
+from topoptcomec.time_estimation import TimeEstimation
 
 
 class ParameterManagerMixin:
@@ -175,7 +175,7 @@ class ParameterManagerMixin:
                         old_res_adjusted = old_res
                         new_res_adjusted = new_res
 
-                    from app.core.post_processing import rescale_density_field
+                    from topoptcomec.core.post_processing import rescale_density_field
 
                     scaled = rescale_density_field(
                         self.last_successful_xPhys, old_res_adjusted, new_res_adjusted
@@ -289,10 +289,28 @@ class ParameterManagerMixin:
         self._normalize_supports(p, is_2d)
         self._normalize_forces(p, is_2d)
         self._normalize_materials(p)
+        self._normalize_optimizer(p)
 
-        # Remove irrelevant keys
+        # Remove irrelevant keys (post-processing only, or optimizer-only state)
         p.pop("Displacement", None)
-        p.pop("Optimizer", None)
+        p.pop("current_xPhys", None)
+
+    def _normalize_optimizer(self, p: dict) -> None:
+        """
+        Normalize optimizer parameters for comparison.
+
+        Optimizer settings (solver, filter, penalization, iterations, ...)
+        are part of a preset's identity: changing any of them must deselect
+        the preset. Only UI-only keys are ignored.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters dictionary containing Optimizer (modified in place).
+        """
+        po = p.get("Optimizer")
+        if po is not None:
+            po.pop("save_frames", None)  # UI-only, not stored in presets
 
     def _normalize_regions(self, p: dict, is_2d: bool) -> None:
         """

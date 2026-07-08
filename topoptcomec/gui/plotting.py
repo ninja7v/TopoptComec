@@ -1,4 +1,4 @@
-# app/ui/plotting.py
+# topoptcomec/ui/plotting.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Plotting class.
 
@@ -175,7 +175,7 @@ class PlottingMixin:
         is_3d : bool
             Whether this is a 3D problem.
         """
-        from app.core import initializers  # Import here to avoid circular
+        from topoptcomec.core import initializers  # Import here to avoid circular
 
         pm: dict = self.last_params["Materials"]
         pd: dict = self.last_params["Dimensions"]

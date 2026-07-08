@@ -4,17 +4,19 @@
 
 import json
 import copy
-import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from app.core import initializers, optimizers
+from topoptcomec.core import initializers, optimizers
 
 
 REFERENCES_DIR = Path(__file__).parent / "references"
-REFERENCE_RTOL = 1e-6
+# Loose enough to absorb BLAS/library differences across platforms, tight
+# enough to catch real regressions (ordering bugs, sign errors, formula
+# changes produce O(1) relative deviations).
+REFERENCE_RTOL = 1e-3
 REFERENCE_ATOL = 1e-6
 
 
@@ -152,10 +154,10 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
             assert u_vec[idx, j] * direction_sign > 0
             j += 1
 
-    # Compare with reference data if not random initialization
-    # Note: We skip this check in CI environments because it failes on GitHub Actions
-    # (maybe due to difference in library versions).
-    if pm["init_type"] != 2 and os.getenv("CI") == "false":
+    # Compare with reference data if not random initialization.
+    # Regenerate with tests/references/regenerate_references.py after any
+    # intentional numerical change.
+    if pm["init_type"] != 2:
         reference_path = (
             REFERENCES_DIR / f"test_optimizers_with_presets_{preset_name}.npz"
         )

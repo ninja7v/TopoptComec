@@ -1,4 +1,4 @@
-# app/ui/resource_path_finder.py
+# topoptcomec/ui/resource_path_finder.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Resource path finder.
 
@@ -25,21 +25,8 @@ def resource_path(relative_path: str) -> Path:
         # PyInstaller frozen exe
         base_path: Path = Path(sys._MEIPASS)
     else:
-        # Normal development run
-        # Try to find the project root by looking for main.py or known file
-        current: Path = Path(__file__).resolve()
-        for parent in [
-            current.parent,
-            current.parent.parent,
-            current.parent.parent.parent,
-        ]:
-            if (parent / "main.py").is_file() or (
-                parent / "requirements.txt"
-            ).is_file():
-                base_path = parent
-                break
-        else:
-            # Fallback: directory of this file
-            base_path = current.parent
+        # Normal run: resources (icons/, presets.json) ship inside the
+        # topoptcomec package, one level above this gui/ subpackage.
+        base_path = Path(__file__).resolve().parent.parent
 
     return base_path / relative_path

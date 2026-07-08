@@ -1,9 +1,10 @@
-# app/cli.py
+# topoptcomec/cli.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # CLI entry point of TopoptComec.
 
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -13,13 +14,32 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from app.core import analyzers, optimizers
-from app import exporters
-from app.parameter_check import ParameterCheck
-from app.time_estimation import TimeEstimation
+from topoptcomec.core import analyzers, optimizers
+from topoptcomec import exporters
+from topoptcomec.parameter_check import ParameterCheck
+from topoptcomec.presets_io import resolve_presets_file
+from topoptcomec.time_estimation import TimeEstimation
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
+
+
+def _params_hash(params: dict) -> str:
+    """
+    Stable hash of a preset dictionary, used to invalidate cached results.
+
+    Parameters
+    ----------
+    params : dict
+        Full preset configuration dictionary.
+
+    Returns
+    -------
+    str
+        Hex digest identifying this exact parameter set.
+    """
+    payload = json.dumps(params, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _load_or_run_optimization(
@@ -32,6 +52,10 @@ def _load_or_run_optimization(
 ) -> tuple[FloatArray | None, FloatArray | None, str | None]:
     """
     Load a cached density field or run the optimizer to generate a new one.
+
+    The cache stores a hash of the preset parameters; if the preset changed
+    since the cache was written, the cache is ignored and the optimization
+    reruns (C8: no stale results).
 
     Parameters
     ----------
@@ -54,18 +78,27 @@ def _load_or_run_optimization(
         xPhys, displacement field u, and an error message if one occurred.
     """
     cache_file: Path = Path(base_dir) / preset_name / f"{preset_name}_density_field.npz"
+    current_hash: str = _params_hash(params)
 
     last_xPhys: FloatArray | None = None
     if cache_file.exists():
-        if verbose:
-            print(f"[{preset_name}] Loading cached density field...")
         try:
             data: np.lib.npyio.NpzFile = np.load(cache_file)
-            last_xPhys = data["xPhys"]
-            # Reuse cached result directly unless the user explicitly requested
-            # initialization from the last result (init_type == 3).
-            if params.get("Materials", {}).get("init_type") != 3:
-                return data["xPhys"], data["u"], None
+            cached_hash = str(data["params_hash"]) if "params_hash" in data else None
+            if cached_hash != current_hash:
+                if verbose:
+                    print(
+                        f"[{preset_name}] Cached result was produced with different "
+                        "parameters; re-running optimization."
+                    )
+            else:
+                last_xPhys = data["xPhys"]
+                # Reuse cached result directly unless the user explicitly
+                # requested initialization from the last result (init_type == 3).
+                if params.get("Materials", {}).get("init_type") != 3:
+                    if verbose:
+                        print(f"[{preset_name}] Loading cached density field...")
+                    return data["xPhys"], data["u"], None
         except Exception as e:
             if verbose:
                 print(f"[{preset_name}] Failed to load cache: {e}")
@@ -102,7 +135,7 @@ def _load_or_run_optimization(
             xPhys, u = optimizers.optimize(**optimizer_params, verbose=verbose)
 
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(cache_file, xPhys=xPhys, u=u)
+        np.savez_compressed(cache_file, xPhys=xPhys, u=u, params_hash=current_hash)
         if verbose:
             print(f"[{preset_name}] Cached density field.")
         return xPhys, u, None
@@ -204,7 +237,7 @@ def _run_displacement(
     if verbose:
         print(f"[{preset_name}] Running displacement...")
 
-    from app.core import displacements
+    from topoptcomec.core import displacements
 
     try:
         disp_iter: int = 0
@@ -244,6 +277,7 @@ def _export_results(
     nelxyz: list[int],
     format: str,
     verbose: bool,
+    output_dir: str = "results",
 ) -> None:
     """
     Export the optimized density field to the requested output formats.
@@ -260,9 +294,11 @@ def _export_results(
         Output format or 'all' for every supported export format.
     verbose : bool
         Whether to print export progress messages.
+    output_dir : str
+        Directory where exported files are written.
     """
-    results_dir: Path = Path("results")
-    results_dir.mkdir(exist_ok=True)
+    results_dir: Path = Path(output_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
     base_filename: Path = results_dir / preset_name
 
     formats: list[str] = ["png", "stl", "vti", "3mf"] if format == "all" else [format]
@@ -289,6 +325,7 @@ def _run_single_preset(
     save_frames: bool = False,
     preview: bool = False,
     verbose: bool = False,
+    output_dir: str = "results",
 ) -> tuple[str, str | None]:
     """
     Execute a single preset from the CLI workflow.
@@ -314,25 +351,27 @@ def _run_single_preset(
         Whether to render a terminal preview of the result.
     save_frames : bool, optional
         Whether to save intermediate frames during optimization and displacement.
+    output_dir : str, optional
+        Directory for caches, frames and exported files.
 
     Returns
     -------
     tuple[str, str | None]
         The preset name and an error message if execution failed.
     """
-    is_pytest = os.environ.get("PYTEST_CURRENT_TEST") is not None
-    base_dir = "tests" if is_pytest else "results"
+    base_dir = output_dir
 
-    optimizer_params: dict = params.copy()
-    optimizer_params.pop("Displacement", None)
+    optimizer_params: dict = {k: v for k, v in params.items() if k != "Displacement"}
 
     is_multimaterial: bool = (
         len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
     )
     if "Materials" in optimizer_params:
-        optimizer_params["Materials"].pop("color", None)
+        materials = dict(optimizer_params["Materials"])
+        materials.pop("color", None)
         if not is_multimaterial:
-            optimizer_params["Materials"].pop("percent", None)
+            materials.pop("percent", None)
+        optimizer_params["Materials"] = materials
 
     xPhys: FloatArray | None
     u: FloatArray | None
@@ -364,11 +403,18 @@ def _run_single_preset(
         xPhys = np.where(xPhys > 0.5, 1.0, 0.0)
 
     if preview:
-        from app.cli.cli_preview import render_preview
+        from topoptcomec.cli.cli_preview import render_preview
 
         print(render_preview(xPhys, params["Dimensions"]["nelxyz"]))
 
-    _export_results(preset_name, xPhys, params["Dimensions"]["nelxyz"], format, verbose)
+    _export_results(
+        preset_name,
+        xPhys,
+        params["Dimensions"]["nelxyz"],
+        format,
+        verbose,
+        output_dir=output_dir,
+    )
 
     if not verbose:
         print(f"Preset '{preset_name}' completed.")
@@ -408,13 +454,8 @@ def _export(
     return False, f"Unknown format: {format}"
 
 
-def run_cli() -> None:
-    """
-    Parse command-line arguments and execute the requested preset workflows.
-
-    The CLI supports single or parallel preset execution, optional displacement,
-    and output export to several file formats.
-    """
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI argument parser."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="TopoptComec CLI - Topology Optimization for Compliant Mechanisms"
     )
@@ -468,20 +509,49 @@ def run_cli() -> None:
         action="store_true",
         help="Print intermediate optimizer output during optimization",
     )
+    parser.add_argument(
+        "--presets",
+        type=str,
+        default=None,
+        help=(
+            "Path to the presets JSON file. Defaults to ./presets.json, then "
+            "~/.topoptcomec/presets.json, then the packaged example presets."
+        ),
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default="results",
+        help="Output directory for caches, frames and exports (default: ./results)",
+    )
 
-    args: argparse.Namespace = parser.parse_args()
+    return parser
+
+
+def run_cli() -> None:
+    """
+    Parse command-line arguments and execute the requested preset workflows.
+
+    The CLI supports single or parallel preset execution, optional displacement,
+    and output export to several file formats.
+    """
+    args: argparse.Namespace = _build_arg_parser().parse_args()
 
     # Load presets
-    presets_path: Path = Path("presets.json")
+    presets_path: Path = resolve_presets_file(args.presets)
     if not presets_path.exists():
-        print(f"Error: presets.json not found at {presets_path.absolute()}")
+        print(
+            f"Error: presets file not found at {presets_path.absolute()}\n"
+            "Use --presets to point to a presets JSON file."
+        )
         sys.exit(1)
 
     try:
         with open(presets_path, "r") as f:
             presets: dict[str, dict] = json.load(f)
     except json.JSONDecodeError as e:
-        print(f"Error reading presets.json: {e}")
+        print(f"Error reading {presets_path}: {e}")
         sys.exit(1)
 
     # Parse and validate preset names
@@ -504,6 +574,7 @@ def run_cli() -> None:
             save_frames=args.intermediate,
             preview=args.preview,
             verbose=args.verbose,
+            output_dir=args.output,
         )
         if error:
             print(error)
@@ -526,6 +597,7 @@ def run_cli() -> None:
                     save_frames=args.intermediate,
                     preview=args.preview,
                     verbose=args.verbose,
+                    output_dir=args.output,
                 ): name
                 for name in preset_names
             }

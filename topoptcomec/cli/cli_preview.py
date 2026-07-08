@@ -1,4 +1,4 @@
-# app/cli_preview.py
+# topoptcomec/cli_preview.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Terminal preview renderer for CLI results.
 

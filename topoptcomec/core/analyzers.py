@@ -1,4 +1,4 @@
-# app/core/analyzers.py
+# topoptcomec/core/analyzers.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Analyze a mechanism.
 
@@ -7,6 +7,9 @@ from collections.abc import Callable
 from functools import partial
 import numpy as np
 import numpy.typing as npt
+
+from topoptcomec.core import preset_format
+from topoptcomec.core.grid import StructuredGrid
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -153,63 +156,38 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     nelx: int = Dimensions["nelxyz"][0]
     nely: int = Dimensions["nelxyz"][1]
     nelz: int = Dimensions["nelxyz"][2]
-    is_3d: bool = nelz > 0
-    dim_mul: int = 3 if is_3d else 2
+    grid = StructuredGrid(nelx, nely, max(0, nelz))
 
-    active_iforces_indices: list[int] = [
-        i for i, fdir in enumerate(Forces.get("fidir", [])) if fdir != "-"
-    ]
-    nbInputForces: int = len(active_iforces_indices)
+    loads_in = preset_format.parse_loads(
+        Forces, "fix", "fiy", "fiz", "fidir", "finorm", grid.is_3d
+    )
+    loads_out = preset_format.parse_loads(
+        Forces, "fox", "foy", "foz", "fodir", "fonorm", grid.is_3d
+    )
+    nbInputForces: int = len(loads_in)
     if nbInputForces == 0:
         return False
 
-    def get_disp(x: int, y: int, z: int, fdir: str, col_idx: int) -> float:
-        node: int = (z * (nelx + 1) * (nely + 1) if is_3d else 0) + x * (nely + 1) + y
-        dof_base: int = node * dim_mul
-        if "X" in fdir:
-            dof: int = dof_base
-        elif "Y" in fdir:
-            dof = dof_base + 1
-        else:
-            dof = dof_base + 2
-
-        sign: float = (
-            -1.0 if "\u2190" in fdir or "\u2191" in fdir or "<" in fdir else 1.0
-        )
-        return u[dof, col_idx] * sign
+    def get_disp(load, col_idx: int) -> float:
+        """Displacement at the load DOF, signed along the load direction."""
+        dof = grid.dofs_per_node * grid.node_index(load.x, load.y, load.z) + load.axis
+        return float(u[dof, col_idx]) * load.sign
 
     effectiveness: float = 0.0
-    active_oforces_indices: list[int] = [
-        i for i, fdir in enumerate(Forces.get("fodir", [])) if fdir != "-"
-    ]
 
-    if active_oforces_indices:
+    if loads_out:
         # Compliant mechanism: compare total input travel to total output geometric travel
         total_u_in: float = 0.0
         total_u_out: float = 0.0
 
-        nbOutputForces: int = len(active_oforces_indices)
+        nbOutputForces: int = len(loads_out)
 
-        for col_idx, i in enumerate(active_iforces_indices):
-            total_u_in += abs(
-                get_disp(
-                    Forces["fix"][i],
-                    Forces["fiy"][i],
-                    Forces["fiz"][i] if is_3d else 0,
-                    Forces["fidir"][i],
-                    col_idx,
-                )
-            )
+        for col_idx, load in enumerate(loads_in):
+            total_u_in += abs(get_disp(load, col_idx))
 
-        for col_idx, oi in enumerate(active_oforces_indices):
+        for col_idx, load in enumerate(loads_out):
             actual_col: int = col_idx if col_idx < nbInputForces else 0
-            u_out_val: float = get_disp(
-                Forces["fox"][oi],
-                Forces["foy"][oi],
-                Forces["foz"][oi] if is_3d else 0,
-                Forces["fodir"][oi],
-                actual_col,
-            )
+            u_out_val: float = get_disp(load, actual_col)
             # Only reward positive movement in the intended direction
             if u_out_val > 0:
                 total_u_out += u_out_val
@@ -218,15 +196,9 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
         return bool(effectiveness < 1 * nbOutputForces)
     else:
         # Rigid mechanism: displacement at input location must remain small
-        for col_idx, i in enumerate(active_iforces_indices):
-            u_in: float = get_disp(
-                Forces["fix"][i],
-                Forces["fiy"][i],
-                Forces["fiz"][i] if is_3d else 0,
-                Forces["fidir"][i],
-                col_idx,
-            )
-            effectiveness += abs(u_in) / max(Forces["finorm"][i], 1e-9)
+        for col_idx, load in enumerate(loads_in):
+            u_in: float = get_disp(load, col_idx)
+            effectiveness += abs(u_in) / max(load.magnitude, 1e-9)
 
         return bool(effectiveness < 500 * nbInputForces)
 

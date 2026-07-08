@@ -1,4 +1,4 @@
-# app/ui/widgets.py
+# topoptcomec/ui/widgets.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Custom PySide6 widgets for the TopoptComec UI.
 
