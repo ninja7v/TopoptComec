@@ -4,7 +4,7 @@
 
 import pytest
 import numpy as np
-from app.gui.main_window import MainWindow
+from topoptcomec.gui.main_window import MainWindow
 from PySide6.QtWidgets import QCheckBox
 from unittest.mock import patch
 
@@ -279,6 +279,32 @@ p_different = {
     "Displacement": {"disp_factor": 1.0, "disp_iterations": 1},
 }
 
+_optimizer_base = {
+    "filter_type": "Sensitivity",
+    "filter_radius_min": 1.3,
+    "penal": 3.0,
+    "eta": 0.3,
+    "max_change": 0.05,
+    "n_it": 30,
+    "solver": "Auto",
+}
+
+p_with_optimizer = {**p_base_2d, "Optimizer": dict(_optimizer_base)}
+
+# Same optimizer plus the UI-only save_frames key: must stay equivalent.
+p_optimizer_ui_only = {
+    **p_base_2d,
+    "Optimizer": {**_optimizer_base, "save_frames": True},
+}
+
+# One optimizer value changed: must NOT be equivalent (regression: the
+# Optimizer section was once ignored by the comparison, so editing it did
+# not deselect the active preset).
+p_different_optimizer = {
+    **p_base_2d,
+    "Optimizer": {**_optimizer_base, "n_it": 60},
+}
+
 
 @pytest.mark.parametrize(
     "p1, p2, expected",
@@ -304,6 +330,17 @@ p_different = {
         (p_base_2d, p_different_region, False),  # Should be different
         (p_base_2d, p_different_material, False),  # Should be different
         (p_base_2d, p_different, False),  # Should be different
+        (p_with_optimizer, p_with_optimizer, True),  # Should equal itself
+        (
+            p_with_optimizer,
+            p_optimizer_ui_only,
+            True,
+        ),  # Equivalent despite the UI-only save_frames key
+        (
+            p_with_optimizer,
+            p_different_optimizer,
+            False,
+        ),  # Changing an optimizer value must deselect the preset
     ],
 )
 def test_are_parameters_equivalent(qt_app, p1: dict, p2: dict, expected: bool):
@@ -376,8 +413,8 @@ def test__on_visibility_toggled(qt_app):
     window.close()
 
 
-@patch("app.gui.main_window.np.savez_compressed")
-@patch("app.gui.main_window.os.makedirs")
+@patch("topoptcomec.gui.main_window.np.savez_compressed")
+@patch("topoptcomec.gui.main_window.os.makedirs")
 def test_handle_optimization_results(mock_makedirs, mock_savez, qt_app):
     """Test that _handle_optimization_results sets xPhys and enables buttons."""
     import numpy as np
@@ -564,7 +601,7 @@ def test_low_density_validation(qt_app):
 
     # 3. Test handle results with valid density (>= 1%)
     mock_xPhys_valid = np.ones(nel)
-    with patch("app.gui.main_window.np.savez_compressed"):
+    with patch("topoptcomec.gui.main_window.np.savez_compressed"):
         window._handle_optimization_results((mock_xPhys_valid, mock_u))
 
     assert window.xPhys_valid is True
@@ -581,4 +618,42 @@ def test_low_density_validation(qt_app):
     assert not window.analysis_widget.run_analysis_button.isEnabled()
     assert not window.displacement_widget.run_disp_button.isEnabled()
 
+    window.close()
+
+
+def test_optimizer_change_deselects_preset(qt_app):
+    """Regression: editing any Optimizer widget must deselect the active
+    preset (comparison must include the Optimizer section AND every
+    optimizer widget must be wired to on_parameter_changed)."""
+    window: MainWindow = MainWindow()
+    combo = window.preset.presets_combo
+    if combo.count() < 2:
+        window.close()
+        pytest.skip("No presets available")
+
+    changes = [
+        lambda: window.optimizer_widget.opt_n_it.setValue(
+            window.optimizer_widget.opt_n_it.value() + 5
+        ),
+        lambda: window.optimizer_widget.opt_solver.setCurrentIndex(
+            (window.optimizer_widget.opt_solver.currentIndex() + 1)
+            % window.optimizer_widget.opt_solver.count()
+        ),
+        lambda: window.optimizer_widget.opt_ft.setCurrentIndex(
+            (window.optimizer_widget.opt_ft.currentIndex() + 1)
+            % window.optimizer_widget.opt_ft.count()
+        ),
+        lambda: window.optimizer_widget.opt_p.setValue(
+            window.optimizer_widget.opt_p.value() + 0.5
+        ),
+    ]
+    for i, change in enumerate(changes):
+        combo.setCurrentIndex(1)
+        window._on_preset_selected()
+        preset_name = combo.currentText()
+        assert preset_name != "Select a preset..."
+        change()
+        assert combo.currentText() == "Select a preset...", (
+            f"Optimizer change #{i} did not deselect the preset"
+        )
     window.close()

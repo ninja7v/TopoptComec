@@ -1,4 +1,4 @@
-# app/ui/main_window.py
+# topoptcomec/ui/main_window.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Main window for the TopoptComec application using PySide6.
 
@@ -31,8 +31,9 @@ from PySide6.QtWidgets import (
 from typing import Tuple
 
 # import mcubes
-from app import exporters
-from app.parameter_check import ParameterCheck
+from topoptcomec import exporters
+from topoptcomec.parameter_check import ParameterCheck
+from topoptcomec.presets_io import resolve_presets_file
 
 from .icons import icons
 from .themes import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
@@ -80,7 +81,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self._set_theme(self.current_theme)
 
         self.presets: dict = {}
-        self.presets_file: str = "presets.json"
+        # Local presets.json (developer workflow) or a per-user writable copy
+        # seeded from the packaged defaults.
+        self.presets_file: str = str(resolve_presets_file(writable=True))
 
         self.main_widget: QWidget = QWidget()
         self.setCentralWidget(self.main_widget)
@@ -280,6 +283,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.on_parameter_changed
         )
         self.optimizer_widget.opt_n_it.valueChanged.connect(self.on_parameter_changed)
+        self.optimizer_widget.opt_solver.currentIndexChanged.connect(
+            self.on_parameter_changed
+        )
         return section
 
     def _create_analysis_section(self) -> CollapsibleSection:
@@ -412,7 +418,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.worker = OptimizerWorker(self.last_params)
         self.worker.progress.connect(self._update_optimization_progress)
         self.worker.frameReady.connect(self._update_optimization_plot)
-        self.worker.finished.connect(self._handle_optimization_results)
+        self.worker.resultsReady.connect(self._handle_optimization_results)
         self.worker.error.connect(self._handle_optimization_error)
         self.worker.start()
 
@@ -629,7 +635,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             # Run single-frame logic directly
             self.status_bar.showMessage("Calculating single displacement frame...")
             QApplication.processEvents()  # Update UI
-            from app.core.displacements import single_linear_displacement
+            from topoptcomec.core.displacements import single_linear_displacement
 
             nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
             self.last_displayed_frame_data = single_linear_displacement(
@@ -656,7 +662,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.worker = DisplacementWorker(self.last_params, self.xPhys, self.u)
             self.worker.progress.connect(self._update_displacement_progress)
             self.worker.frameReady.connect(self._update_animation_frame)
-            self.worker.finished.connect(self._handle_displacement_finished)
+            self.worker.simulationFinished.connect(self._handle_displacement_finished)
             self.worker.error.connect(self._handle_displacement_error)
             self.worker.start()
 
@@ -820,7 +826,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.worker = AnalysisWorker(self.last_params, self.xPhys, self.u)
         self.worker.progress.connect(self._update_analysis_progress)
-        self.worker.finished.connect(self._handle_analysis_finished)
+        self.worker.analysisFinished.connect(self._handle_analysis_finished)
         self.worker.error.connect(self._handle_analysis_error)
         self.worker.start()
 

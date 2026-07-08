@@ -1,8 +1,8 @@
-pyside6
-numpy
-scipy
-matplotlib
-vtk
-PyMCubes
-numpy-stl
-lib3mf
+pyside6>=6.5
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+vtk>=9.2
+PyMCubes>=0.1.4
+numpy-stl>=3.0
+lib3mf>=2.3

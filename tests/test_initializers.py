@@ -5,7 +5,7 @@
 import numpy as np
 import pytest
 
-from app.core import initializers
+from topoptcomec.core import initializers
 
 
 def test_initialize_material():
@@ -238,7 +238,7 @@ def test_initialize_from_current_result():
 def test_from_current_result_disabling_and_scaling(qt_app):
     """Test the disabling of 'From current result' and scaling behavior."""
     from unittest.mock import patch
-    from app.gui.main_window import MainWindow
+    from topoptcomec.gui.main_window import MainWindow
 
     window = MainWindow()
 
@@ -283,7 +283,7 @@ def test_from_current_result_disabling_and_scaling(qt_app):
     assert window.last_successful_xPhys.size == 100
 
     # 5. Test starting a new optimization leaves last_successful_xPhys intact
-    with patch("app.gui.main_window.OptimizerWorker") as mock_worker:
+    with patch("topoptcomec.gui.main_window.OptimizerWorker") as mock_worker:
         window._run_optimization()
         # last_successful_xPhys should not be reset to None
         assert window.last_successful_xPhys is not None

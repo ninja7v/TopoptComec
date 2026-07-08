@@ -24,28 +24,30 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "pyside6",
-    "numpy",
-    "scipy",
-    "matplotlib",
-    "vtk",
-    "PyMCubes",
-    "numpy-stl",
-    "lib3mf",
+    "pyside6>=6.5",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "vtk>=9.2",
+    "PyMCubes>=0.1.4",
+    "numpy-stl>=3.0",
+    "lib3mf>=2.3",
 ]
 
 [project.urls]
-Homepage = "https://github.com/ninja7V/topoptcomec"
-Repository = "https://github.com/ninja7V/topoptcomec.git"
-Documentation = "https://github.com/ninja7v/TopoptComec/wiki"
-Issues = "https://github.com/ninja7V/topoptcomec/issues"
+Homepage = "https://github.com/ninja7v/topoptcomec"
+Repository = "https://github.com/ninja7v/topoptcomec.git"
+Documentation = "https://github.com/ninja7v/topoptcomec/wiki"
+Issues = "https://github.com/ninja7v/topoptcomec/issues"
 
 [project.scripts]
-topoptcomec = "app.__main__:main"
+topoptcomec = "topoptcomec.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["topoptcomec*"]
 
 [tool.setuptools]
-packages = ["app", "app.core", "app.gui"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-app = ["icons/*"]
+topoptcomec = ["icons/*", "presets.json"]

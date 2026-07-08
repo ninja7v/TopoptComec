@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app import exporters
+from topoptcomec import exporters
 
 
 def test_exporters():

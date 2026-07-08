@@ -64,6 +64,10 @@ topoptcomec -p ForceInverter_2Sup_2D --preview
 ### Create
 Tweak the parameters or choose a preset and hit "Create"!
 
+> **Units:** TopoptComec is unit-agnostic — one grid element = one length unit, and `E`/forces are whatever consistent unit system you choose. See `docs/GLOSSARY.md` (Units and Conventions) for details, including the artificial-spring convention at load points.
+
+> **Presets:** the CLI and GUI look for `presets.json` in the current directory first, then `~/.topoptcomec/presets.json`, then fall back to the packaged examples (CLI: override with `--presets`).
+
 ### Export
 Once you’re happy with your mechanism, export it for visualization in ParaView or for refinement in your favorite CAD software.
 

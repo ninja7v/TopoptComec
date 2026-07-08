@@ -12,7 +12,10 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=lib3mf_binaries,
-    datas=[('icons/*', 'icons')],
+    datas=[
+        ('topoptcomec/icons/*', 'icons'),
+        ('topoptcomec/presets.json', '.'),
+    ],
     hiddenimports=['lib3mf'],
 )
 
@@ -31,5 +34,5 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon='icons/window_icon.ico'
+    icon='topoptcomec/icons/window_icon.ico'
 )

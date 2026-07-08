@@ -8,8 +8,8 @@ from unittest.mock import patch
 import pytest
 import numpy as np
 from pathlib import Path
-from app.cli.cli import run_cli
-from app.cli.cli_preview import (
+from topoptcomec.cli.cli import _params_hash, run_cli
+from topoptcomec.cli.cli_preview import (
     _density_to_2d,
     _downscale,
     _render_lines_ascii,
@@ -34,10 +34,10 @@ def test_cli_help():
         assert cm.value.code == 0
 
 
-@patch("app.cli.cli.np.savez_compressed")
-@patch("app.cli.cli.Path.mkdir")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.Path.mkdir")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -82,10 +82,10 @@ def test_run_cli_valid_png(
     assert str(args[2]).endswith(f"{preset_name}.png")
 
 
-@patch("app.cli.cli.np.savez_compressed")
-@patch("app.cli.cli.Path.mkdir")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.Path.mkdir")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -118,10 +118,10 @@ def test_run_cli_all_formats(
     mock_exporters.save_as_3mf.assert_called_once()
 
 
-@patch("app.cli.cli.np.savez_compressed")
-@patch("app.cli.cli.Path.mkdir")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.Path.mkdir")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -198,7 +198,7 @@ def test_run_cli_json_decode_error(mock_exists, mock_open):
             assert cm.value.code == 1
 
 
-@patch("app.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -217,10 +217,10 @@ def test_run_cli_optimization_failure(
         assert cm.value.code == 1
 
 
-@patch("app.cli.cli.np.savez_compressed")
-@patch("app.cli.cli.Path.mkdir")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.Path.mkdir")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -270,11 +270,11 @@ class MockExecutor:
         return MockFuture(fn(*args, **kwargs))
 
 
-@patch("app.cli.cli.np.savez_compressed")
-@patch("app.cli.cli.Path.mkdir")
-@patch("app.cli.cli.ProcessPoolExecutor", MockExecutor)
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.Path.mkdir")
+@patch("topoptcomec.cli.cli.ProcessPoolExecutor", MockExecutor)
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
 @patch.object(Path, "exists")
@@ -325,12 +325,12 @@ def test_run_cli_multiple_presets_one_invalid(
         assert cm.value.code == 1
 
 
-@patch("app.cli.cli.np.load")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.load")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.cli.Path.exists")
+@patch("topoptcomec.cli.cli.Path.exists")
 def test_run_cli_cache_hit(
     mock_exists,
     mock_json_load,
@@ -345,7 +345,11 @@ def test_run_cli_cache_hit(
     mock_exists.side_effect = [True, True]
     mock_json_load.return_value = mock_presets_data
 
-    mock_np_load.return_value = {"xPhys": np.zeros(150), "u": np.zeros(300)}
+    mock_np_load.return_value = {
+        "xPhys": np.zeros(150),
+        "u": np.zeros(300),
+        "params_hash": _params_hash(mock_presets_data["ForceInverter_2Sup_2D"]),
+    }
     mock_exporters.save_as_png.return_value = (True, None)
 
     with patch.object(
@@ -358,12 +362,12 @@ def test_run_cli_cache_hit(
     mock_exporters.save_as_png.assert_called_once()
 
 
-@patch("app.cli.cli.np.savez_compressed")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.np.savez_compressed")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.cli.Path.exists")
+@patch("topoptcomec.cli.cli.Path.exists")
 def test_run_cli_saving_cache(
     mock_exists,
     mock_json_load,
@@ -391,13 +395,13 @@ def test_run_cli_saving_cache(
     mock_exporters.save_as_png.assert_called_once()
 
 
-@patch("app.cli.cli.analyzers.analyze")
-@patch("app.cli.cli.np.load")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.cli.cli.analyzers.analyze")
+@patch("topoptcomec.cli.cli.np.load")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.cli.Path.exists")
+@patch("topoptcomec.cli.cli.Path.exists")
 def test_run_cli_analysis_flag(
     mock_exists,
     mock_json_load,
@@ -411,7 +415,11 @@ def test_run_cli_analysis_flag(
     """Test that analysis runs when -a is passed."""
     mock_exists.side_effect = [True, True]
     mock_json_load.return_value = mock_presets_data
-    mock_np_load.return_value = {"xPhys": np.zeros(150), "u": np.zeros(300)}
+    mock_np_load.return_value = {
+        "xPhys": np.zeros(150),
+        "u": np.zeros(300),
+        "params_hash": _params_hash(mock_presets_data["ForceInverter_2Sup_2D"]),
+    }
     mock_analyze.return_value = (False, True, False, True)
     mock_exporters.save_as_png.return_value = (True, None)
 
@@ -425,13 +433,13 @@ def test_run_cli_analysis_flag(
     mock_analyze.assert_called_once()
 
 
-@patch("app.core.displacements.run_iterative_displacement")
-@patch("app.cli.cli.np.load")
-@patch("app.cli.cli.optimizers.optimize")
-@patch("app.cli.cli.exporters")
+@patch("topoptcomec.core.displacements.run_iterative_displacement")
+@patch("topoptcomec.cli.cli.np.load")
+@patch("topoptcomec.cli.cli.optimizers.optimize")
+@patch("topoptcomec.cli.cli.exporters")
 @patch("builtins.open")
 @patch("json.load")
-@patch("app.cli.cli.Path.exists")
+@patch("topoptcomec.cli.cli.Path.exists")
 def test_run_cli_displacement_flag(
     mock_exists,
     mock_json_load,
@@ -445,7 +453,11 @@ def test_run_cli_displacement_flag(
     """Test that displacement runs when -d is passed."""
     mock_exists.side_effect = [True, True]
     mock_json_load.return_value = mock_presets_data
-    mock_np_load.return_value = {"xPhys": np.zeros(150), "u": np.zeros(300)}
+    mock_np_load.return_value = {
+        "xPhys": np.zeros(150),
+        "u": np.zeros(300),
+        "params_hash": _params_hash(mock_presets_data["ForceInverter_2Sup_2D"]),
+    }
     mock_disp.return_value = [np.zeros((3, 150))]
     mock_exporters.save_as_png.return_value = (True, None)
 
@@ -633,3 +645,80 @@ class TestRenderPreview:
         # Skip separator and header lines
         for line in content_lines[3:-1]:
             assert "\033[" not in line
+
+
+# --- End-to-end tests (no mocks) ---
+
+
+def test_run_cli_end_to_end(tmp_path, capsys):
+    """Full CLI run on a tiny preset: optimize, export, cache and reuse."""
+    presets_path = Path(__file__).parent / "presets_test.json"
+    with open(presets_path, "r", encoding="utf-8") as f:
+        presets = json.load(f)
+    small = {"Tiny": presets["ForceInverter_2Sup_2D"]}
+    preset_file = tmp_path / "presets.json"
+    preset_file.write_text(json.dumps(small))
+    out_dir = tmp_path / "out"
+
+    argv = [
+        "main.py",
+        "-p",
+        "Tiny",
+        "-f",
+        "png",
+        "--presets",
+        str(preset_file),
+        "-o",
+        str(out_dir),
+    ]
+    with patch.object(sys, "argv", argv):
+        run_cli()
+    assert (out_dir / "Tiny.png").exists()
+    cache = out_dir / "Tiny" / "Tiny_density_field.npz"
+    assert cache.exists()
+    data = np.load(cache)
+    assert "params_hash" in data
+
+    # Second run with identical parameters: cache hit, no re-optimization.
+    capsys.readouterr()
+    with patch.object(sys, "argv", argv + ["-v"]):
+        run_cli()
+    assert "Loading cached density field" in capsys.readouterr().out
+
+
+def test_run_cli_cache_invalidated_on_param_change(tmp_path, capsys):
+    """Editing a preset must invalidate the cached result."""
+    presets_path = Path(__file__).parent / "presets_test.json"
+    with open(presets_path, "r", encoding="utf-8") as f:
+        presets = json.load(f)
+    preset = json.loads(json.dumps(presets["ForceInverter_2Sup_2D"]))
+    preset_file = tmp_path / "presets.json"
+    preset_file.write_text(json.dumps({"Tiny": preset}))
+    out_dir = tmp_path / "out"
+
+    def argv():
+        return [
+            "main.py",
+            "-p",
+            "Tiny",
+            "-f",
+            "png",
+            "-v",
+            "--presets",
+            str(preset_file),
+            "-o",
+            str(out_dir),
+        ]
+
+    with patch.object(sys, "argv", argv()):
+        run_cli()
+
+    # Change a physical parameter and rerun: cache must be ignored.
+    preset["Dimensions"]["volfrac"] = 0.42
+    preset_file.write_text(json.dumps({"Tiny": preset}))
+    capsys.readouterr()
+    with patch.object(sys, "argv", argv()):
+        run_cli()
+    out = capsys.readouterr().out
+    assert "different parameters" in out
+    assert "Loading cached density field" not in out

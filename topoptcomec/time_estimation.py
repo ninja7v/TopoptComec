@@ -1,4 +1,4 @@
-# app/time_estimation.py
+# topoptcomec/time_estimation.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Estimate runtime for optimization, displacement and analysis.
 

@@ -6,308 +6,234 @@ import numpy as np
 import pytest
 from scipy.sparse import isspmatrix
 
-from app.core.fem import FEM
+from topoptcomec.core.fem import FEM
+from topoptcomec.core.grid import StructuredGrid
+from topoptcomec.core.model import Load, Region, Support
 
 
 # --- Fixtures ---
 
 
 @pytest.fixture
-def base_config_2d():
-    """Basic 2D configuration: 2x1 Mesh."""
-    return {
-        "Dimensions": {"nelxyz": [2, 1, 0], "volfrac": 0.5},
-        "Materials": {"E": [1.0], "nu": [0.3], "init_type": 0},
-        "Optimizer": {
-            "penal": 3.0,
-            "filter_radius_min": 1.5,
-            "solver": "default",
-            "filter_type": 0,  # Sensitivity filter
-        },
-    }
+def fem_2d():
+    """Basic 2D FEM: 2x1 mesh with a sensitivity filter."""
+    return FEM(
+        StructuredGrid(2, 1, 0),
+        E=[1.0],
+        nu=[0.3],
+        penal=3.0,
+        solver="Auto",
+        filter_type="Sensitivity",
+        filter_radius=1.5,
+    )
 
 
 @pytest.fixture
-def base_config_3d():
-    """Basic 3D configuration: 1x1x1 Cube."""
-    return {
-        "Dimensions": {"nelxyz": [1, 1, 1], "volfrac": 0.5},
-        "Materials": {"E": [1.0], "nu": [0.3]},
-        "Optimizer": {"penal": 3.0, "filter_radius_min": 1.5},
-    }
+def fem_3d():
+    """Basic 3D FEM: 1x1x1 cube."""
+    return FEM(
+        StructuredGrid(1, 1, 1),
+        E=[1.0],
+        nu=[0.3],
+        penal=3.0,
+        filter_radius=1.5,
+    )
 
 
 # --- Tests ---
 
 
-def test_initialization_2d(base_config_2d: dict):
+def test_initialization_2d(fem_2d: FEM):
     """Test if 2D FEM initializes dimensions and degrees of freedom correctly."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
-
-    assert not fem.is_3d
-    assert fem.nel == 2 * 1
-    assert fem.elemndof == 2
-    assert fem.ndof == 2 * (2 + 1) * (1 + 1)
-    assert fem.KE.shape == (8, 8)
+    assert not fem_2d.is_3d
+    assert fem_2d.nel == 2 * 1
+    assert fem_2d.elemndof == 2
+    assert fem_2d.ndof == 2 * (2 + 1) * (1 + 1)
+    assert fem_2d.KE.shape == (8, 8)
 
 
-def test_initialization_3d(base_config_3d: dict):
+def test_initialization_3d(fem_3d: FEM):
     """Test if 3D FEM initializes dimensions correctly."""
-    fem = FEM(
-        base_config_3d["Dimensions"],
-        base_config_3d["Materials"],
-        base_config_3d["Optimizer"],
-    )
-
-    assert fem.is_3d
-    assert fem.nel == 1
-    assert fem.elemndof == 3
-    assert fem.ndof == 24
-    assert fem.KE.shape == (24, 24)
+    assert fem_3d.is_3d
+    assert fem_3d.nel == 1
+    assert fem_3d.elemndof == 3
+    assert fem_3d.ndof == 24
+    assert fem_3d.KE.shape == (24, 24)
 
 
-def test_lk_properties_2d(base_config_2d: dict):
-    """Test physical properties of the element stiffness matrix (Symmetry & Equilibrium)."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
+def test_invalid_solver_rejected():
+    """Unknown solver strings must raise instead of silently changing behavior."""
+    with pytest.raises(ValueError, match="solver"):
+        FEM(StructuredGrid(2, 2, 0), solver="default")
+
+
+def test_invalid_filter_rejected():
+    """Unknown filter type strings must raise."""
+    with pytest.raises(ValueError, match="filter_type"):
+        FEM(StructuredGrid(2, 2, 0), filter_type=0)
+
+
+@pytest.mark.parametrize("dims", [(2, 1, 0), (1, 1, 1)])
+def test_lk_properties(dims):
+    """Element stiffness matrix physical properties (symmetry & equilibrium)."""
+    fem = FEM(StructuredGrid(*dims))
     KE = fem.KE
 
     # 1. Symmetry: K_ij = K_ji
     assert np.allclose(KE, KE.T, atol=1e-10), "The stiffness matrix must be symmetric"
-    assert KE.shape == (8, 8), "The 2D stiffness matrix must be 8x8"
 
-    # 2. Equilibrium: Sum of rows/cols should be zero (rigid body motion results in 0 force)
-    # Summing columns implies applying unit displacement to all DOFs -> Force should be 0
+    # 2. Equilibrium: rigid body translation must produce zero force
     assert np.allclose(np.sum(KE, axis=1), 0, atol=1e-10), (
         "The stiffness matrix should satisfy equilibrium (sum of rows = 0)"
     )
 
 
-def test_boundary_conditions_parsing(base_config_2d: dict):
-    """Test if Supports and Forces are parsed into correct DOF indices."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
+def test_boundary_conditions_parsing(fem_2d: FEM):
+    """Test if Supports and Loads are parsed into correct DOF indices."""
+    # Fix node (0,0) in X and Y; apply force at (2,1) in -Y direction.
+    supports = [Support(x=0, y=0, fix_x=True, fix_y=True)]
+    loads_in = [Load(x=2, y=1, axis=1, sign=-1, magnitude=1.0)]
 
-    # Scenario:
-    # Fix Node at (0,0) in X and Y.
-    # Apply Force at (2,1) in Y direction.
-    Supports = {"sx": [0], "sy": [0], "sz": [], "sdim": ["XY"]}
-    Forces = {
-        "fix": [2],
-        "fiy": [1],
-        "fiz": [],
-        "fidir": ["Y:\u2191"],
-        "finorm": [1.0],
-        # Output forces (required by parse logic even if empty)
-        "fox": [],
-        "foy": [],
-        "foz": [],
-        "fodir": [],
-        "fonorm": [],
-    }
+    fem_2d.setup_boundary_conditions(loads_in, [], supports)
 
-    fem.setup_boundary_conditions(Forces, Supports)
-
-    assert len(fem.fixed_dofs) == 2, "Should have 2 fixed DOFs for (0,0) in X and Y"
-    assert len(fem.fi_indices) == 1, "Should have 1 input force DOF for (2,1) in Y"
+    assert len(fem_2d.fixed_dofs) == 2, "Should have 2 fixed DOFs for (0,0) in X and Y"
+    assert len(fem_2d.loads_in) == 1, "Should have 1 input load"
+    assert fem_2d.forces_i.shape == (fem_2d.ndof, 1)
+    node = fem_2d.grid.node_index(2, 1)
+    assert fem_2d.in_dofs == [2 * node + 1]
+    assert fem_2d.forces_i[2 * node + 1, 0] == -1.0
 
 
-def test_solver_mechanics(base_config_2d: dict):
+def test_solver_mechanics(fem_2d: FEM):
     """Test that the solver produces a non-zero displacement in the direction of force."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
+    # Fix left edge (x=0): nodes (0,0) and (0,1).
+    supports = [
+        Support(x=0, y=0, fix_x=True, fix_y=True),
+        Support(x=0, y=1, fix_x=True, fix_y=True),
+    ]
+    # Pull right edge (x=2, y=0) to the right (+X); one output port in -Y.
+    loads_in = [Load(x=2, y=0, axis=0, sign=1, magnitude=1.0)]
+    loads_out = [Load(x=1, y=1, axis=1, sign=-1, magnitude=1.0)]
 
-    # Fix left edge (x=0)
-    # Nodes at x=0 are (0,0) and (0,1). Indices: 0*(2)+0=0, 0*(2)+1=1.
-    Supports = {"sx": [0, 0], "sy": [0, 1], "sz": [], "sdim": ["XY", "XY"]}
-    # Pull right edge (x=2, y=0) to the right (X)
-    Forces = {
-        "fix": [0, 2],
-        "fiy": [0, 0],
-        "fiz": [],
-        "fidir": ["-", "X:\u2192"],
-        "finorm": [1.0, 1.0],
-        "fox": [0, 1],
-        "foy": [0, 1],
-        "foz": [],
-        "fodir": ["-", "Y:\u2191"],
-        "fonorm": [1.0, 1.0],
-    }
-
-    fem.setup_boundary_conditions(Forces, Supports)
+    fem_2d.setup_boundary_conditions(loads_in, loads_out, supports)
 
     # Create a solid material (density = 1.0)
-    xPhys = np.ones(fem.nel)
-
-    # Solve
-    ui, uo = fem.solve(xPhys)
+    xPhys = np.ones(fem_2d.nel)
+    ui, uo = fem_2d.solve(xPhys)
 
     # Check dimensions
-    assert ui.shape == (fem.ndof, 1)
-    assert uo.shape == (fem.ndof, 1)
+    assert ui.shape == (fem_2d.ndof, 1)
+    assert uo.shape == (fem_2d.ndof, 1)
 
-    # The node at force application (x=2, y=0) is Node index 4 -> DOF 8 (X)
+    # The node at force application (x=2, y=0) is node index 4 -> DOF 8 (X)
     assert ui[8, 0] > 0.0, (
         "The node under force should have positive displacement in X direction"
     )
 
 
-def test_sensitivities_calculation(base_config_2d: dict):
+def test_sensitivities_calculation(fem_2d: FEM):
     """Test calculation of objective and sensitivities."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
+    supports = [Support(x=0, y=0, fix_x=True, fix_y=True)]
+    loads_in = [Load(x=2, y=0, axis=0, sign=1, magnitude=1.0)]
+    fem_2d.setup_boundary_conditions(loads_in, [], supports)
 
-    # Minimal BCs to ensure stability
-    Supports = {"sx": [0], "sy": [0], "sz": [], "sdim": ["XY"]}
-    Forces = {
-        "fix": [2, 0],
-        "fiy": [0, 0],
-        "fiz": [],
-        "fidir": ["X:\u2192", "-"],
-        "finorm": [1.0, 1.0],
-        "fox": [],
-        "foy": [],
-        "foz": [],
-        "fodir": [],
-        "fonorm": [],
-    }
-    fem.setup_boundary_conditions(Forces, Supports)
+    xPhys = np.full(fem_2d.nel, 0.5)
+    ui, uo = fem_2d.solve(xPhys)
 
-    xPhys = np.full(fem.nel, 0.5)
-    ui, uo = fem.solve(xPhys)
-
-    (dc, dv) = fem.compute_sensitivities(xPhys, ui, uo)
+    (dc, dv) = fem_2d.compute_sensitivities(xPhys, ui, uo)
     assert np.all(dc <= 0), (
         "Sensitivities should be negative for compliance minimization"
     )
-    assert dc.shape == (fem.nel,), "Sensitivity array should match number of elements"
-    assert dv.shape == (fem.nel,), (
+    assert dc.shape == (fem_2d.nel,), (
+        "Sensitivity array should match number of elements"
+    )
+    assert dv.shape == (fem_2d.nel,), (
         "Volume sensitivities should match number of elements"
     )
 
-    obj = fem.compute_objective(xPhys, ui, uo)
+    obj = fem_2d.compute_objective(xPhys, ui, uo)
     assert obj > 0, "Compliance objective should be positive"
 
 
-def test_regions_void(base_config_2d: dict):
+def test_rigid_objective_uses_full_density_field(fem_2d: FEM):
+    """The compliance must weight every element's density.
+
+    The historic implementation indexed xPhys[0] (the density of element 0)
+    instead of the density field, producing a wrong reported objective.
+    """
+    supports = [
+        Support(x=0, y=0, fix_x=True, fix_y=True),
+        Support(x=0, y=1, fix_x=True, fix_y=True),
+    ]
+    loads_in = [Load(x=2, y=0, axis=0, sign=1, magnitude=1.0, spring=0.0)]
+    fem_2d.setup_boundary_conditions(loads_in, [], supports)
+
+    xPhys = np.array([0.3, 0.9])
+    ui, uo = fem_2d.solve(xPhys)
+    obj = fem_2d.compute_objective(xPhys, ui, uo)
+
+    # Without springs, compliance == f^T u exactly.
+    expected = float(fem_2d.forces_i[:, 0] @ ui[:, 0])
+    np.testing.assert_allclose(obj, expected, rtol=1e-9)
+
+
+def test_compliant_objective_is_output_displacement(fem_2d: FEM):
+    """Compliant objective = signed output displacement under
+    the input load (not the self-compliance of the output port)."""
+    supports = [
+        Support(x=0, y=0, fix_x=True, fix_y=True),
+        Support(x=0, y=1, fix_x=True, fix_y=True),
+    ]
+    loads_in = [Load(x=2, y=0, axis=0, sign=1, magnitude=1.0)]
+    loads_out = [Load(x=2, y=1, axis=1, sign=-1, magnitude=1.0)]
+    fem_2d.setup_boundary_conditions(loads_in, loads_out, supports)
+
+    xPhys = np.full(fem_2d.nel, 0.8)
+    ui, uo = fem_2d.solve(xPhys)
+    obj = fem_2d.compute_objective(xPhys, ui, uo)
+
+    out_dof = fem_2d.out_dofs[0]
+    expected = -1 * ui[out_dof, 0]  # sign of the output load
+    np.testing.assert_allclose(obj, expected, rtol=1e-12)
+
+
+def test_e_min_scales_with_e_max():
+    """E_min must be relative to E_max for conditioning."""
+    fem = FEM(StructuredGrid(2, 2, 0), E=[200e9], nu=[0.3])
+    np.testing.assert_allclose(fem.E_min, 200e9 * 1e-9)
+
+
+def test_regions_void(fem_2d: FEM):
     """Test that applying a Void region forces density to near-zero."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
+    regions = [Region(shape="box", x=0, y=0, radius=1.0, solid=False)]
 
-    # Define a void region at x=0, y=0
-    Regions = {
-        "rx": [0, 0],
-        "ry": [0, 0],
-        "rz": [],
-        "rradius": [1, 1],  # Small radius covering the element center
-        "rshape": ["-", "□"],  # Square
-        "rstate": ["Void", "Void"],
-    }
-
-    x = np.ones(fem.nel)  # Start fully solid
-    x_new = fem.apply_regions(x, Regions)
+    x = np.ones(fem_2d.nel)  # Start fully solid
+    x_new = fem_2d.apply_regions(x, regions)
 
     assert x_new[0] < 0.01, "Element in Void region should have near-zero density"
     assert x_new[1] == 1.0, "Element outside Void region should remain unchanged"
 
 
-def test_filter_construction(base_config_2d: dict):
+def test_filter_construction(fem_2d: FEM):
     """Test that the filter matrix H is constructed properly."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
-
     # Check types
-    assert isspmatrix(fem.H)
-    assert fem.H.shape == (fem.nel, fem.nel)
+    assert isspmatrix(fem_2d.H)
+    assert fem_2d.H.shape == (fem_2d.nel, fem_2d.nel)
 
-    # Filter radius is 1.5.
-    # Element 0 (0,0) should be connected to Element 1 (0,1) because dist=1 < 1.5.
-    # It should not be connected to Element at (1,0) if elements are unit size?
-    # Note: In the code logic, distance is between element indices in grid.
-    # (0,0) and (0,1) are neighbors.
-
-    # Get the row for element 0
-    row0 = fem.H.getrow(0).toarray().flatten()
+    # Filter radius is 1.5: elements 0 and 1 are neighbors (dist 1 < 1.5).
+    row0 = fem_2d.H.getrow(0).toarray().flatten()
     assert row0[0] > 0, "Element 0 should have a self-connection"
     assert row0[1] > 0, "Element 0 should be connected to neighbor element 1"
 
 
-def test_boundary_conditions_radius(base_config_2d: dict):
+def test_boundary_conditions_radius(fem_2d: FEM):
     """Test if a support with radius fixes multiple nodes."""
-    fem = FEM(
-        base_config_2d["Dimensions"],
-        base_config_2d["Materials"],
-        base_config_2d["Optimizer"],
-    )
+    # Center at node (1, 0), radius 1: fixes (0,0), (1,0), (2,0), (1,1).
+    supports = [Support(x=1, y=0, radius=1.0, fix_x=True, fix_y=True)]
+    fem_2d.setup_boundary_conditions([], [], supports)
 
-    # Center at (1, 0) (bottom middle node)
-    # Radius 1 -> should cover (0,0), (1,0), (2,0) and maybe (0,1), (1,1), (2,1)?
-    # Dist from (1,0) to (0,0) is 1. <= 1 -> Yes.
-    # Dist from (1,0) to (1,1) is 1. <= 1 -> Yes.
-    Supports = {
-        "sx": [1],
-        "sy": [0],
-        "sz": [],
-        "sdim": ["XY"],
-        "sr": [1],
-    }
-    Forces = {
-        "fix": [],
-        "fiy": [],
-        "fiz": [],
-        "fidir": [],
-        "finorm": [],
-        "fox": [],
-        "foy": [],
-        "foz": [],
-        "fodir": [],
-        "fonorm": [],
-    }
-
-    fem.setup_boundary_conditions(Forces, Supports)
-
-    # Nodes:
-    # (0,0) -> 0
-    # (1,0) -> 1 (Center)
-    # (2,0) -> 2
-    # (0,1) -> 3
-    # (1,1) -> 4
-    # (2,1) -> 5
-
-    # Check fixed DOFs
-    # 0, 1, 2, 4 are within radius 1 of (1,0)
-    # 0: dist=1
-    # 2: dist=1
-    # 4: dist=1 (x=1, y=1) -> sqrt(0^2 + 1^2) = 1
-    # 3: dist=sqrt(1^2+1^2)=1.41 > 1 -> No
-    # 5: dist=sqrt(1^2+1^2)=1.41 > 1 -> No
-
-    fixed_nodes = set()
-    for dof in fem.fixed_dofs:
-        fixed_nodes.add(dof // fem.dim_mul)
-
+    fixed_nodes = {int(dof) // fem_2d.dim_mul for dof in fem_2d.fixed_dofs}
+    # Node indices: (0,0)->0, (1,0)->2, (1,1)->3, (2,0)->4
     expected_nodes = {0, 2, 3, 4}
     assert fixed_nodes == expected_nodes, (
         f"Expected fixed nodes {expected_nodes}, got {fixed_nodes}"

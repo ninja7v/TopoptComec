@@ -1,4 +1,4 @@
-# app/core/post_processing.py
+# topoptcomec/core/post_processing.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Post-processing utilities for topology optimization results.
 

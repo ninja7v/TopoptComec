@@ -4,9 +4,8 @@ Quick map of the repository.
 
 ## Root
 
-- `main.py`: convenience wrapper, delegates to `app/__main__:main`
-- `app/__main__.py`: application entry point (console script target)
-- `presets.json`: built-in preset definitions
+- `main.py`: convenience wrapper, delegates to `topoptcomec/__main__:main`
+- `topoptcomec/__main__.py`: application entry point (console script target)
 - `requirements.txt`: dependencies
 - `README.md`: user-facing overview
 - `CONTRIBUTING.md`: contribution guide
@@ -14,24 +13,30 @@ Quick map of the repository.
 
 ## Source
 
-### `app/`
+### `topoptcomec/`
 - `__main__.py`: application entry point (console script target)
 - `exporters.py`: PNG, STL, VTI, 3MF export (shared by GUI and CLI)
 - `parameter_check.py`: `ParameterCheck` class, parameter validation (shared)
 - `time_estimation.py`: `TimeEstimation` class, runtime estimation (shared)
+- `presets_io.py`: presets file resolution (local / per-user / packaged)
+- `presets.json`: packaged default preset definitions
 
-### `app/core/`
+### `topoptcomec/core/`
+- `grid.py`: `StructuredGrid`, canonical element/node ordering and reshapes
+- `model.py`: typed problem definition (`Load`, `Support`, `Region`)
+- `preset_format.py`: legacy preset dictionary -> typed model translation
 - `fem.py`: FEM model and solves
-- `optimizers.py`: optimization loops
+- `optimizers.py`: optimization loops (single- and multi-material)
 - `initializers.py`: density initialization
 - `displacements.py`: displacement simulation
 - `analyzers.py`: result checks
+- `post_processing.py`: density/displacement field rescaling
 
-### `app/cli/`
+### `topoptcomec/cli/`
 - `cli.py`: CLI execution, preset loading, parallel runs, export dispatch
 - `cli_preview.py`: terminal rendering of density fields
 
-### `app/gui/`
+### `topoptcomec/gui/`
 - `main_window.py`: main window and action flow
 - `parameter_manager.py`: parameter gathering, normalization, and scaling
 - `widgets.py`: GUI widgets
@@ -43,8 +48,9 @@ Quick map of the repository.
 
 ## Tests
 
-- `tests/test_cli.py`: CLI behavior
+- `tests/test_cli.py`: CLI behavior (mocked and end-to-end)
 - `tests/test_fem.py`: FEM behavior
+- `tests/test_numerics.py`: stiffness matrices vs Gauss quadrature, finite-difference sensitivity checks, solver equivalence, filter behavior
 - `tests/test_optimizers.py`: optimizer behavior
 - `tests/test_initializers.py`: initializer behavior
 - `tests/test_displacements.py`: displacement behavior
@@ -56,6 +62,7 @@ Quick map of the repository.
 - `tests/test_workers.py`: worker behavior
 - `tests/conftest.py`: shared fixtures
 - `tests/presets_test.json`: preset fixture data
+- `tests/references/`: result references (`regenerate_references.py` rebuilds them after intentional numerical changes)
 
 ## Documentation
 
@@ -67,5 +74,5 @@ Quick map of the repository.
 
 ## Assets and Output
 
-- `icons/`: GUI SVG assets
-- `results/`: generated output files
+- `topoptcomec/icons/`: GUI SVG assets (packaged)
+- `results/`: generated output files (default CLI output directory)

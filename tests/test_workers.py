@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from app.gui.workers import OptimizerWorker, DisplacementWorker, AnalysisWorker
+from topoptcomec.gui.workers import OptimizerWorker, DisplacementWorker, AnalysisWorker
 
 
 def test_optimizer_worker(monkeypatch):
@@ -16,7 +16,7 @@ def test_optimizer_worker(monkeypatch):
         progress_cb(1, 3.14, 0.01, np.array([[42]]))
         return np.array([0.5]), np.array([0.1])
 
-    monkeypatch.setattr("app.gui.workers.optimizers.optimize", dummy_optimize)
+    monkeypatch.setattr("topoptcomec.gui.workers.optimizers.optimize", dummy_optimize)
 
     worker = OptimizerWorker({"some_param": 1})
 
@@ -24,7 +24,7 @@ def test_optimizer_worker(monkeypatch):
         lambda it, obj, ch: recorded["progress"].append((it, obj, ch))
     )
     worker.frameReady.connect(lambda frame: recorded.update({"frame": frame}))
-    worker.finished.connect(lambda res: recorded.update({"finished": res}))
+    worker.resultsReady.connect(lambda res: recorded.update({"finished": res}))
     worker.error.connect(lambda e: recorded.update({"error": e}))
 
     # Run synchronously in the test thread
@@ -50,7 +50,8 @@ def test_displacement_worker(monkeypatch):
                 break
 
     monkeypatch.setattr(
-        "app.gui.workers.displacements.run_iterative_displacement", dummy_generator
+        "topoptcomec.gui.workers.displacements.run_iterative_displacement",
+        dummy_generator,
     )
 
     recorded = {"progress": [], "frames": [], "finished": None, "error": None}
@@ -59,7 +60,7 @@ def test_displacement_worker(monkeypatch):
 
     worker.progress.connect(lambda it: recorded["progress"].append(it))
     worker.frameReady.connect(lambda f: recorded["frames"].append(np.array(f)))
-    worker.finished.connect(
+    worker.simulationFinished.connect(
         lambda msg, flag: recorded.update({"finished": (msg, flag)})
     )
     worker.error.connect(lambda e: recorded.update({"error": e}))
@@ -81,7 +82,7 @@ def test_optimizer_worker_error(monkeypatch):
     def failing_optimize(**kwargs):
         raise RuntimeError("Optimization exploded")
 
-    monkeypatch.setattr("app.gui.workers.optimizers.optimize", failing_optimize)
+    monkeypatch.setattr("topoptcomec.gui.workers.optimizers.optimize", failing_optimize)
 
     recorded = {"error": None}
     worker = OptimizerWorker({"some_param": 1})
@@ -94,17 +95,19 @@ def test_optimizer_worker_error(monkeypatch):
 
 
 def test_optimizer_worker_multimaterial(monkeypatch):
-    """Test that OptimizerWorker dispatches to optimize_multimaterial for multi-material."""
+    """Test that OptimizerWorker dispatches to optimize with multimaterial=True."""
     recorded = {"called": None}
 
-    def dummy_optimize_multi(**kwargs):
+    def dummy_optimize(**kwargs):
+        assert kwargs.get("multimaterial") is True
         recorded["called"] = "multi"
         cb = kwargs.get("progress_callback")
         cb(1, 1.0, 0.01, np.array([0.5]))
         return np.array([0.5]), np.array([0.1])
 
     monkeypatch.setattr(
-        "app.gui.workers.optimizers.optimize_multimaterial", dummy_optimize_multi
+        "topoptcomec.gui.workers.optimizers.optimize",
+        dummy_optimize,
     )
 
     params = {
@@ -116,7 +119,7 @@ def test_optimizer_worker_multimaterial(monkeypatch):
         },
     }
     worker = OptimizerWorker(params)
-    worker.finished.connect(lambda res: None)
+    worker.resultsReady.connect(lambda res: None)
     worker.progress.connect(lambda *a: None)
     worker.frameReady.connect(lambda f: None)
 
@@ -143,13 +146,14 @@ def test_displacement_worker_stop(monkeypatch):
             yield f
 
     monkeypatch.setattr(
-        "app.gui.workers.displacements.run_iterative_displacement", dummy_generator
+        "topoptcomec.gui.workers.displacements.run_iterative_displacement",
+        dummy_generator,
     )
 
     recorded = {"frames": [], "finished": None}
     worker = DisplacementWorker({"p": 1}, np.array([0.0]), np.array([0.0]))
     worker.frameReady.connect(lambda f: recorded["frames"].append(np.array(f)))
-    worker.finished.connect(
+    worker.simulationFinished.connect(
         lambda msg, flag: recorded.update({"finished": (msg, flag)})
     )
     worker.progress.connect(lambda it: None)
@@ -171,7 +175,8 @@ def test_displacement_worker_error(monkeypatch):
         yield  # pragma: no cover
 
     monkeypatch.setattr(
-        "app.gui.workers.displacements.run_iterative_displacement", failing_generator
+        "topoptcomec.gui.workers.displacements.run_iterative_displacement",
+        failing_generator,
     )
 
     recorded = {"error": None}
@@ -179,7 +184,7 @@ def test_displacement_worker_error(monkeypatch):
     worker.error.connect(lambda e: recorded.update({"error": e}))
     worker.progress.connect(lambda it: None)
     worker.frameReady.connect(lambda f: None)
-    worker.finished.connect(lambda msg, flag: None)
+    worker.simulationFinished.connect(lambda msg, flag: None)
 
     worker.run()
 
@@ -196,7 +201,7 @@ def test_analysis_worker(monkeypatch):
             cb(1)
         return True, False, True, False
 
-    monkeypatch.setattr("app.gui.workers.analyzers.analyze", dummy_analyze)
+    monkeypatch.setattr("topoptcomec.gui.workers.analyzers.analyze", dummy_analyze)
 
     recorded = {"finished": None, "error": None}
     params = {
@@ -213,12 +218,14 @@ def test_analysis_worker(monkeypatch):
         "Supports": {"sdim": ["Y"]},
         "Optimizer": {"solver": "Direct"},
         "Regions": {},
+        # Optimizer-only key that must not leak into analyze()
+        "current_xPhys": np.ones(100) * 0.5,
     }
     xPhys = np.ones(100) * 0.5
     u = np.ones((242, 1)) * 0.01
 
     worker = AnalysisWorker(params, xPhys, u)
-    worker.finished.connect(lambda res: recorded.update({"finished": res}))
+    worker.analysisFinished.connect(lambda res: recorded.update({"finished": res}))
     worker.error.connect(lambda e: recorded.update({"error": e}))
     worker.progress.connect(lambda it: None)
     worker.frameReady.connect(lambda f: None)
@@ -239,7 +246,7 @@ def test_analysis_worker_error(monkeypatch):
     def failing_analyze(**kwargs):
         raise RuntimeError("Analysis exploded")
 
-    monkeypatch.setattr("app.gui.workers.analyzers.analyze", failing_analyze)
+    monkeypatch.setattr("topoptcomec.gui.workers.analyzers.analyze", failing_analyze)
 
     recorded = {"error": None}
     params = {
@@ -250,7 +257,7 @@ def test_analysis_worker_error(monkeypatch):
     worker.error.connect(lambda e: recorded.update({"error": e}))
     worker.progress.connect(lambda it: None)
     worker.frameReady.connect(lambda f: None)
-    worker.finished.connect(lambda res: None)
+    worker.analysisFinished.connect(lambda res: None)
 
     worker.run()
 

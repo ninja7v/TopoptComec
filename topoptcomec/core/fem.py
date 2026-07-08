@@ -1,4 +1,4 @@
-# app/core/fem.py
+# topoptcomec/core/fem.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Finite Element Method (FEM) class for topology optimization.
 
@@ -9,9 +9,19 @@ import numpy.typing as npt
 from scipy.sparse import coo_matrix, csc_matrix, eye
 from scipy.sparse.linalg import spsolve, cg, LinearOperator
 
+from topoptcomec.core.grid import StructuredGrid
+from topoptcomec.core.model import Load, Region, Support
+
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
+
+#: Accepted linear solver identifiers.
+SOLVERS = ("Direct", "Iterative", "Auto")
+#: Accepted filter identifiers.
+FILTERS = ("Sensitivity", "Density", "None")
+#: Relative minimum stiffness (E_min = MIN_STIFFNESS_RATIO * E_max).
+MIN_STIFFNESS_RATIO = 1e-9
 
 
 class FEM:
@@ -19,7 +29,7 @@ class FEM:
     Finite Element Method solver for topology optimization.
 
     Supports 2D (Q4) and 3D (H8) continuum elements with multiple load cases,
-    SIMP-based material interpolation, and sensitivity filtering.
+    SIMP-based material interpolation, and sensitivity/density filtering.
 
     The discrete equilibrium equation solved for each load case is:
 
@@ -36,59 +46,62 @@ class FEM:
 
     Parameters
     ----------
-    Dimensions : Dict
-        Mesh configuration with 'nelxyz' key specifying [nx, ny, nz].
-    Materials : Dict
-        Material properties: 'E' (Young's modulus list), 'nu' (Poisson's ratio list).
-    Optimizer : Dict
-        Optimization settings: 'penal' (SIMP exponent), 'solver',
-        'filter_type', 'filter_radius_min'.
+    grid : StructuredGrid
+        Structured mesh definition.
+    E : Sequence[float]
+        Young's modulus of each material.
+    nu : Sequence[float]
+        Poisson's ratio of each material.
+    penal : float
+        SIMP penalization exponent.
+    solver : str
+        One of ``"Direct"``, ``"Iterative"``, ``"Auto"``.
+    filter_type : str
+        One of ``"Sensitivity"``, ``"Density"``, ``"None"``.
+    filter_radius : float
+        Filter radius in element units; ``<= 0`` disables filtering.
     """
 
-    def __init__(self, Dimensions: dict, Materials: dict, Optimizer: dict) -> None:
-        """
-        Initialize the FEM solver.
+    def __init__(
+        self,
+        grid: StructuredGrid,
+        E: Sequence[float] = (1.0,),
+        nu: Sequence[float] = (0.3,),
+        penal: float = 3.0,
+        solver: str = "Auto",
+        filter_type: str = "Sensitivity",
+        filter_radius: float = 0.0,
+    ) -> None:
+        if solver not in SOLVERS:
+            raise ValueError(f"Unknown solver {solver!r}; expected one of {SOLVERS}")
+        if filter_type not in FILTERS:
+            raise ValueError(
+                f"Unknown filter_type {filter_type!r}; expected one of {FILTERS}"
+            )
 
-        Parameters
-        ----------
-        Dimensions : dict
-            Mesh configuration with 'nelxyz' key specifying [nx, ny, nz].
-        Materials : dict
-            Material properties: 'E' (Young's modulus list), 'nu' (Poisson's ratio list).
-        Optimizer : dict
-            Optimization settings: 'penal' (SIMP exponent), 'solver',
-            'filter_type', 'filter_radius_min'.
-        """
         # Geometry and Grid Setup
-        self.nelxyz: Sequence[int] = Dimensions.get("nelxyz", [1, 1, 1])
-        self.nelx, self.nely, self.nelz = (int(v) for v in self.nelxyz)
-        self.is_3d: bool = self.nelz > 0
-        if self.nelx <= 0 or self.nely <= 0 or (self.is_3d and self.nelz <= 0):
-            raise ValueError(f"Invalid grid dimensions: {self.nelxyz!r}")
-        self.nel: int = self.nelx * self.nely * (self.nelz if self.is_3d else 1)
-        self.elemndof: int = 3 if self.is_3d else 2
-        self.dim_mul: int = self.elemndof
+        self.grid: StructuredGrid = grid
+        self.nelx: int = grid.nelx
+        self.nely: int = grid.nely
+        self.nelz: int = grid.nelz
+        self.is_3d: bool = grid.is_3d
+        self.nel: int = grid.nel
+        self.elemndof: int = grid.dofs_per_node
+        self.dim_mul: int = grid.dofs_per_node
         self.eldof: int = 8 * (self.elemndof if self.is_3d else 1)
-        self.ndof: int = (
-            self.dim_mul
-            * (self.nelx + 1)
-            * (self.nely + 1)
-            * ((self.nelz + 1) if self.is_3d else 1)
-        )
+        self.ndof: int = grid.ndof
 
         # Materials and Optimization Params
-        self.E_max: FloatArray = np.atleast_1d(
-            np.asarray(Materials.get("E", [1.0]), dtype=np.float64)
-        )
+        self.E_max: FloatArray = np.atleast_1d(np.asarray(E, dtype=np.float64))
         self.nb_mat: int = self.E_max.size
-        self.E_min: FloatArray = np.full(self.nb_mat, 1e-9, dtype=np.float64)
-        self.nu: FloatArray = np.atleast_1d(
-            np.asarray(Materials.get("nu", [0.3]), dtype=np.float64)
-        )
-        self.penal: float = float(Optimizer.get("penal", 3.0))
-        self.solver_type: str = Optimizer.get("solver", "default")
-        self.filter_type: str = Optimizer.get("filter_type", "Sensitivity")
-        self.filter_radius: float = float(Optimizer.get("filter_radius_min", 0.0))
+        # Relative minimum stiffness keeps the system conditioned for any
+        # physical unit of E (C4: E_min proportional to E_max).
+        self.E_min: FloatArray = MIN_STIFFNESS_RATIO * self.E_max
+        self.nu: FloatArray = np.atleast_1d(np.asarray(nu, dtype=np.float64))
+        self.penal: float = float(penal)
+        self.solver_type: str = solver
+        self.filter_type: str = filter_type
+        self.filter_radius: float = float(filter_radius)
 
         # Pre-compute Constant Matrices (KE, DOF Maps, Filter)
         self.KE: FloatArray = self._get_lk_stiffness()
@@ -99,110 +112,123 @@ class FEM:
         # State placeholders for BCs
         self.fixed_dofs: IntArray = np.array([], dtype=np.int64)
         self.free_dofs: IntArray = np.array([], dtype=np.int64)
-        self.fi_indices: list[int] = []
-        self.fo_indices: list[int] = []
-        self.di_indices: list[int] = []
-        self.do_indices: list[int] = []
-        self.finorm: Sequence[float] = []
-        self.fonorm: Sequence[float] = []
+        self.loads_in: list[Load] = []
+        self.loads_out: list[Load] = []
+        self.in_dofs: list[int] = []
+        self.out_dofs: list[int] = []
         self.forces_i: FloatArray | None = None
         self.forces_o: FloatArray | None = None
+        self._spring_dofs: IntArray = np.array([], dtype=np.int64)
+        self._spring_vals: FloatArray = np.array([], dtype=np.float64)
 
     def setup_boundary_conditions(
-        self, forces: dict, supports: dict | None = None
+        self,
+        loads_in: Sequence[Load],
+        loads_out: Sequence[Load] = (),
+        supports: Sequence[Support] = (),
     ) -> None:
         """
-        Parse Forces and Supports dicts to create force vectors and fixed DOFs.
+        Build force vectors and fixed DOFs from typed boundary conditions.
 
         Parameters
         ----------
-        Forces : Dict
-            Input forces: 'fix', 'fiy', 'fiz', 'fidir', 'finorm'
-            Output forces: 'fox', 'foy', 'foz', 'fodir', 'fonorm'
-        Supports : Dict, optional
-            Support conditions: 'sx', 'sy', 'sz', 'sr' (radius), 'sdim'
+        loads_in : Sequence[Load]
+            Actuation loads. One FEM load case per entry.
+        loads_out : Sequence[Load]
+            Output ports (compliant mechanisms). Each acts as a dummy/adjoint
+            load and defines the desired output direction. Empty for rigid
+            (compliance-minimization) problems.
+        supports : Sequence[Support]
+            Fixed nodes.
         """
-        # Forces
-        di: list[int]
-        do: list[int]
-        self.forces_i, self.fi_indices, di = self._parse_forces(
-            forces, "fix", "fiy", "fiz", "fidir", "finorm"
-        )
-        self.forces_o, self.fo_indices, do = self._parse_forces(
-            forces, "fox", "foy", "foz", "fodir", "fonorm"
-        )
+        self.loads_in = list(loads_in)
+        self.loads_out = list(loads_out)
+        self.forces_i, self.in_dofs = self._assemble_loads(self.loads_in)
+        self.forces_o, self.out_dofs = self._assemble_loads(self.loads_out)
 
-        self.di_indices = di  # For artificial stiffness addition
-        self.do_indices = do  # For artificial stiffness addition
-        self.finorm = forces.get("finorm", [])
-        self.fonorm = forces.get("fonorm", [])
+        # Artificial springs at load locations (classic Sigmund formulation):
+        # extra diagonal triplets appended at every assembly.
+        spring_dofs: list[int] = []
+        spring_vals: list[float] = []
+        for dofs, loads in (
+            (self.in_dofs, self.loads_in),
+            (self.out_dofs, self.loads_out),
+        ):
+            for dof, load in zip(dofs, loads):
+                if load.spring_stiffness > 0:
+                    spring_dofs.append(dof)
+                    spring_vals.append(load.spring_stiffness)
+        self._spring_dofs: IntArray = np.asarray(spring_dofs, dtype=np.int64)
+        self._spring_vals: FloatArray = np.asarray(spring_vals, dtype=np.float64)
 
-        # Supports
         fixed: list[int] = []
-        if supports:
-            sx: list[float] = supports.get("sx", [])
-            sy: list[float] = supports.get("sy", [])
-            sz: list[float] = supports.get("sz", [])
-            sr: list[float] = supports.get("sr", [0.0] * len(sx))
-            sdim: list[str] = supports.get("sdim", [])
-            active_sup: list[int] = [i for i, val in enumerate(sdim) if val != "-"]
+        for sup in supports:
+            nodes_to_fix = [self.grid.node_index(sup.x, sup.y, sup.z)]
+            if sup.radius > 0:
+                nodes_to_fix.extend(self._nodes_within_radius(sup))
+            for node_idx in nodes_to_fix:
+                node_dof = self.dim_mul * node_idx
+                if sup.fix_x:
+                    fixed.append(node_dof)
+                if sup.fix_y:
+                    fixed.append(node_dof + 1)
+                if self.is_3d and sup.fix_z:
+                    fixed.append(node_dof + 2)
 
-            for i in active_sup:
-                center_node_idx = self._get_node_idx(
-                    int(sx[i]), int(sy[i]), int(sz[i]) if self.is_3d else 0
-                )
-                nodes_to_fix = [center_node_idx]
-
-                # If radius > 0, find all nodes within radius
-                if i < len(sr) and sr[i] > 0:
-                    radius = float(sr[i])
-                    # Determine range to search
-                    x_range = range(
-                        max(0, int(sx[i] - radius)),
-                        min(self.nelx + 1, int(sx[i] + radius + 1)),
-                    )
-                    y_range = range(
-                        max(0, int(sy[i] - radius)),
-                        min(self.nely + 1, int(sy[i] + radius + 1)),
-                    )
-                    z_range = (
-                        range(
-                            max(0, int(sz[i] - radius)),
-                            min(self.nelz + 1, int(sz[i] + radius + 1)),
-                        )
-                        if self.is_3d
-                        else range(1)
-                    )
-
-                    for z in z_range:
-                        for x in x_range:
-                            for y in y_range:
-                                dist_sq = (
-                                    (x - sx[i]) ** 2
-                                    + (y - sy[i]) ** 2
-                                    + ((z - sz[i]) ** 2 if self.is_3d else 0)
-                                )
-                                if dist_sq <= radius**2:
-                                    n_idx = self._get_node_idx(
-                                        x, y, z if self.is_3d else 0
-                                    )
-                                    nodes_to_fix.append(n_idx)
-
-                for node_idx in nodes_to_fix:
-                    node_dof = self.dim_mul * node_idx
-                    if "X" in sdim[i]:
-                        fixed.append(node_dof)
-                    if "Y" in sdim[i]:
-                        fixed.append(node_dof + 1)
-                    if self.is_3d and "Z" in sdim[i]:
-                        fixed.append(node_dof + 2)
-
-        self.fixed_dofs = np.unique(fixed).astype(np.int64)
+        self.fixed_dofs = np.unique(np.asarray(fixed, dtype=np.int64))
         self.free_dofs = np.setdiff1d(
             np.arange(self.ndof, dtype=np.int64), self.fixed_dofs
         )
 
-    def apply_regions(self, x: FloatArray, regions: dict) -> FloatArray:
+    def _nodes_within_radius(self, sup: Support) -> list[int]:
+        """All node indices within ``sup.radius`` of the support center."""
+        radius = float(sup.radius)
+        x_range = range(
+            max(0, int(sup.x - radius)), min(self.nelx + 1, int(sup.x + radius + 1))
+        )
+        y_range = range(
+            max(0, int(sup.y - radius)), min(self.nely + 1, int(sup.y + radius + 1))
+        )
+        z_range = (
+            range(
+                max(0, int(sup.z - radius)),
+                min(self.nelz + 1, int(sup.z + radius + 1)),
+            )
+            if self.is_3d
+            else range(1)
+        )
+        nodes: list[int] = []
+        for z in z_range:
+            for x in x_range:
+                for y in y_range:
+                    dist_sq = (
+                        (x - sup.x) ** 2
+                        + (y - sup.y) ** 2
+                        + ((z - sup.z) ** 2 if self.is_3d else 0)
+                    )
+                    if dist_sq <= radius**2:
+                        nodes.append(self.grid.node_index(x, y, z))
+        return nodes
+
+    def _assemble_loads(self, loads: Sequence[Load]) -> tuple[FloatArray, list[int]]:
+        """
+        Assemble one force vector column per load.
+
+        Returns
+        -------
+        tuple[FloatArray, list[int]]
+            (force_matrix of shape (ndof, n_loads), loaded DOF indices).
+        """
+        f_vec = np.zeros((self.ndof, len(loads)), dtype=np.float64)
+        dofs: list[int] = []
+        for col, load in enumerate(loads):
+            node = self.grid.node_index(load.x, load.y, load.z if self.is_3d else 0)
+            dof = self.dim_mul * node + load.axis
+            f_vec[dof, col] = load.signed_magnitude()
+            dofs.append(dof)
+        return f_vec, dofs
+
+    def apply_regions(self, x: FloatArray, regions: Sequence[Region]) -> FloatArray:
         """
         Apply geometric constraints (Regions) to the density field.
 
@@ -215,12 +241,19 @@ class FEM:
                 \\rho_e, & \\text{otherwise}
             \\end{cases}
 
+        Notes
+        -----
+        Coverage convention (kept identical to the GUI preview and historic
+        presets): a region spans element indices ``[int(c - r), int(c + r))``
+        per axis; spheres additionally require
+        ``dist(element, center) <= r``.
+
         Parameters
         ----------
         x : FloatArray
-            Current design variable vector.
-        Regions : Dict
-            Region definitions with 'rshape', 'rx', 'ry', 'rz', 'rradius', 'rstate'.
+            Current design variable vector (flat element ordering).
+        regions : Sequence[Region]
+            Geometric constraints.
 
         Returns
         -------
@@ -228,47 +261,37 @@ class FEM:
             Modified density field with regions applied.
         """
         xPhys = x.copy()
-        rshape: list[str] = regions.get("rshape", [])
-        if not rshape:
-            return xPhys
-
-        rx: list[float] = regions.get("rx", [])
-        ry: list[float] = regions.get("ry", [])
-        rz: list[float] = regions.get("rz", [])
-        rradius: list[float] = regions.get("rradius", [])
-        rstate: list[str] = regions.get("rstate", [])
-
-        active_regions: list[int] = [i for i, s in enumerate(rshape) if s != "-"]
-
-        for i in active_regions:
-            val = 1e-6 if rstate[i] == "Void" else 1.0
-            r = float(rradius[i])
+        for region in regions:
+            val = 1.0 if region.solid else 1e-6
+            r = float(region.radius)
             z_range = (
-                range(max(0, int(rz[i] - r)), min(self.nelz, int(rz[i] + r)))
+                range(
+                    max(0, int(region.z - r)),
+                    min(self.nelz, int(region.z + r)),
+                )
                 if self.is_3d
                 else range(1)
             )
+            x_range = range(
+                max(0, int(region.x - r)),
+                min(self.nelx, int(region.x + r)),
+            )
+            y_range = range(
+                max(0, int(region.y - r)),
+                min(self.nely, int(region.y + r)),
+            )
             for ez in z_range:
-                for ex in range(max(0, int(rx[i] - r)), min(self.nelx, int(rx[i] + r))):
-                    for ey in range(
-                        max(0, int(ry[i] - r)), min(self.nely, int(ry[i] + r))
-                    ):
-                        # Geometric check
-                        if rshape[i] == "◯":
+                for ex in x_range:
+                    for ey in y_range:
+                        if region.shape == "sphere":
                             dist_sq = (
-                                (ex - rx[i]) ** 2
-                                + (ey - ry[i]) ** 2
-                                + ((ez - rz[i]) ** 2 if self.is_3d else 0)
+                                (ex - region.x) ** 2
+                                + (ey - region.y) ** 2
+                                + ((ez - region.z) ** 2 if self.is_3d else 0)
                             )
                             if dist_sq > r**2:
                                 continue
-
-                        idx = (
-                            (ez * self.nelx * self.nely if self.is_3d else 0)
-                            + ex * self.nely
-                            + ey
-                        )
-                        xPhys[idx] = val
+                        xPhys[self.grid.element_index(ex, ey, ez)] = val
         return xPhys
 
     def solve(self, xPhys: FloatArray) -> tuple[FloatArray, FloatArray]:
@@ -298,31 +321,38 @@ class FEM:
         Returns
         -------
         Tuple[FloatArray, FloatArray]
-            (ui, uo) - Displacement arrays for input and output forces.
+            (ui, uo) - Displacement arrays for input and output loads.
         """
-        # Assembly
-        E_eff = (
-            self.E_min[:, None] + xPhys**self.penal * (self.E_max - self.E_min)[:, None]
-        ).sum(axis=0)
-
+        E_eff = self._effective_stiffness(xPhys)
         sK = self._KE_flat[:, None] * E_eff
 
+        # Element triplets + artificial spring triplets in a single assembly.
         K = coo_matrix(
-            (sK.ravel(order="F"), (self.iK, self.jK)),
+            (
+                np.concatenate([sK.ravel(order="F"), self._spring_vals]),
+                (
+                    np.concatenate([self.iK, self._spring_dofs]),
+                    np.concatenate([self.jK, self._spring_dofs]),
+                ),
+            ),
             shape=(self.ndof, self.ndof),
         ).tocsc()
-        # Add artificial stiffness at force locations
-        self._add_artificial_springs(K, self.di_indices, self.fi_indices, self.finorm)
-        self._add_artificial_springs(K, self.do_indices, self.fo_indices, self.fonorm)
 
         # Solving
         K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
-        ui = np.zeros((self.ndof, len(self.fi_indices)), dtype=np.float64)
-        uo = np.zeros((self.ndof, len(self.fo_indices)), dtype=np.float64)
-        self._solve_linear_system(K_free, self.forces_i, self.fi_indices, ui)
-        self._solve_linear_system(K_free, self.forces_o, self.fo_indices, uo)
+        ui = np.zeros((self.ndof, len(self.loads_in)), dtype=np.float64)
+        uo = np.zeros((self.ndof, len(self.loads_out)), dtype=np.float64)
+        self._solve_linear_system(K_free, self.forces_i, ui)
+        self._solve_linear_system(K_free, self.forces_o, uo)
 
         return ui, uo
+
+    def _effective_stiffness(self, xPhys: FloatArray) -> FloatArray:
+        """SIMP effective stiffness per element, shape (nel,)."""
+        xP = np.atleast_2d(np.asarray(xPhys, dtype=np.float64))
+        return (
+            self.E_min[:, None] + xP**self.penal * (self.E_max - self.E_min)[:, None]
+        ).sum(axis=0)
 
     def compute_ce(self, ui: FloatArray, uo: FloatArray) -> FloatArray:
         """
@@ -355,33 +385,36 @@ class FEM:
         Parameters
         ----------
         ui : FloatArray
-            Displacements due to input forces, shape (ndof, n_inputs).
+            Displacements due to input loads, shape (ndof, n_inputs).
         uo : FloatArray
-            Displacements due to output forces, shape (ndof, n_outputs).
+            Displacements due to output (adjoint) loads, shape (ndof, n_outputs).
 
         Returns
         -------
         FloatArray
-            Element compliance values, shape (nel,).
+            Element energy values, shape (nel,).
         """
-        nb_out = len(self.fo_indices)
         ce_total = np.zeros(self.nel, dtype=np.float64)
 
-        if nb_out == 0:  # Rigid Mechanism (Minimize Compliance)
-            for i_in in range(len(self.fi_indices)):
+        if not self.loads_out:  # Rigid structure (minimize compliance)
+            for i_in in range(len(self.loads_in)):
                 Ue = ui[self.edofMat, i_in]
                 ce_total += np.sum((Ue @ self.KE) * Ue, axis=1)
-        else:  # Compliant Mechanism
-            for i_in in range(len(self.fi_indices)):
+        else:  # Compliant mechanism
+            for i_in in range(len(self.loads_in)):
                 Ue_in = ui[self.edofMat, i_in]
-                for i_out in range(len(self.fo_indices)):
+                for i_out in range(len(self.loads_out)):
                     Ue_out = uo[self.edofMat, i_out]
                     ce_total += np.sum((Ue_in @ self.KE) * Ue_out, axis=1)
 
         return ce_total
 
     def compute_sensitivities(
-        self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray
+        self,
+        xPhys: FloatArray,
+        ui: FloatArray,
+        uo: FloatArray,
+        mat_idx: int = 0,
     ) -> tuple[FloatArray, FloatArray]:
         """
         Calculate sensitivity derivatives for optimization.
@@ -394,34 +427,40 @@ class FEM:
             \\frac{\\partial C}{\\partial \\rho_e}
             = -p\\rho_e^{p-1}(E_0 - E_{\\min})c_e
 
-        The implemented sign is reversed for the compliant-mechanism objective,
-        where output motion is maximized rather than compliance minimized. The
-        volume derivative is:
+        For the compliant-mechanism objective (output displacement
+        :math:`u_{out}` computed with the adjoint solve ``uo``), the exact
+        derivative is:
 
         .. math::
 
-            \\frac{\\partial V}{\\partial \\rho_e} = 1
+            \\frac{\\partial u_{out}}{\\partial \\rho_e}
+            = -p\\rho_e^{p-1}(E_0 - E_{\\min})c_e
+
+        which is returned with a positive sign so that the OC update (a
+        minimizer) maximizes the output displacement.
 
         Parameters
         ----------
         xPhys : FloatArray
-            Physical element densities.
+            Physical element densities of material ``mat_idx``, shape (nel,).
         ui, uo : FloatArray
             Displacement solutions.
+        mat_idx : int
+            Material index used for the stiffness scale factor.
 
         Returns
         -------
         Tuple[FloatArray, FloatArray]
-            (dc, dv) - Compliance sensitivity and volume sensitivity.
+            (dc, dv) - Objective sensitivity and volume sensitivity.
         """
-        nb_out = len(self.fo_indices)
         ce_total = self.compute_ce(ui, uo)
+        dE = self.E_max[mat_idx] - self.E_min[mat_idx]
+        scale = self.penal * (xPhys ** (self.penal - 1)) * dE
 
-        # Compliance / Objective Calculation
-        if nb_out == 0:  # Rigid Mechanism (Minimize Compliance)
-            dc = -self.penal * (xPhys ** (self.penal - 1)) * ce_total
-        else:  # Compliant Mechanism
-            dc = self.penal * (xPhys ** (self.penal - 1)) * ce_total
+        if not self.loads_out:  # Rigid structure (minimize compliance)
+            dc = -scale * ce_total
+        else:  # Compliant mechanism (maximize output displacement)
+            dc = scale * ce_total
 
         # Volume Sensitivity (dv)
         dv: FloatArray = np.ones(self.nel, dtype=np.float64)
@@ -442,12 +481,15 @@ class FEM:
             C(\\boldsymbol{\\rho}) =
             \\sum_{e=1}^{n_e} E_e(\\rho_e)c_e
 
-        Compliant mechanisms use an output-displacement objective:
+        Compliant mechanisms report the signed output displacement under the
+        input loads, averaged over load-case/output pairs (positive when the
+        output moves in the intended direction):
 
         .. math::
 
             J(\\boldsymbol{\\rho}) =
-            \\frac{1}{n_o}\\sum_{i=1}^{n_o}|u_{o,i}|
+            \\frac{1}{n_i n_o}\\sum_{i=1}^{n_i}\\sum_{o=1}^{n_o}
+            s_o\\, u_{i}[d_o]
 
         Parameters
         ----------
@@ -459,138 +501,28 @@ class FEM:
         float
             Objective function value.
         """
-        if len(self.fo_indices) == 0:
-            # Rigid Mechanism (Minimize Compliance)
-            E_eff = np.full(self.nel, self.E_min[0], dtype=np.float64)
-            for i, E_i in enumerate(self.E_max):
-                E_eff += xPhys[i] ** self.penal * (E_i - self.E_min[i])
+        if not self.loads_out:
+            # Rigid structure (minimize compliance)
+            E_eff = self._effective_stiffness(xPhys)
             ce_total = self.compute_ce(ui, uo)
             return float((E_eff * ce_total).sum())
-        r"""
-        E(\rho) = E_{min} + \rho^p (E_0 - E_{min})
-        """
-        # Compliant Mechanism: maximize average output displacement
-        return float(
-            np.mean([abs(uo[dof, idx]) for idx, dof in enumerate(self.do_indices)])
-        )
+
+        # Compliant mechanism: signed output displacement under input loads.
+        if ui.shape[1] == 0:
+            return 0.0
+        vals = [
+            load.sign * ui[dof, i_in]
+            for dof, load in zip(self.out_dofs, self.loads_out)
+            for i_in in range(ui.shape[1])
+        ]
+        return float(np.mean(vals))
 
     # --- Internal Helper Methods ---
-
-    def _get_node_idx(self, x: int, y: int, z: int) -> int:
-        """
-        Convert 3D element coordinates to a single node index.
-
-        Parameters
-        ----------
-        x, y, z : int
-            Element coordinates in each dimension.
-
-        Returns
-        -------
-        int
-            The flattened node index.
-        """
-        return (
-            (z * (self.nelx + 1) * (self.nely + 1) if self.is_3d else 0)
-            + x * (self.nely + 1)
-            + y
-        )
-
-    def _parse_forces(
-        self,
-        Forces: dict,
-        kx: str,
-        ky: str,
-        kz: str,
-        kdir: str,
-        knorm: str,
-    ) -> tuple[FloatArray, list[int], list[int]]:
-        """
-        Parse force parameters and build force vectors.
-
-        Parameters
-        ----------
-        Forces : dict
-            Force parameters dictionary.
-        kx, ky, kz : str
-            Dictionary keys for x, y, z coordinates.
-        kdir : str
-            Dictionary key for force direction.
-        knorm : str
-            Dictionary key for force magnitude.
-
-        Returns
-        -------
-        tuple[FloatArray, list[int], list[int]]
-            (force_vector, active_indices, dof_indices) - The assembled force
-            vector, indices of active forces, and corresponding DOF indices.
-        """
-        fx = Forces.get(kx, [])
-        fy = Forces.get(ky, [])
-        fz = Forces.get(kz, []) if self.is_3d else []
-        fdir = Forces.get(kdir, [])
-        fnorm = Forces.get(knorm, [])
-
-        active_indices = [i for i, val in enumerate(fdir) if val != "-"]
-        f_vec = np.zeros((self.ndof, len(active_indices)), dtype=np.float64)
-        dof_indices: list[int] = []
-
-        for mat_idx, i in enumerate(active_indices):
-            node = self._get_node_idx(fx[i], fy[i], fz[i] if self.is_3d else 0)
-            val = fnorm[i]
-            dof = self.dim_mul * node
-            if "X" in fdir[i]:
-                if "←" in fdir[i]:
-                    val = -val
-            elif "Y" in fdir[i]:
-                dof += 1
-                if "↑" in fdir[i]:
-                    val = -val
-            elif self.is_3d and "Z" in fdir[i]:
-                dof += 2
-                if ">" in fdir[i]:
-                    val = -val
-
-            f_vec[dof, mat_idx] = val
-            dof_indices.append(dof)
-
-        return f_vec, active_indices, dof_indices
-
-    def _add_artificial_springs(
-        self,
-        K: csc_matrix,
-        dofs: list[int],
-        active_indices: list[int],
-        norms: list[float],
-    ) -> None:
-        """
-        Add artificial spring stiffness at force locations.
-
-        .. math::
-
-            K_{ii} \\leftarrow K_{ii} + k_s
-
-        Parameters
-        ----------
-        K : csc_matrix
-            Global stiffness matrix (modified in place).
-        dofs : list[int]
-            List of DOF indices where springs are added.
-        active_indices : list[int]
-            Indices mapping to the norms array.
-        norms : list[float]
-            Spring stiffness values.
-        """
-        for i, dof in enumerate(dofs):
-            original_idx = active_indices[i]
-            if original_idx < len(norms) and norms[original_idx] > 0:
-                K[dof, dof] += norms[original_idx]
 
     def _solve_linear_system(
         self,
         K_free: csc_matrix,
         F: FloatArray | None,
-        active_indices: list[int],
         U_full: FloatArray,
     ) -> None:
         """
@@ -608,13 +540,11 @@ class FEM:
         K_free : csc_matrix
             Reduced stiffness matrix (free DOFs only).
         F : FloatArray | None
-            Force vector.
-        active_indices : list[int]
-            Indices of active forces.
+            Force matrix, shape (ndof, n_cases).
         U_full : FloatArray
-            Displacement vector to fill (modified in place).
+            Displacement matrix to fill (modified in place).
         """
-        if not active_indices or F is None:
+        if F is None or F.shape[1] == 0:
             return
 
         use_direct = self.solver_type == "Direct" or (
@@ -631,13 +561,13 @@ class FEM:
             # Iterative Solver (CG with Jacobi Preconditioner)
             D_inv = 1.0 / K_free.diagonal()
             M = LinearOperator(K_free.shape, lambda x: D_inv * x)
-            for i in range(len(active_indices)):
+            for i in range(F.shape[1]):
                 if np.any(F[self.free_dofs, i]):
                     u_sol, info = cg(
                         K_free,
                         F[self.free_dofs, i],
                         M=M,
-                        rtol=1e-6,
+                        rtol=1e-8,
                         maxiter=K_free.shape[0],
                     )
                     if info != 0 and self.solver_type == "Auto":
@@ -679,7 +609,7 @@ class FEM:
         x : FloatArray
             Design variables.
         dc : FloatArray
-            Compliance sensitivities.
+            Objective sensitivities.
         dv : FloatArray
             Volume sensitivities.
 
@@ -746,7 +676,11 @@ class FEM:
             )
             k = 1 / 72 * (A.T @ np.array([1.0, nu], dtype=np.float64))
             K_blocks = self._build_3d_blocks(k)
-            return (E / ((nu + 1) * (1 - 2 * nu)) * K_blocks).astype(np.float64)
+            # The classic top3d coefficient table corresponds to a 2x2x2
+            # element; the 0.5 factor rescales it to the unit cube so 2D and
+            # 3D elements share the same unit-element convention (verified
+            # against Gauss-quadrature integration in tests/test_numerics.py).
+            return (0.5 * E / ((nu + 1) * (1 - 2 * nu)) * K_blocks).astype(np.float64)
         else:
             k = np.array(
                 [
@@ -878,14 +812,9 @@ class FEM:
             (edofMat, iK, jK) - Element DOF matrix and sparse matrix indices.
         """
         size = 8 * (self.elemndof if self.is_3d else 1)
-        el = np.arange(self.nel)
+        ex, ey, ez = self.grid.element_coordinates()
 
-        # Vectorize elemental coordinates
         if self.is_3d:
-            ez = el // (self.nelx * self.nely)
-            rem = el % (self.nelx * self.nely)
-            ex = rem // self.nely
-            ey = rem % self.nely
             n1 = ez * (self.nelx + 1) * (self.nely + 1) + ex * (self.nely + 1) + ey
 
             # Bottom + Top face nodes
@@ -904,8 +833,6 @@ class FEM:
                 dtype=np.int64,
             )
         else:
-            ex = el // self.nely
-            ey = el % self.nely
             n1 = ex * (self.nely + 1) + ey
             base_nodes = np.array([1, self.nely + 2, self.nely + 1, 0], dtype=np.int64)
 
@@ -940,23 +867,14 @@ class FEM:
         tuple
             (H, Hs) - Sparse filter matrix and row sums for normalization.
         """
-        if self.filter_radius <= 0:
-            # No error rased since it is equivalent to no filtering.
+        if self.filter_radius <= 0 or self.filter_type == "None":
+            # No error raised since it is equivalent to no filtering.
             H = eye(self.nel, format="csc", dtype=np.float64)
             Hs = np.ones(self.nel, dtype=np.float64)
             return H, Hs
 
+        ex, ey, ez = self.grid.element_coordinates()
         el = np.arange(self.nel)
-
-        # Map 1D element arrays to 2D/3D indices
-        if self.is_3d:
-            ez = el // (self.nelx * self.nely)
-            rem = el % (self.nelx * self.nely)
-            ex = rem // self.nely
-            ey = rem % self.nely
-        else:
-            ex = el // self.nely
-            ey = el % self.nely
 
         # Pre-calculate the localized relative neighbor meshgrid
         r = int(np.ceil(self.filter_radius))

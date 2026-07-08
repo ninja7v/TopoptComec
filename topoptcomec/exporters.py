@@ -1,4 +1,4 @@
-# app/ui/exporters.py
+# topoptcomec/ui/exporters.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Export result to various file formats.
 

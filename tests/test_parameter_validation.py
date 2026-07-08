@@ -4,8 +4,8 @@
 
 import numpy as np
 from unittest.mock import patch
-from app.gui.main_window import MainWindow
-from app.parameter_check import ParameterCheck
+from topoptcomec.gui.main_window import MainWindow
+from topoptcomec.parameter_check import ParameterCheck
 
 
 def _validate(window: MainWindow, params: dict) -> str | None:

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 
-from app.gui.widgets import (
+from topoptcomec.gui.widgets import (
     CollapsibleSection,
     ColorPickerButton,
     DimensionsWidget,

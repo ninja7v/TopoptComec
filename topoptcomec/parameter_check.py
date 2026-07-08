@@ -1,4 +1,4 @@
-# app/parameter_check.py
+# topoptcomec/parameter_check.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Check input parameters.
 
@@ -110,6 +110,15 @@ class ParameterCheck:
             return "Optimizer max_change must be positive."
         if po.get("n_it", 0) <= 0:
             return "Optimizer iteration count must be positive."
+        solver: str = po.get("solver", "Auto")
+        if solver not in ("Direct", "Iterative", "Auto"):
+            return f"Unknown solver '{solver}' (expected Direct, Iterative or Auto)."
+        filter_type: str = po.get("filter_type", "Sensitivity")
+        if filter_type not in ("Sensitivity", "Density", "None"):
+            return (
+                f"Unknown filter type '{filter_type}' "
+                "(expected Sensitivity, Density or None)."
+            )
 
     def _check_duplicates(
         self, indices: list, keyfunc: callable, msg: callable
@@ -191,7 +200,7 @@ class ParameterCheck:
         str or None
             Error message if duplicate found, None otherwise.
         """
-        pr: dict = params.get("Region")
+        pr: dict = params.get("Regions")
         if not pr:
             return
 

@@ -1,4 +1,4 @@
-# app/ui/icons.py
+# topoptcomec/ui/icons.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Icon management.
 

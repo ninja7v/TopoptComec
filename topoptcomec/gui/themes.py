@@ -1,4 +1,4 @@
-# app/ui/themes.py
+# topoptcomec/ui/themes.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Stylesheets for the Light and Dark themes.
 
