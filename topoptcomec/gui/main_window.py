@@ -131,7 +131,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     def _create_control_panel(self) -> None:
         """Creates the right-hand side control panel with all settings."""
         self.control_panel_frame = QFrame()
-        self.control_panel_frame.setFixedWidth(350)
+        # Must be big enough to accomodate the widest section + the right scrollbar
+        self.control_panel_frame.setFixedWidth(375)
         panel_layout = QVBoxLayout(self.control_panel_frame)
 
         # Header
