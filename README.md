@@ -26,11 +26,12 @@ cd topoptcomec
 ```
 
 ### 2. Run
-GUI:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't already have it.
+#### GUI:
 ```bash
 uv run topoptcomec
 ```
-CLI:
+#### CLI:
 ```bash
 uv run topoptcomec -p ForceInverter_2Sup_2D --preview
 ```
