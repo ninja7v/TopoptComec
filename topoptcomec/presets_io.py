@@ -44,7 +44,7 @@ def resolve_presets_file(explicit: str | None = None, writable: bool = False) ->
     if explicit is not None:
         return Path(explicit)
 
-    cwd_presets = Path.cwd() / "presets.json"
+    cwd_presets = Path.cwd() / "topoptcomec" / "presets.json"
     if cwd_presets.is_file():
         return cwd_presets
 
