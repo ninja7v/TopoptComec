@@ -412,7 +412,10 @@ def _run_single_preset(
     if preview:
         from topoptcomec.cli.cli_preview import render_preview
 
-        print(render_preview(xPhys, params["Dimensions"]["nelxyz"]))
+        preview_colors = params.get("Materials", {}).get("color", None)
+        print(
+            render_preview(xPhys, params["Dimensions"]["nelxyz"], colors=preview_colors)
+        )
 
     _export_results(
         preset_name,
