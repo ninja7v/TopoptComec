@@ -136,7 +136,6 @@ class PlottingMixin:
                         rgb_image.reshape((nelx, nely, 3)),
                         shading="auto",
                     )
-
                 else:
                     # Single-material logic
                     hex_color: str = to_hex(
