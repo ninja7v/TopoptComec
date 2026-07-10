@@ -24,44 +24,19 @@ Open the folder you want TopoptComec to be in a terminal and run:
 git clone https://github.com/ninja7V/topoptcomec.git
 cd topoptcomec
 ```
-### 2. Set up the environment (once)
-Create and activate a virtual environment:
-```bash
-python -m venv .venv
-```
-- macOS / Linux:
-```bash
-source .venv/bin/activate
-```
-- Windows PowerShell:
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-- Windows CMD:
-```cmd
-.\.venv\Scripts\activate.bat
-```
-Then install:
-```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install -e .
-```
 
-### 3. Run
-> **Note:** Always activate the virtual environment first (see step 2) before running `topoptcomec`.
-
+### 2. Run
 GUI:
 ```bash
-topoptcomec
+uv run topoptcomec
 ```
 CLI:
 ```bash
-topoptcomec -p ForceInverter_2Sup_2D --preview
+uv run topoptcomec -p ForceInverter_2Sup_2D --preview
 ```
-<img width="500" alt="image" src="https://github.com/user-attachments/assets/da6c85da-66ff-459b-b7fd-63d62f638839" />
+<img width="500" alt="image" src="https://github.com/user-attachments/assets/bf4e7643-2014-4521-bf0c-4d2cc78c7fe7" />
 
-### Create
+### 3. Create
 Tweak the parameters or choose a preset and hit "Create"!
 
 > **Units:** TopoptComec is unit-agnostic — one grid element = one length unit, and `E`/forces are whatever consistent unit system you choose. See `docs/GLOSSARY.md` (Units and Conventions) for details, including the artificial-spring convention at load points.
