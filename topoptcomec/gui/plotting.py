@@ -93,11 +93,26 @@ class PlottingMixin:
                 ) / 8.0
 
                 # Colors with alpha = density
-                colors: np.ndarray = np.zeros((nel, 4))
-                colors[:, :3] = to_rgb(
-                    self.materials_widget.inputs[0]["color"].get_color()
-                )
-                colors[:, 3] = self.xPhys
+                is_multi_3d: bool = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
+                if is_multi_3d:
+                    n_mat, _ = self.xPhys.shape
+                    rgb_3d: np.ndarray = np.ones((nel, 3))
+                    for i in range(n_mat):
+                        mat_rgb: np.ndarray = np.array(
+                            to_rgb(self.materials_widget.inputs[i]["color"].get_color())
+                        )
+                        rgb_3d += self.xPhys[i, :, np.newaxis] * (mat_rgb - 1.0)
+                    rgb_3d = np.clip(rgb_3d, 0.0, 1.0)
+                    alpha_3d: np.ndarray = self.xPhys.sum(axis=0).clip(0.0, 1.0)
+                    colors: np.ndarray = np.zeros((nel, 4))
+                    colors[:, :3] = rgb_3d
+                    colors[:, 3] = alpha_3d
+                else:
+                    colors = np.zeros((nel, 4))
+                    colors[:, :3] = to_rgb(
+                        self.materials_widget.inputs[0]["color"].get_color()
+                    )
+                    colors[:, 3] = self.xPhys
 
                 # Scatter plot of displaced centers
                 ax.scatter(
@@ -118,16 +133,13 @@ class PlottingMixin:
                 if is_multi:
                     n_mat, nel = self.xPhys.shape
                     rgb_image: np.ndarray = np.ones((nel, 3))  # Start white
-
                     for i in range(n_mat):
                         mat_rgb: np.ndarray = np.array(
                             to_rgb(self.materials_widget.inputs[i]["color"].get_color())
                         )
                         # Blend: pixel = sum(rho_i * color_i)
                         rgb_image += self.xPhys[i, :, np.newaxis] * (mat_rgb - 1.0)
-
                     rgb_image = np.clip(rgb_image, 0.0, 1.0)
-
                     # Matplotlib's pcolormesh natively accepts 3D RGB arrays for the C parameter.
                     # We reshape the (nel, 3) list into the 2D grid shape (nelx, nely, 3).
                     ax.pcolormesh(
@@ -136,7 +148,6 @@ class PlottingMixin:
                         rgb_image.reshape((nelx, nely, 3)),
                         shading="auto",
                     )
-
                 else:
                     # Single-material logic
                     hex_color: str = to_hex(
