@@ -102,7 +102,7 @@ def parse_supports(supports: dict | None, is_3d: bool) -> list[Support]:
 
 
 def parse_regions(regions: dict | None) -> list[Region]:
-    """Convert the legacy Regions dictionary to a list of Regions."""
+    """Convert the Regions dictionary to a list of Regions."""
     if not regions:
         return []
     rshape = regions.get("rshape", [])
@@ -123,7 +123,11 @@ def parse_regions(regions: dict | None) -> list[Region]:
                 y=float(ry[i]),
                 z=float(rz[i]) if i < len(rz) else 0.0,
                 radius=float(rradius[i]),
-                solid=rstate[i] != "Void",
+                material=0
+                if rstate[i] == "Material 1"
+                else 1
+                if rstate[i] == "Material 2"
+                else -1,
             )
         )
     return result

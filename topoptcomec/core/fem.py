@@ -228,18 +228,16 @@ class FEM:
             dofs.append(dof)
         return f_vec, dofs
 
-    def apply_regions(self, x: FloatArray, regions: Sequence[Region]) -> FloatArray:
+    def apply_regions(
+        self, x: FloatArray, regions: Sequence[Region], mat_idx: int = 0
+    ) -> FloatArray:
         """
-        Apply geometric constraints (Regions) to the density field.
+        Force geometric regions to a target density in the physical field.
 
-        .. math::
-
-            \\rho_e =
-            \\begin{cases}
-                \\rho_{\\min}, & e \\in \\Omega_{void} \\\\
-                1, & e \\in \\Omega_{solid} \\\\
-                \\rho_e, & \\text{otherwise}
-            \\end{cases}
+        For multi-material runs each call operates on a single material
+        slice (``mat_idx``): a region whose ``material`` matches ``mat_idx``
+        is forced to solid (1.0), any region targeting a *different* material
+        or void (``-1``) is forced to void (1e-6) within this slice.
 
         Notes
         -----
@@ -254,6 +252,8 @@ class FEM:
             Current design variable vector (flat element ordering).
         regions : Sequence[Region]
             Geometric constraints.
+        mat_idx : int
+            Index of the material slice being processed (0-based).
 
         Returns
         -------
@@ -262,7 +262,7 @@ class FEM:
         """
         xPhys = x.copy()
         for region in regions:
-            val = 1.0 if region.solid else 1e-6
+            val = 1.0 if region.material == mat_idx else 1e-6
             r = float(region.radius)
             z_range = (
                 range(

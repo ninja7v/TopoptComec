@@ -205,7 +205,7 @@ def test_e_min_scales_with_e_max():
 
 def test_regions_void(fem_2d: FEM):
     """Test that applying a Void region forces density to near-zero."""
-    regions = [Region(shape="box", x=0, y=0, radius=1.0, solid=False)]
+    regions = [Region(shape="box", x=0, y=0, radius=1.0, material=-1)]
 
     x = np.ones(fem_2d.nel)  # Start fully solid
     x_new = fem_2d.apply_regions(x, regions)

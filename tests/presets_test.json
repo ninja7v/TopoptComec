@@ -6,7 +6,7 @@
         },
         "Regions": {
             "rshape": ["□"],
-            "rstate": ["Fill"],
+            "rstate": ["Material 1"],
             "rradius": [1],
             "rx": [0],
             "ry": [0],
