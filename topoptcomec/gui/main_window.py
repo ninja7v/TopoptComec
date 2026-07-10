@@ -50,7 +50,6 @@ from .widgets import (
     PresetWidget,
     RegionsWidget,
     SupportWidget,
-    _normalize_rstate,
 )
 from .workers import AnalysisWorker, DisplacementWorker, OptimizerWorker
 from .plotting import PlottingMixin
@@ -1145,9 +1144,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             rw["rshape"].blockSignals(True)
             rw["rstate"].blockSignals(True)
             rw["rshape"].setCurrentText(pr["rshape"][i])
-            rstate = _normalize_rstate(
-                pr["rstate"][i], len(self.regions_widget._materials)
-            )
+            rstate = rw["rstate"]
+            if rstate == "Material 2" and len(self._materials) < 2:
+                rstate = "Material 1"
             idx = rw["rstate"].findData(rstate)
             if idx == -1:
                 idx = rw["rstate"].findData("Void")
