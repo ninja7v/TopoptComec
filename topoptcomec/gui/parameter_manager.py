@@ -52,7 +52,7 @@ class ParameterManagerMixin:
         }
         for rw in self.regions_widget.inputs:
             Regions["rshape"].append(rw["rshape"].currentText())
-            Regions["rstate"].append(rw["rstate"].currentText())
+            Regions["rstate"].append(rw["rstate"].currentData() or "Void")
             Regions["rradius"].append(rw["rradius"].value())
             Regions["rx"].append(rw["rx"].value())
             Regions["ry"].append(rw["ry"].value())

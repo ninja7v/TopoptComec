@@ -204,7 +204,7 @@ p_different_region = {
     },
     "Regions": {
         "rshape": ["□"],
-        "rstate": ["Filled"],
+        "rstate": ["Material 1"],
         "rradius": [5],
         "rx": [25],
         "ry": [20],
@@ -270,7 +270,7 @@ p_different = {
     },
     "Regions": {
         "rshape": ["□"],
-        "rstate": ["Filled"],
+        "rstate": ["Material 1"],
         "rradius": [7],
         "rx": [20],
         "ry": [30],
@@ -367,7 +367,7 @@ def test_gather_and_apply_parameters(qt_app):
     if "Regions" not in modified_params:
         modified_params["Regions"] = {}
     modified_params["Regions"]["rshape"] = ["□", "◯"]
-    modified_params["Regions"]["rstate"] = ["Void", "Filled"]
+    modified_params["Regions"]["rstate"] = ["Void", "Material 1"]
     modified_params["Regions"]["rradius"] = [5, 10]
     modified_params["Regions"]["rx"] = [10, 20]
     modified_params["Regions"]["ry"] = [10, 20]

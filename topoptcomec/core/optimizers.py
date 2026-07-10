@@ -247,7 +247,7 @@ def optimize(
         )[np.newaxis, :]
 
     for i in range(n_mat):
-        x[i] = fem.apply_regions(x[i], regions)
+        x[i] = fem.apply_regions(x[i], regions, mat_idx=i)
     xPhys: FloatArray = x.copy()
     g: FloatArray = np.zeros(n_mat, dtype=np.float64)
 
@@ -287,7 +287,7 @@ def optimize(
             dc_i, dv_i = fem.compute_sensitivities(xPhys[i], ui, uo, mat_idx=i)
             x[i], g[i] = _oc(fem.nel, x[i], eta, max_change, dc_i, dv_i, g[i])
             xPhys[i] = fem.update_xPhys(x[i])
-            xPhys[i] = fem.apply_regions(xPhys[i], regions)
+            xPhys[i] = fem.apply_regions(xPhys[i], regions, mat_idx=i)
         if multimaterial:
             # Partition-of-unity constraint: sum of densities <= 1 per element
             col_sums: FloatArray = xPhys.sum(axis=0)

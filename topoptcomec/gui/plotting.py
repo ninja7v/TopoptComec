@@ -315,12 +315,19 @@ class PlottingMixin:
                         indices = jj + ii * nely
 
             if indices is not None:
-                value: float = 1e-6 if pr["rstate"][i] == "Void" else 1.0
+                if pr["rstate"][i] == "Material 1":
+                    mat = 0
+                elif pr["rstate"][i] == "Material 2":
+                    mat = 1
+                else:  # "Void"
+                    mat = -1
                 flat_idx: np.ndarray = indices.flatten()
                 if self.xPhys.ndim == 1:
-                    self.xPhys[flat_idx] = value
+                    self.xPhys[flat_idx] = 1.0 if mat == 0 else 1e-6
                 else:
-                    self.xPhys[:, flat_idx] = value
+                    self.xPhys[:, flat_idx] = 1e-6
+                    if mat >= 0:
+                        self.xPhys[mat, flat_idx] = 1.0
 
     def _show_initial_message(self, ax: plt.Axes, is_3d: bool) -> None:
         """

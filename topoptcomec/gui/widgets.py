@@ -3,7 +3,7 @@
 # Custom PySide6 widgets for the TopoptComec UI.
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QFont
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
@@ -450,7 +450,7 @@ class DimensionsWidget(QWidget):
 
 class RegionsWidget(QWidget):
     """
-    Widget for defining void/filled regions in the design domain.
+    Widget for defining material/void regions in the design domain.
 
     Supports adding and removing regions with shape, state, radius, and position.
     """
@@ -461,6 +461,7 @@ class RegionsWidget(QWidget):
         """Initialize the regions widget."""
         super().__init__()
         self.inputs = []  # This list will hold the input widgets so the MainWindow can access them
+        self._materials: list[str] = ["#000000"]  # hex color per material
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setSpacing(10)
@@ -476,6 +477,43 @@ class RegionsWidget(QWidget):
         self.add_btn.setToolTip("Add a region")
         self.main_layout.addWidget(self.add_btn, alignment=Qt.AlignLeft)
         self.main_layout.addStretch()
+
+    def set_materials(self, colors: list[str]) -> None:
+        """
+        Update the color palette used to label region material entries.
+
+        Rebuilds every existing rstate combo box so that each "Material" item
+        is shown in the color of its corresponding material, adding or removing
+        the second-material entry as needed while preserving the current
+        selection (matched by canonical data value).
+        """
+        self._materials = list(colors)
+        for region in self.inputs:
+            combo: QComboBox = region["rstate"]
+            current = combo.currentData() or "Void"
+            combo.blockSignals(True)
+            combo.clear()
+            self._populate_rstate_combo(combo)
+            idx = combo.findData(current)
+            if idx == -1:
+                # Selection no longer valid (e.g. material 2 removed); fall back
+                idx = combo.findData("Void")
+                if idx == -1:
+                    idx = 0
+            combo.setCurrentIndex(idx)
+            combo.blockSignals(False)
+
+    def _populate_rstate_combo(self, combo: QComboBox) -> None:
+        """Fill *combo* with one colored "Material N" entry per material plus "Void"."""
+        for i, color in enumerate(self._materials):
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(QColor(color))
+            combo.addItem(QIcon(pixmap), f"Material {i + 1}")
+            combo.setItemData(combo.count() - 1, f"Material {i + 1}", Qt.UserRole)
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(QColor("#FFFFFF"))
+        combo.addItem(QIcon(pixmap), "Void")
+        combo.setItemData(combo.count() - 1, "Void", Qt.UserRole)
 
     def add_region(
         self,
@@ -493,7 +531,7 @@ class RegionsWidget(QWidget):
         rshape : str
             Shape type ("□" or "◯").
         rstate : str
-            State ("Void" or "Filled").
+            State: canonical "Material 1"/"Material 2"/"Void".
         rradius : int
             Radius of the region.
         pos : list
@@ -513,7 +551,7 @@ class RegionsWidget(QWidget):
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(0, 5, 0, 5)
 
-        # --- Line 1: [Minus] "Shape" [Combos] "Radius" [Spin] ---
+        # --- Line 1: [Minus] "Shape" [Combo] "Radius" [Spin] ---
         line1_layout = QHBoxLayout()
 
         # Remove button
@@ -527,8 +565,6 @@ class RegionsWidget(QWidget):
         line1_layout.addWidget(QLabel("Shape:"))
         rshape = _make_combo(["-", "□", "◯"], 0, "Shape of the region")
         line1_layout.addWidget(rshape)
-        rstate = _make_combo(["Void", "Filled"], 0, "State of the region")
-        line1_layout.addWidget(rstate)
         # Radius
         line1_layout.addWidget(QLabel("Radius:"))
         rradius = _make_spin(1, 100, rradius, "Radius")
@@ -536,18 +572,36 @@ class RegionsWidget(QWidget):
         line1_layout.addStretch()
         container_layout.addLayout(line1_layout)
 
-        # --- Line 2: "Center" [X] [Y] [Z] ---
+        # --- Line 2: "Contains:" [combo] ---
         line2_layout = QHBoxLayout()
         line2_layout.addSpacing(40)  # Align with line above
-        line2_layout.addWidget(QLabel("Center:"))
-        rx = _make_spin(0, 1000, pos[0], "X")
-        line2_layout.addWidget(rx)
-        ry = _make_spin(0, 1000, pos[1], "Y")
-        line2_layout.addWidget(ry)
-        rz = _make_spin(0, 1000, pos[2], "Z")
-        line2_layout.addWidget(rz)
+        line2_layout.addWidget(QLabel("Contains:"))
+        rstate_combo = QComboBox()
+        rstate_combo.setToolTip("State of the region")
+        self._populate_rstate_combo(rstate_combo)
+        if rstate == "Material 2" and len(self._materials) < 2:
+            rstate = "Material 1"
+        idx = rstate_combo.findData(rstate)
+        if idx == -1:
+            idx = rstate_combo.findData("Void")
+        rstate_combo.setCurrentIndex(idx if idx != -1 else 0)
+        rstate_combo.setMinimumWidth(130)
+        line2_layout.addWidget(rstate_combo)
         line2_layout.addStretch()
         container_layout.addLayout(line2_layout)
+
+        # --- Line 3: "Center" [X] [Y] [Z] ---
+        line3_layout = QHBoxLayout()
+        line3_layout.addSpacing(40)  # Align with line above
+        line3_layout.addWidget(QLabel("Center:"))
+        rx = _make_spin(0, 1000, pos[0], "X")
+        line3_layout.addWidget(rx)
+        ry = _make_spin(0, 1000, pos[1], "Y")
+        line3_layout.addWidget(ry)
+        rz = _make_spin(0, 1000, pos[2], "Z")
+        line3_layout.addWidget(rz)
+        line3_layout.addStretch()
+        container_layout.addLayout(line3_layout)
 
         # Add to main layout (before the Add button)
         # self.main_layout has: grid (now empty/unused?), add_btn
@@ -559,7 +613,7 @@ class RegionsWidget(QWidget):
         self.inputs.append(
             {
                 "rshape": rshape,
-                "rstate": rstate,
+                "rstate": rstate_combo,
                 "rradius": rradius,
                 "rx": rx,
                 "ry": ry,

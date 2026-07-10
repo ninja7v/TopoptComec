@@ -57,10 +57,11 @@ class Support:
 @dataclass(frozen=True)
 class Region:
     """
-    Geometric density constraint: force a sphere/box to be void or solid.
+    Geometric density constraint: force a sphere/box to a material or void.
 
     ``shape`` is either ``"sphere"`` or ``"box"``; ``radius`` is the sphere
-    radius or the box half-width.
+    radius or the box half-width. ``material`` is the 0-based material index
+    to fill the region with, or ``-1`` to force the region to void.
     """
 
     shape: str  # "sphere" | "box"
@@ -68,7 +69,7 @@ class Region:
     y: float
     z: float = 0.0
     radius: float = 0.0
-    solid: bool = True
+    material: int = 0  # -1 = void, 0+ = material index
 
     def __post_init__(self) -> None:
         if self.shape not in ("sphere", "box"):

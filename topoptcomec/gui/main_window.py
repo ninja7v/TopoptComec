@@ -50,6 +50,7 @@ from .widgets import (
     PresetWidget,
     RegionsWidget,
     SupportWidget,
+    _normalize_rstate,
 )
 from .workers import AnalysisWorker, DisplacementWorker, OptimizerWorker
 from .plotting import PlottingMixin
@@ -257,15 +258,26 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         section.visibility_button.toggled.connect(self._on_visibility_toggled)
         self.materials_widget.add_btn.clicked.connect(self._connect_material_signals)
         self.materials_widget.nbMaterialsChanged.connect(self.on_parameter_changed)
+        self.materials_widget.nbMaterialsChanged.connect(self._update_region_materials)
         self.materials_widget.mat_init_type.currentIndexChanged.connect(
             self.on_parameter_changed
         )
+        # Sync the region widget colors now that materials exist
+        self._update_region_materials()
         return section
+
+    def _update_region_materials(self) -> None:
+        """Push the current material colors into the regions widget combos."""
+        if not hasattr(self, "regions_widget"):
+            return
+        colors = [mw["color"].get_color() for mw in self.materials_widget.inputs]
+        self.regions_widget.set_materials(colors)
 
     def _connect_material_signals(self) -> None:
         """(Re)connects on_parameter_changed signals to all current material widgets."""
         for mw in self.materials_widget.inputs:
-            mw["color"].clicked.connect(self.replot)
+            mw["color"].colorChanged.connect(self._update_region_materials)
+            mw["color"].colorChanged.connect(self.replot)
             mw["E"].valueChanged.connect(self.on_parameter_changed)
             mw["nu"].valueChanged.connect(self.on_parameter_changed)
             mw["percent"].valueChanged.connect(self.on_parameter_changed)
@@ -1086,10 +1098,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self._block_all_parameter_signals(True)
 
         self._apply_dimensions_param(params)
+        self._apply_materials_param(params)
         self._apply_regions_param(params)
         self._apply_forces_param(params)
         self._apply_supports_param(params)
-        self._apply_materials_param(params)
         self._apply_optimizer_param(params)
         self._apply_displacement_param(params)
 
@@ -1114,6 +1126,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
     def _apply_regions_param(self, params: dict) -> None:
         """Applies region parameters from a preset dictionary."""
+        # Materials were applied just before this (signals blocked), so the
+        # region combos still show the old palette; refresh them now.
+        self._update_region_materials()
         pr = params.get("Regions", {})
         num_regions_in_preset = len(pr.get("rshape", []))
         current_num_regions = len(self.regions_widget.inputs)
@@ -1130,7 +1145,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             rw["rshape"].blockSignals(True)
             rw["rstate"].blockSignals(True)
             rw["rshape"].setCurrentText(pr["rshape"][i])
-            rw["rstate"].setCurrentText(pr["rstate"][i])
+            rstate = _normalize_rstate(
+                pr["rstate"][i], len(self.regions_widget._materials)
+            )
+            idx = rw["rstate"].findData(rstate)
+            if idx == -1:
+                idx = rw["rstate"].findData("Void")
+            rw["rstate"].setCurrentIndex(idx if idx != -1 else 0)
             rw["rradius"].setValue(pr["rradius"][i])
             rw["rx"].setValue(pr["rx"][i])
             rw["ry"].setValue(pr["ry"][i])
