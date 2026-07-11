@@ -379,6 +379,20 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     # OPTIMIZATION #
     ################
 
+    def _finalize_worker(self) -> None:
+        """Block until the current worker thread has fully exited, then drop it.
+
+        Signal handlers (``resultsReady``, ``error``, etc.) run in the main
+        thread while the worker thread is still inside ``run()``.  Setting
+        ``self.worker = None`` immediately would let Python garbage-collect the
+        ``QThread`` object before it has finished its internal cleanup, causing
+        ``QThread: Destroyed while thread is still running``.  Calling
+        ``wait()`` guarantees the thread has fully stopped first.
+        """
+        if self.worker is not None:
+            self.worker.wait()
+            self.worker = None
+
     def _run_optimization(self) -> None:
         """
         Start the optimization process using the current UI parameters.
@@ -420,6 +434,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.footer.stop_button.show()
         self.footer.binarize_button.setEnabled(False)
         self.footer.save_button.setEnabled(False)
+        self.analysis_widget.run_analysis_button.setEnabled(False)
+        self.displacement_widget.run_disp_button.setEnabled(False)
+        self.sections["Displacement"].visibility_button.setEnabled(False)
         self.status_bar.showMessage("Starting optimization...")
         self.progress_bar.setRange(0, self.last_params["Optimizer"]["n_it"])
         self.progress_bar.setValue(0)
@@ -530,7 +547,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         self.update_mat_init_type_state()
         self.last_displayed_frame_data = None
-        self.worker = None
+        self._finalize_worker()
         self.status_bar.showMessage("Optimization finished successfully.", 5000)
         self.preset.setEnabled(True)
         self.footer.stop_button.hide()
@@ -591,7 +608,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         error_msg : str
             Message describing the error that occurred.
         """
-        self.worker = None
+        self._finalize_worker()
         self.status_bar.showMessage("Optimization failed.", 5000)
         self.preset.setEnabled(True)
         self.footer.stop_button.hide()
@@ -618,18 +635,18 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         synchronously; otherwise it launches a `DisplacementWorker` to
         compute frames in the background while updating the UI.
         """
-        if not self.xPhys_valid or self.u is None:
-            QMessageBox.warning(
-                self,
-                "Displacement Warning",
-                "You must run a successful optimization with a valid result before analyzing movement.",
-            )
-            return
         if self.worker is not None:
             QMessageBox.warning(
                 self,
                 "Displacement Warning",
                 "A worker is already running.",
+            )
+            return
+        if not self.xPhys_valid or self.u is None:
+            QMessageBox.warning(
+                self,
+                "Displacement Warning",
+                "You must run a successful optimization with a valid result before analyzing movement.",
             )
             return
 
@@ -663,6 +680,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         else:
             self.footer.create_button.setEnabled(False)
             self.displacement_widget.run_disp_button.setEnabled(False)
+            self.analysis_widget.run_analysis_button.setEnabled(False)
             self.status_bar.showMessage("Starting displacement computation...")
 
             self.progress_bar.setRange(
@@ -785,6 +803,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.status_bar.showMessage(message, 5000)
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
+        self.analysis_widget.run_analysis_button.setEnabled(True)
         self.displacement_widget.run_disp_button.setEnabled(False)
         self.displacement_widget.button_stack.setCurrentWidget(
             self.displacement_widget.reset_disp_button
@@ -794,14 +813,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )  # Reset text for next run
         self.displacement_widget.stop_disp_button.setEnabled(True)
         self.is_displaying_deformation = True
-        self.worker = None
+        self._finalize_worker()
 
     def _handle_displacement_error(self, error_msg: str) -> None:
         """Handles any errors that occur during displacement computation."""
-        self.worker = None
+        self._finalize_worker()
         self.status_bar.showMessage("Displacements failed.", 5000)
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
+        self.analysis_widget.run_analysis_button.setEnabled(True)
         self.displacement_widget.run_disp_button.setEnabled(True)
         QMessageBox.critical(self, "Displacement Runtime Error", error_msg)
 
@@ -810,18 +830,18 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     ############
     def _run_analysis(self) -> None:
         """Starts the analysis evaluation based on the last optimization result"""
-        if not self.xPhys_valid or self.u is None:
-            QMessageBox.warning(
-                self,
-                "Analysis Warning",
-                "You must run a successful optimization with a valid result before analyzing results.",
-            )
-            return
         if self.worker is not None:
             QMessageBox.warning(
                 self,
                 "Analysis Warning",
                 "A worker is already running.",
+            )
+            return
+        if not self.xPhys_valid or self.u is None:
+            QMessageBox.warning(
+                self,
+                "Analysis Warning",
+                "You must run a successful optimization with a valid result before analyzing results.",
             )
             return
 
@@ -882,11 +902,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         aw.run_analysis_button.setEnabled(True)
         self.displacement_widget.run_disp_button.setEnabled(True)
         self.footer.create_button.setEnabled(True)
-        self.worker = None
+        self._finalize_worker()
 
     def _handle_analysis_error(self, error_msg: str) -> None:
         """Handles any errors that occur during analysis."""
-        self.worker = None
+        self._finalize_worker()
         self.status_bar.showMessage("Analysis failed.", 5000)
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
