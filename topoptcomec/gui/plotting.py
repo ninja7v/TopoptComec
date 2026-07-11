@@ -418,6 +418,9 @@ class PlottingMixin:
         if not is_3d:
             ax.set_aspect("equal", "box")
         ax.autoscale(tight=True)
+        self.figure.subplots_adjust(
+            left=0.07, right=0.93, bottom=0.07, top=0.93, wspace=0, hspace=0
+        )
         self.canvas.draw()
 
     def _plot_material(
