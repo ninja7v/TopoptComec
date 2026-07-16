@@ -258,7 +258,7 @@ def optimize(
 
     loop: int = 0
     change: float = 1.0
-    ui: FloatArray = np.zeros((fem.ndof, len(loads_in)), dtype=np.float64)
+    ui: FloatArray = np.zeros(fem.ndof, dtype=np.float64)
 
     def _emit(iteration: int, obj_val: float, chg: float) -> bool:
         """Send a *copy* of the current densities to the callback (C7)."""

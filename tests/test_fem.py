@@ -122,11 +122,11 @@ def test_solver_mechanics(fem_2d: FEM):
     ui, uo = fem_2d.solve(xPhys)
 
     # Check dimensions
-    assert ui.shape == (fem_2d.ndof, 1)
-    assert uo.shape == (fem_2d.ndof, 1)
+    assert ui.shape == (fem_2d.ndof,)
+    assert uo.shape == (fem_2d.ndof,)
 
     # The node at force application (x=2, y=0) is node index 4 -> DOF 8 (X)
-    assert ui[8, 0] > 0.0, (
+    assert ui[8] > 0.0, (
         "The node under force should have positive displacement in X direction"
     )
 
@@ -173,7 +173,7 @@ def test_rigid_objective_uses_full_density_field(fem_2d: FEM):
     obj = fem_2d.compute_objective(xPhys, ui, uo)
 
     # Without springs, compliance == f^T u exactly.
-    expected = float(fem_2d.forces_i[:, 0] @ ui[:, 0])
+    expected = float(fem_2d.forces_i[:, 0] @ ui)
     np.testing.assert_allclose(obj, expected, rtol=1e-9)
 
 
@@ -193,7 +193,7 @@ def test_compliant_objective_is_output_displacement(fem_2d: FEM):
     obj = fem_2d.compute_objective(xPhys, ui, uo)
 
     out_dof = fem_2d.out_dofs[0]
-    expected = -1 * ui[out_dof, 0]  # sign of the output load
+    expected = -1 * ui[out_dof]  # sign of the output load
     np.testing.assert_allclose(obj, expected, rtol=1e-12)
 
 

@@ -28,8 +28,8 @@ class FEM:
     """
     Finite Element Method solver for topology optimization.
 
-    Supports 2D (Q4) and 3D (H8) continuum elements with multiple load cases,
-    SIMP-based material interpolation, and sensitivity/density filtering.
+    Supports 2D (Q4) and 3D (H8) continuum elements with simultaneous point
+    loads, SIMP-based material interpolation, and sensitivity/density filtering.
 
     The discrete equilibrium equation solved for each load case is:
 
@@ -133,11 +133,11 @@ class FEM:
         Parameters
         ----------
         loads_in : Sequence[Load]
-            Actuation loads. One FEM load case per entry.
+            Actuation loads applied simultaneously in one load case.
         loads_out : Sequence[Load]
             Output ports (compliant mechanisms). Each acts as a dummy/adjoint
-            load and defines the desired output direction. Empty for rigid
-            (compliance-minimization) problems.
+            direction with equal weight in the mean output objective. Empty
+            for rigid (compliance-minimization) problems.
         supports : Sequence[Support]
             Fixed nodes.
         """
@@ -145,6 +145,13 @@ class FEM:
         self.loads_out = list(loads_out)
         self.forces_i, self.in_dofs = self._assemble_loads(self.loads_in)
         self.forces_o, self.out_dofs = self._assemble_loads(self.loads_out)
+        if self.loads_out:
+            # The output objective is the mean signed port displacement.
+            # Output magnitudes still define port spring stiffnesses below.
+            self.forces_o.fill(0.0)
+            weight = 1.0 / len(self.loads_out)
+            for col, (dof, load) in enumerate(zip(self.out_dofs, self.loads_out)):
+                self.forces_o[dof, col] = load.sign * weight
 
         # Artificial springs at load locations (classic Sigmund formulation):
         # extra diagonal triplets appended at every assembly.
@@ -340,8 +347,8 @@ class FEM:
 
         # Solving
         K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
-        ui = np.zeros((self.ndof, len(self.loads_in)), dtype=np.float64)
-        uo = np.zeros((self.ndof, len(self.loads_out)), dtype=np.float64)
+        ui = np.zeros(self.ndof, dtype=np.float64)
+        uo = np.zeros(self.ndof, dtype=np.float64)
         self._solve_linear_system(K_free, self.forces_i, ui)
         self._solve_linear_system(K_free, self.forces_o, uo)
 
@@ -363,20 +370,18 @@ class FEM:
         .. math::
 
             c_e =
-            \\sum_{i=1}^{n_i}
-            (\\mathbf{u}_{e,i}^{in})^T
+            (\\mathbf{u}_{e}^{in})^T
             \\mathbf{K}_e^0
-            \\mathbf{u}_{e,i}^{in}
+            \\mathbf{u}_{e}^{in}
 
         For compliant mechanisms:
 
         .. math::
 
             c_e =
-            \\sum_{i=1}^{n_i}\\sum_{o=1}^{n_o}
-            (\\mathbf{u}_{e,i}^{in})^T
+            (\\mathbf{u}_{e}^{in})^T
             \\mathbf{K}_e^0
-            \\mathbf{u}_{e,o}^{out}
+            \\mathbf{u}_{e}^{out}
 
         In both expressions :math:`\\mathbf{K}_e^0` is the normalized element
         stiffness matrix. The SIMP stiffness factor is applied later when the
@@ -385,9 +390,9 @@ class FEM:
         Parameters
         ----------
         ui : FloatArray
-            Displacements due to input loads, shape (ndof, n_inputs).
+            Displacements due to the simultaneous input loads, shape (ndof,).
         uo : FloatArray
-            Displacements due to output (adjoint) loads, shape (ndof, n_outputs).
+            Displacements due to the normalized output adjoint, shape (ndof,).
 
         Returns
         -------
@@ -397,15 +402,12 @@ class FEM:
         ce_total = np.zeros(self.nel, dtype=np.float64)
 
         if not self.loads_out:  # Rigid structure (minimize compliance)
-            for i_in in range(len(self.loads_in)):
-                Ue = ui[self.edofMat, i_in]
-                ce_total += np.sum((Ue @ self.KE) * Ue, axis=1)
+            Ue = ui[self.edofMat]
+            ce_total += np.sum((Ue @ self.KE) * Ue, axis=1)
         else:  # Compliant mechanism
-            for i_in in range(len(self.loads_in)):
-                Ue_in = ui[self.edofMat, i_in]
-                for i_out in range(len(self.loads_out)):
-                    Ue_out = uo[self.edofMat, i_out]
-                    ce_total += np.sum((Ue_in @ self.KE) * Ue_out, axis=1)
+            Ue_in = ui[self.edofMat]
+            Ue_out = uo[self.edofMat]
+            ce_total += np.sum((Ue_in @ self.KE) * Ue_out, axis=1)
 
         return ce_total
 
@@ -478,18 +480,19 @@ class FEM:
 
         .. math::
 
-            C(\\boldsymbol{\\rho}) =
-            \\sum_{e=1}^{n_e} E_e(\\rho_e)c_e
+            C(\\boldsymbol{\\rho}) = \\mathbf{f}^T\\mathbf{u}
 
         Compliant mechanisms report the signed output displacement under the
-        input loads, averaged over load-case/output pairs (positive when the
+        combined input load, averaged over output ports (positive when the
         output moves in the intended direction):
 
         .. math::
 
             J(\\boldsymbol{\\rho}) =
-            \\frac{1}{n_i n_o}\\sum_{i=1}^{n_i}\\sum_{o=1}^{n_o}
-            s_o\\, u_{i}[d_o]
+            \\frac{1}{n_o}\\sum_{o=1}^{n_o}
+            s_o\\, u[d_o]
+
+        where ``u`` is the single combined-load displacement field.
 
         Parameters
         ----------
@@ -503,19 +506,15 @@ class FEM:
         """
         if not self.loads_out:
             # Rigid structure (minimize compliance)
-            E_eff = self._effective_stiffness(xPhys)
-            ce_total = self.compute_ce(ui, uo)
-            return float((E_eff * ce_total).sum())
+            if self.forces_i is None:
+                return 0.0
+            return float(self.forces_i.sum(axis=1) @ ui)
 
         # Compliant mechanism: signed output displacement under input loads.
-        if ui.shape[1] == 0:
+        if not self.in_dofs:
             return 0.0
-        vals = [
-            load.sign * ui[dof, i_in]
-            for dof, load in zip(self.out_dofs, self.loads_out)
-            for i_in in range(ui.shape[1])
-        ]
-        return float(np.mean(vals))
+        vals = [load.sign * ui[dof] for dof, load in zip(self.out_dofs, self.loads_out)]
+        return float(np.mean(vals)) if vals else 0.0
 
     # --- Internal Helper Methods ---
 
@@ -540,9 +539,10 @@ class FEM:
         K_free : csc_matrix
             Reduced stiffness matrix (free DOFs only).
         F : FloatArray | None
-            Force matrix, shape (ndof, n_cases).
+            Force-component matrix, shape (ndof, n_components). Columns are
+            summed into one simultaneous load vector.
         U_full : FloatArray
-            Displacement matrix to fill (modified in place).
+            Displacement vector to fill, shape (ndof,), modified in place.
         """
         if F is None or F.shape[1] == 0:
             return
@@ -551,38 +551,30 @@ class FEM:
             self.solver_type == "Auto" and K_free.shape[0] < 10000
         )
 
+        # Assemble simultaneous force components into one physical load case.
+        F_sum = F[self.free_dofs].sum(axis=1)
         if use_direct:
-            sol = spsolve(K_free, F[self.free_dofs, :])
-            if sol.ndim == 1:
-                U_full[self.free_dofs, 0] = sol
-            else:
-                U_full[self.free_dofs, :] = sol
+            sol = spsolve(K_free, F_sum)
+            U_full[self.free_dofs] = sol
         else:
             # Iterative Solver (CG with Jacobi Preconditioner)
             D_inv = 1.0 / K_free.diagonal()
             M = LinearOperator(K_free.shape, lambda x: D_inv * x)
-            for i in range(F.shape[1]):
-                if np.any(F[self.free_dofs, i]):
-                    u_sol, info = cg(
-                        K_free,
-                        F[self.free_dofs, i],
-                        M=M,
-                        rtol=1e-8,
-                        maxiter=K_free.shape[0],
-                    )
-                    if info != 0 and self.solver_type == "Auto":
-                        # Fallback
-                        try:
-                            U_full[self.free_dofs, i] = spsolve(
-                                K_free, F[self.free_dofs, i]
-                            )
-                        except Exception as e:
-                            print(
-                                f"Direct solver failed: {e}. Using partial CG solution."
-                            )
-                            U_full[self.free_dofs, i] = u_sol
-                    else:
-                        U_full[self.free_dofs, i] = u_sol
+            u_sol, info = cg(
+                K_free,
+                F_sum,
+                M=M,
+                rtol=1e-8,
+                maxiter=K_free.shape[0],
+            )
+            if info != 0 and self.solver_type == "Auto":
+                try:
+                    U_full[self.free_dofs] = spsolve(K_free, F_sum)
+                except Exception as e:
+                    print(f"Direct solver failed: {e}. Using partial CG solution.")
+                    U_full[self.free_dofs] = u_sol
+            else:
+                U_full[self.free_dofs] = u_sol
 
     def _apply_filter(
         self, x: FloatArray, dc: FloatArray, dv: FloatArray

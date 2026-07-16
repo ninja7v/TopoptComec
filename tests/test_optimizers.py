@@ -117,16 +117,19 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
         * (pd["nelxyz"][1] + 1)
         * ((pd["nelxyz"][2] + 1) if is_3d else 1)
     )
-    assert u_vec.size == ndof * sum(1 for x in pf["fidir"] if x != "-"), (
-        "Displacement vector should be (ndof x nb_active_iforces)"
+    assert u_vec.shape == (ndof,), (
+        "Displacement vector should be (ndof,) for the combined-load solve"
     )
 
     if not is_multi:
-        # Check displacement direction at the input forces
-        j = 0
+        # Combined-load solve: per-input displacement alignment is not
+        # guaranteed (opposing inputs partially cancel). Instead verify the
+        # combined input load does positive work on the combined displacement
+        # (strain energy = f^T u > 0 for a positive-definite system).
         active_iforces_indices = [
             i for i in range(len(pf["fidir"])) if pf["fidir"][i] != "-"
         ]
+        work = 0.0
         for i in active_iforces_indices:
             idx = (
                 (pf["fiz"][i] * pd["nelxyz"][0] * pd["nelxyz"][1] if is_3d else 0)
@@ -149,8 +152,10 @@ def test_optimizers_with_presets(preset_name: str, preset_params: dict):
                 or pf["fidir"][i] == "Z:<"
                 else -1
             )
-            assert u_vec[idx, j] * direction_sign > 0
-            j += 1
+            work += direction_sign * pf["finorm"][i] * u_vec[idx]
+        assert work > 0, (
+            "Combined input load should do positive work on the displacement"
+        )
 
     # Compare with reference data if not random initialization.
     # Regenerate with tests/references/regenerate_references.py after any

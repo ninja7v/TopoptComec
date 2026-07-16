@@ -19,6 +19,34 @@ FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
 
 
+def combine_load_case_displacements(u: FloatArray) -> FloatArray:
+    """
+    Combine displacements from multiple load cases into a single vector.
+
+    Parameters
+    ----------
+    u : FloatArray
+        Displacement vector from FEM solve, shape (ndof,) or (ndof, n_forces).
+    n_forces : int
+        Number of load cases.
+    is_3d : bool
+        Whether the problem is 3D.
+
+    Returns
+    -------
+    FloatArray
+        Combined displacement vector of shape (ndof,).
+    """
+    u_arr = np.asarray(u, dtype=np.float64)
+    if u_arr.ndim == 1:
+        return u_arr
+    elif u_arr.ndim == 2:
+        # Sum displacements across all load cases for each DOF
+        return u_arr.sum(axis=1)
+    else:
+        raise ValueError("Displacement field must be 1D or 2D.")
+
+
 def single_linear_displacement(
     u: FloatArray, nelx: int, nely: int, nelz: int, disp_factor: float
 ) -> tuple[FloatArray, ...]:
@@ -61,12 +89,7 @@ def single_linear_displacement(
         x_coords: FloatArray = nodes_flat // (nely + 1)
         y_coords: FloatArray = nodes_flat % (nely + 1)
 
-    # Calculate average displacement
-    # u shape is (ndof, n_forces) or (ndof,)
-    if u.ndim > 1:
-        u_vec: FloatArray = np.mean(u, axis=1)
-    else:
-        u_vec: FloatArray = u
+    u_vec = combine_load_case_displacements(u)
 
     # Map DOF indices to Node indices
     elemndof: int = 3 if is_3d else 2
@@ -450,10 +473,8 @@ def run_iterative_displacement(
         # Solve FEM to get the deformation
         ui, _ = fem.solve(xPhys if is_multi else xPhys[0])
 
-        # Collapse multiple load cases to average if necessary
-        u_curr: FloatArray = (
-            np.mean(ui, axis=1) if ui.shape[1] > 0 else np.zeros(fem.ndof)
-        )
+        # Single combined-load solve -> ui is already 1D (ndof,).
+        u_curr: FloatArray = ui
 
         # Move the input loads with the deforming structure
         loads_in = _reposition_loads(

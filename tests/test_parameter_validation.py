@@ -73,6 +73,16 @@ def test_validate_no_active_output_or_supports(qt_app):
     window.close()
 
 
+def test_validate_rigid_problem_without_output_keys(qt_app):
+    """Rigid presets may omit optional output-port arrays."""
+    window = MainWindow()
+    params = window._gather_parameters()
+    for key in ("fox", "foy", "foz", "fodir", "fonorm"):
+        params["Forces"].pop(key, None)
+    assert _validate(window, params) is None
+    window.close()
+
+
 def test_validate_duplicate_input_forces(qt_app):
     """Test that validate_parameters detects duplicate input forces."""
     window: MainWindow = MainWindow()

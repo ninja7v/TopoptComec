@@ -26,19 +26,21 @@ Following the classic compliant-mechanism formulation (Sigmund, 1997), an
 artificial spring is attached to every loaded DOF. **The force magnitude is
 reused as the spring stiffness**: an input force `finorm = 0.01` also adds a
 spring `k = 0.01` at the input node, and each output entry adds a spring
-`k = fonorm` at the output node. Output "forces" additionally serve as the
-adjoint (dummy) loads that define the output direction. Larger output spring
-stiffness models a stiffer workpiece and yields designs that trade output
-displacement for output force. The typed API (`topoptcomec/core/model.py`,
-`Load.spring`) lets library users set the spring independently of the force.
+`k = fonorm` at the output node. Output entries define equally weighted adjoint
+directions; `fonorm` controls their spring stiffness, not their objective
+weight. Larger output spring stiffness models a stiffer workpiece and yields
+designs that trade output displacement for output force. The typed API
+(`topoptcomec/core/model.py`, `Load.spring`) lets library users set the spring
+independently of the force.
 
 ### Objectives
 
-- **Rigid case** (no output force): minimize compliance
-  `C = Σ_e E_e(ρ_e) c_e = fᵀu` (exact when no springs are present).
+- **Rigid case** (no output force): minimize total compliance `C = fᵀu` under
+  all input forces acting simultaneously. Its sensitivity uses material strain
+  energy; constant artificial springs remain part of the equilibrium system.
 - **Compliant case**: maximize the signed output displacement under the
-  input loads, averaged over input/output pairs. Positive objective values
-  mean the output moves in the requested direction.
+  simultaneous input loads, averaged over output ports. Positive objective
+  values mean the outputs move in the requested directions.
 
 ## Optimization Terms
 
