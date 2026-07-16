@@ -193,6 +193,66 @@ def test_fd_sensitivity_compliant():
         np.testing.assert_allclose(dc[e], -fd, rtol=1e-4, atol=1e-10)
 
 
+def test_fd_sensitivity_rigid_multiple_simultaneous_loads_with_springs():
+    """Combined-load compliance and sensitivity must include port springs."""
+    fem = _cantilever_fem("None")
+    supports = _clamp_left_edge(fem.grid)
+    loads_in = [
+        Load(x=4, y=0, axis=1, sign=1, magnitude=0.7),
+        Load(x=4, y=3, axis=1, sign=1, magnitude=1.3),
+    ]
+    fem.setup_boundary_conditions(loads_in, [], supports)
+
+    x = np.linspace(0.35, 0.85, fem.nel)
+    ui, uo = fem.solve(x)
+    dc, _ = fem.compute_sensitivities(x, ui, uo)
+
+    h = 1e-6
+    for e in range(0, fem.nel, 3):
+        xp = x.copy()
+        xp[e] += h
+        uip, uop = fem.solve(xp)
+        cp = fem.compute_objective(xp, uip, uop)
+        xm = x.copy()
+        xm[e] -= h
+        uim, uom = fem.solve(xm)
+        cm = fem.compute_objective(xm, uim, uom)
+        fd = (cp - cm) / (2 * h)
+        np.testing.assert_allclose(dc[e], fd, rtol=1e-4, atol=1e-10)
+
+
+def test_fd_sensitivity_compliant_multiple_ports_with_unequal_springs():
+    """Adjoint must match mean output displacement despite unequal springs."""
+    fem = _cantilever_fem("None")
+    supports = _clamp_left_edge(fem.grid)
+    loads_in = [
+        Load(x=4, y=0, axis=0, sign=1, magnitude=0.8),
+        Load(x=4, y=3, axis=0, sign=1, magnitude=1.2),
+    ]
+    loads_out = [
+        Load(x=4, y=1, axis=1, sign=1, magnitude=0.2),
+        Load(x=4, y=2, axis=1, sign=-1, magnitude=0.6),
+    ]
+    fem.setup_boundary_conditions(loads_in, loads_out, supports)
+
+    x = np.linspace(0.35, 0.85, fem.nel)
+    ui, uo = fem.solve(x)
+    dc, _ = fem.compute_sensitivities(x, ui, uo)
+
+    h = 1e-6
+    for e in range(0, fem.nel, 3):
+        xp = x.copy()
+        xp[e] += h
+        uip, uop = fem.solve(xp)
+        jp = fem.compute_objective(xp, uip, uop)
+        xm = x.copy()
+        xm[e] -= h
+        uim, uom = fem.solve(xm)
+        jm = fem.compute_objective(xm, uim, uom)
+        fd = (jp - jm) / (2 * h)
+        np.testing.assert_allclose(dc[e], -fd, rtol=1e-4, atol=1e-10)
+
+
 # --- Solver equivalence -------------------------------------------------------
 
 

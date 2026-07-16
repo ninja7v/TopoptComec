@@ -47,9 +47,7 @@ def test_analysis_with_presets(preset_name: str, preset_params: dict):
     densities = x**p
     np.random.shuffle(densities)
     result = densities
-    u = np.random.rand(
-        ndof, sum(1 for fdir in disp_params["Forces"]["fidir"] if fdir != "-")
-    )
+    u = np.random.rand(ndof)
 
     # Check if not empty
     assert result is not None, "Optimizer returned None"
@@ -124,10 +122,10 @@ def test_efficient():
         "fodir": [],  # No output forces = rigid mechanism
     }
     ndof = 2 * 11 * 11
-    u = np.zeros((ndof, 1))
+    u = np.zeros(ndof)
     # Small displacement at force location -> efficient
     idx = 5 * 11 + 5
-    u[idx * 2, 0] = 0.001
+    u[idx * 2] = 0.001
     result = analyzers._efficient(u, Dimensions, Forces)
     assert isinstance(result, bool)
 
@@ -146,7 +144,7 @@ def test_efficient():
         "fonorm": [0.01],
     }
     ndof = 2 * 11 * 11
-    u = np.zeros((ndof, 1))
+    u = np.zeros(ndof)
     result = analyzers._efficient(u, Dimensions, Forces)
     assert isinstance(result, bool)
 
@@ -155,7 +153,7 @@ def test_analyze_with_progress_callback_cancel():
     """Test analyze() cancels early when progress_callback returns True at step 1."""
     nelx, nely = 5, 5
     xPhys = np.random.rand(nelx * nely)
-    u = np.random.rand(2 * 6 * 6, 1)
+    u = np.random.rand(2 * 6 * 6)
     Dimensions = {"nelxyz": [nelx, nely, 0]}
     Forces = {
         "fidir": ["X:→"],
@@ -187,7 +185,7 @@ def test_analyze_no_callback():
     """Test analyze() runs fully without a progress_callback."""
     nelx, nely = 5, 5
     xPhys = np.random.rand(nelx * nely)
-    u = np.random.rand(2 * 6 * 6, 1)
+    u = np.random.rand(2 * 6 * 6)
     Dimensions = {"nelxyz": [nelx, nely, 0]}
     Forces = {
         "fidir": ["X:→"],

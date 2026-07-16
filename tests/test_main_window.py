@@ -429,7 +429,7 @@ def test_handle_optimization_results(mock_makedirs, mock_savez, qt_app):
     window._handle_optimization_results((mock_xPhys, mock_u))
 
     np.testing.assert_array_equal(window.xPhys, mock_xPhys)
-    np.testing.assert_array_equal(window.u, mock_u)
+    np.testing.assert_array_equal(window.u, mock_u[:, 0])
     assert window.footer.create_button.isEnabled()
     assert window.footer.binarize_button.isEnabled()
     assert window.footer.save_button.isEnabled()

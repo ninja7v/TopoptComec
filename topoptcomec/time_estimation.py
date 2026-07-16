@@ -125,8 +125,8 @@ class TimeEstimation:
         """
         size_matrix = self._compute_size_matrix()
         forces: dict = self.params.get("Forces", {})
-        nb_iteration: int = len([d for d in forces.get("fidir", []) if d != "-"]) + len(
-            [d for d in forces.get("fodir", []) if d != "-"]
+        nb_iteration: int = int(any(d != "-" for d in forces.get("fidir", []))) + int(
+            any(d != "-" for d in forces.get("fodir", []))
         )
         nb_solves: int = self.params.get("Optimizer", {}).get("n_it", 50)
 
@@ -154,7 +154,7 @@ class TimeEstimation:
         """
         size_matrix = self._compute_size_matrix()
         forces: dict = self.params.get("Forces", {})
-        nb_iteration: int = len([d for d in forces.get("fidir", []) if d != "-"])
+        nb_iteration: int = int(any(d != "-" for d in forces.get("fidir", [])))
         nb_solves: int = self.params.get("Optimizer", {}).get("n_it", 50)
 
         return self._estimated_solving_cost(nb_iteration, nb_solves, size_matrix)

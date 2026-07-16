@@ -838,10 +838,10 @@ class PlottingMixin:
             )
 
             dof: int = 3 if is_3d else 2
-            ux: np.ndarray = self.u[dof * idx, 0] * disp_factor
-            uy: np.ndarray = self.u[dof * idx + 1, 0] * disp_factor
+            ux: np.ndarray = self.u[dof * idx] * disp_factor
+            uy: np.ndarray = self.u[dof * idx + 1] * disp_factor
             uz: np.ndarray | None = (
-                self.u[dof * idx + 2, 0] * disp_factor if is_3d else None
+                self.u[dof * idx + 2] * disp_factor if is_3d else None
             )
 
             fx: np.ndarray = fx + ux  # using += will give an error
@@ -1065,9 +1065,9 @@ class PlottingMixin:
             z_valid: np.ndarray = z_coords.flatten()[material_mask] + 0.5
             node_valid: np.ndarray = node_indices[material_mask]
 
-            ux: np.ndarray = self.u[3 * node_valid, 0] * factor
-            uy: np.ndarray = -self.u[3 * node_valid + 1, 0] * factor
-            uz: np.ndarray = self.u[3 * node_valid + 2, 0] * factor
+            ux: np.ndarray = self.u[3 * node_valid] * factor
+            uy: np.ndarray = -self.u[3 * node_valid + 1] * factor
+            uz: np.ndarray = self.u[3 * node_valid + 2] * factor
 
             ax.quiver(
                 x_valid,
@@ -1099,8 +1099,8 @@ class PlottingMixin:
             y_valid = y_coords.flatten()[material_mask]
             node_valid = node_indices[material_mask]
 
-            ux = self.u[2 * node_valid, 0] * factor
-            uy = -self.u[2 * node_valid + 1, 0] * factor
+            ux = self.u[2 * node_valid] * factor
+            uy = -self.u[2 * node_valid + 1] * factor
 
             ax.quiver(
                 x_valid,

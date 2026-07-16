@@ -32,6 +32,7 @@ from typing import Tuple
 
 # import mcubes
 from topoptcomec import exporters
+from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import resolve_presets_file
 
@@ -541,7 +542,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             the displacement vector returned by the optimizer. If a preset
             is selected the result is saved to `results/<preset>/...`.
         """
-        self.xPhys, self.u = result
+        self.xPhys, u = result
+        self.u = combine_load_case_displacements(u)
         self.last_successful_xPhys = (
             self.xPhys.copy() if self.xPhys is not None else None
         )

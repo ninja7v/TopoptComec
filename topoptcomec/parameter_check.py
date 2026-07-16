@@ -163,11 +163,12 @@ class ParameterCheck:
         """
         pf: dict = params["Forces"]
         ps: dict = params.get("Supports", {})
+        output_directions = pf.get("fodir", [])
 
         if not any(d != "-" for d in pf["fidir"]):
             return "At least one input force must be active"
 
-        if not any(d != "-" for d in pf["fodir"]) and not any(
+        if not any(d != "-" for d in output_directions) and not any(
             d != "-" for d in ps.get("sdim", [])
         ):
             return "At least one output force (for compliant mechanisms) or support (for rigid mechanisms) must be active"
@@ -181,7 +182,7 @@ class ParameterCheck:
             return err
 
         return self._check_duplicates(
-            [i for i, d in enumerate(pf["fodir"]) if d != "-"],
+            [i for i, d in enumerate(output_directions) if d != "-"],
             lambda i: (pf["fox"][i], pf["foy"][i], pf["foz"][i], pf["fodir"][i]),
             lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
         )

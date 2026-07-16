@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 from matplotlib.colors import to_hex
 
 
+from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.time_estimation import TimeEstimation
 
 
@@ -252,7 +253,8 @@ class ParameterManagerMixin:
                     if os.path.exists(cache_file):
                         try:
                             data = np.load(cache_file)
-                            self.xPhys, self.u = data["xPhys"], data["u"]
+                            self.xPhys = data["xPhys"]
+                            self.u = combine_load_case_displacements(data["u"])
                         except Exception as e:
                             print(f"Failed to load cache: {e}")
                     break

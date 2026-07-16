@@ -15,6 +15,7 @@ import numpy as np
 import numpy.typing as npt
 
 from topoptcomec.core import analyzers, optimizers
+from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec import exporters
 from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import resolve_presets_file
@@ -98,7 +99,11 @@ def _load_or_run_optimization(
                 if params.get("Materials", {}).get("init_type") != 3:
                     if verbose:
                         print(f"[{preset_name}] Loading cached density field...")
-                    return data["xPhys"], data["u"], None
+                    return (
+                        data["xPhys"],
+                        combine_load_case_displacements(data["u"]),
+                        None,
+                    )
         except Exception as e:
             if verbose:
                 print(f"[{preset_name}] Failed to load cache: {e}")

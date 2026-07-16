@@ -141,7 +141,8 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     Parameters
     ----------
     u : FloatArray
-        Displacement matrix returned by the solver (DOFs x columns).
+        Displacement vector returned by the solver (DOFs,), single combined
+        load case.
     Dimensions : dict
         Dimensions dictionary containing `nelxyz` for mesh sizes.
     Forces : dict
@@ -168,10 +169,10 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     if nbInputForces == 0:
         return False
 
-    def get_disp(load, col_idx: int) -> float:
+    def get_disp(load) -> float:
         """Displacement at the load DOF, signed along the load direction."""
         dof = grid.dofs_per_node * grid.node_index(load.x, load.y, load.z) + load.axis
-        return float(u[dof, col_idx]) * load.sign
+        return float(u[dof]) * load.sign
 
     effectiveness: float = 0.0
 
@@ -182,12 +183,11 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
 
         nbOutputForces: int = len(loads_out)
 
-        for col_idx, load in enumerate(loads_in):
-            total_u_in += abs(get_disp(load, col_idx))
+        for load in loads_in:
+            total_u_in += abs(get_disp(load))
 
-        for col_idx, load in enumerate(loads_out):
-            actual_col: int = col_idx if col_idx < nbInputForces else 0
-            u_out_val: float = get_disp(load, actual_col)
+        for load in loads_out:
+            u_out_val: float = get_disp(load)
             # Only reward positive movement in the intended direction
             if u_out_val > 0:
                 total_u_out += u_out_val
@@ -196,8 +196,8 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
         return bool(effectiveness < 1 * nbOutputForces)
     else:
         # Rigid mechanism: displacement at input location must remain small
-        for col_idx, load in enumerate(loads_in):
-            u_in: float = get_disp(load, col_idx)
+        for load in loads_in:
+            u_in: float = get_disp(load)
             effectiveness += abs(u_in) / max(load.magnitude, 1e-9)
 
         return bool(effectiveness < 500 * nbInputForces)
