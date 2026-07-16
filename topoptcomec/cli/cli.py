@@ -112,11 +112,14 @@ def _load_or_run_optimization(
     if error:
         return None, None, error
 
-    if save_frames:
+    loss_history: list[tuple[int, float]] = []
 
-        def progress_callback(
-            iteration: int, objective: float, change: float, xPhys_frame: FloatArray
-        ) -> bool:
+    def progress_callback(
+        iteration: int, objective: float, change: float, xPhys_frame: FloatArray
+    ) -> bool:
+        if iteration > 0:
+            loss_history.append((iteration, objective))
+        if save_frames:
             folder: Path = Path(base_dir) / preset_name / f"{preset_name}_creation"
             folder.mkdir(parents=True, exist_ok=True)
             filename: Path = folder / f"{preset_name}_creation_{iteration}.png"
@@ -124,9 +127,9 @@ def _load_or_run_optimization(
             exporters.save_as_png(
                 xPhys_frame, params["Dimensions"]["nelxyz"], str(filename), colors
             )
-            return False
+        return False
 
-        optimizer_params["progress_callback"] = progress_callback
+    optimizer_params["progress_callback"] = progress_callback
 
     is_multimaterial: bool = (
         len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
@@ -150,6 +153,9 @@ def _load_or_run_optimization(
         np.savez_compressed(cache_file, xPhys=xPhys, u=u, params_hash=current_hash)
         if verbose:
             print(f"[{preset_name}] Cached density field.")
+
+        exporters.save_loss(loss_history, base_dir, preset_name)
+
         return xPhys, u, None
     except Exception as e:
         import traceback

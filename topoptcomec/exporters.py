@@ -3,8 +3,10 @@
 # Export result to various file formats.
 
 from __future__ import annotations
+import csv
 import ctypes
 import warnings
+from pathlib import Path
 import mcubes
 import matplotlib.pyplot as plt
 import numpy as np
@@ -374,6 +376,45 @@ def save_as_3mf(
         writer = model.QueryWriter("3mf")
         writer.WriteToFile(filename)
 
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def save_loss(
+    loss: list[tuple[int, float]],
+    output_dir: str,
+    preset_name: str,
+) -> tuple[bool, str | None]:
+    """
+    Save the loss (objective) history to a CSV file.
+
+    The CSV is written to ``<output_dir>/<preset_name>/<preset_name>_loss_function.csv``
+    with the columns ``iteration,objective``.
+
+    Parameters
+    ----------
+    loss : list[tuple[int, float]]
+        List of ``(iteration, objective)`` tuples recorded during optimization.
+    output_dir : str
+        Base output directory under which the preset's folder lives.
+    preset_name : str
+        Preset identifier used to name the CSV file.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        A tuple containing a boolean indicating success or failure, and an
+        error message if applicable.
+    """
+    folder: Path = Path(output_dir) / preset_name
+    folder.mkdir(parents=True, exist_ok=True)
+    csv_file: Path = folder / f"{preset_name}_loss_function.csv"
+    try:
+        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["iteration", "objective"])
+            writer.writerows(loss)
         return True, None
     except Exception as e:
         return False, str(e)

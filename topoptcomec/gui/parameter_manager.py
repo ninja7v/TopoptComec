@@ -255,6 +255,26 @@ class ParameterManagerMixin:
                             data = np.load(cache_file)
                             self.xPhys = data["xPhys"]
                             self.u = combine_load_case_displacements(data["u"])
+                            mean_density: float = (
+                                np.mean(self.xPhys.sum(axis=0))
+                                if self.xPhys.ndim == 2
+                                else np.mean(self.xPhys)
+                            )
+                            if mean_density < 0.01:
+                                self.xPhys_valid = False
+                            else:
+                                self.xPhys_valid = True
+                                self.footer.binarize_button.setEnabled(True)
+                                self.footer.save_button.setEnabled(True)
+                                self.analysis_widget.run_analysis_button.setEnabled(
+                                    True
+                                )
+                                self.displacement_widget.run_disp_button.setEnabled(
+                                    True
+                                )
+                                self.sections[
+                                    "Displacement"
+                                ].visibility_button.setEnabled(True)
                         except Exception as e:
                             print(f"Failed to load cache: {e}")
                     break

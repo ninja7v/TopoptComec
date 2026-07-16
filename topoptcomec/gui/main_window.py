@@ -77,6 +77,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         self.last_params: dict = {}
         self.current_theme: str = "dark"
+        self.loss_history: list[tuple[int, float]] = []
         self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
 
         self._set_theme(self.current_theme)
@@ -445,6 +446,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.last_params = self._gather_parameters()
         self.last_params["current_xPhys"] = getattr(self, "last_successful_xPhys", None)
+        self.loss_history = []
         self.worker = OptimizerWorker(self.last_params)
         self.worker.progress.connect(self._update_optimization_progress)
         self.worker.frameReady.connect(self._update_optimization_plot)
@@ -479,6 +481,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.status_bar.showMessage(
             f"It: {iteration}, Obj: {objective:.4f}, Change: {change:.4f}"
         )
+        if iteration > 0:
+            self.loss_history.append((iteration, objective))
 
     def _update_optimization_plot(self, xPhys_frame: np.ndarray) -> None:
         """
@@ -598,6 +602,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 np.savez_compressed(cache_file, xPhys=self.xPhys, u=self.u)
             except Exception as e:
                 print(f"Failed to save cache: {e}")
+
+            try:
+                exporters.save_loss(self.loss_history, base_dir, preset_name)
+            except Exception as e:
+                print(f"Failed to save loss function CSV: {e}")
 
         self.replot()
 
