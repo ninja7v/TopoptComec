@@ -681,6 +681,12 @@ def test_run_cli_end_to_end(tmp_path, capsys):
     data = np.load(cache)
     assert "params_hash" in data
 
+    csv_file = out_dir / "Tiny" / "Tiny_loss_function.csv"
+    assert csv_file.exists()
+    csv_content = csv_file.read_text(encoding="utf-8")
+    assert csv_content.startswith("iteration,objective")
+    assert len(csv_content.splitlines()) > 1
+
     # Second run with identical parameters: cache hit, no re-optimization.
     capsys.readouterr()
     with patch.object(sys, "argv", argv + ["-v"]):
