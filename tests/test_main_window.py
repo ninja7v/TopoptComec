@@ -8,6 +8,16 @@ from topoptcomec.gui.main_window import MainWindow
 from PySide6.QtWidgets import QCheckBox
 from unittest.mock import patch
 
+
+@pytest.fixture(autouse=True)
+def _prevent_loss_csv_writes():
+    """Keep GUI unit tests from overwriting checked-in result histories."""
+    with patch(
+        "topoptcomec.gui.main_window.exporters.save_loss", return_value=(True, None)
+    ):
+        yield
+
+
 # --- Test Cases for the Intelligent Comparison ---
 p_base_2d = {
     "Dimensions": {"nelxyz": [60, 40, 0]},
@@ -395,11 +405,11 @@ def test_save_result(qt_app):
     # Mock result data
     window.xPhys: np.ndarray = np.array([0.5] * 100)
     window.last_params["Dimensions"]: dict = {"nelxyz": (10, 10, 0)}
-    window.figure: object = type("Fig", (), {"savefig": lambda *a, **k: None})()
 
     with patch("PySide6.QtWidgets.QFileDialog.getSaveFileName") as mock_dialog:
         mock_dialog.return_value = ("results/test.png", "PNG")
-        window._save_result_as("png")  # Should not raise
+        with patch.object(window, "_save_screenshot"):
+            window._save_result_as("png")  # Should not raise
 
 
 def test__on_visibility_toggled(qt_app):
@@ -506,7 +516,23 @@ def test_style_plot_default(qt_app):
     """Test that style_plot_default sets the plot background to white."""
     window: MainWindow = MainWindow()
     window._style_plot_default()
-    assert window.figure.get_facecolor() == (1.0, 1.0, 1.0, 1.0)
+    assert window.plotter.background_color.float_rgb == (1.0, 1.0, 1.0)
+    window.close()
+
+
+def test_update_camera_uses_non_rotating_2d_style(qt_app):
+    """2D plots use image interaction while 3D plots retain trackball rotation."""
+    window: MainWindow = MainWindow()
+    window._camera_mode = None
+    window._camera_dims = None
+
+    with patch.object(window.plotter, "enable_image_style") as image_style:
+        window._update_camera(False, (10, 8, 0))
+    image_style.assert_called_once_with()
+
+    with patch.object(window.plotter, "enable_trackball_style") as trackball_style:
+        window._update_camera(True, (10, 8, 4))
+    trackball_style.assert_called_once_with()
     window.close()
 
 
@@ -517,6 +543,7 @@ def test_update_optimization_progress(qt_app):
     window.progress_bar.setVisible(True)
     window._update_optimization_progress(42, 1.234, 0.001)
     assert window.progress_bar.value() == 42
+    assert window.loss_history == [(42, 1.234)]
     window.close()
 
 

@@ -6,7 +6,6 @@ import copy
 import os
 import numpy as np
 from PySide6.QtWidgets import QMessageBox
-from matplotlib.colors import to_hex
 
 
 from topoptcomec.core.displacements import combine_load_case_displacements
@@ -106,7 +105,7 @@ class ParameterManagerMixin:
             Materials["E"].append(mat["E"].value())
             Materials["nu"].append(mat["nu"].value())
             Materials["percent"].append(mat["percent"].value())
-            Materials["color"].append(to_hex(mat["color"].get_color()))
+            Materials["color"].append(mat["color"].get_color())
         Materials["init_type"] = self.materials_widget.mat_init_type.currentIndex()
         params["Materials"] = Materials
 

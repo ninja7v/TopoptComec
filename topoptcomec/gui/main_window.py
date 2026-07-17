@@ -6,11 +6,9 @@ import json
 import math
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.colors import to_rgb
+from pyvistaqt import QtInteractor
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
@@ -96,9 +94,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self.plot_frame: QFrame = QFrame()
         plot_layout: QVBoxLayout = QVBoxLayout(self.plot_frame)
-        self.figure: plt.Figure = plt.figure()
-        self.canvas: FigureCanvas = FigureCanvas(self.figure)
-        plot_layout.addWidget(self.canvas)
+        self.plotter: QtInteractor = QtInteractor(self.plot_frame)
+        self.plotter.set_background("white")
+        plot_layout.addWidget(self.plotter.interactor)
+        self._init_plotting_state()
         self.splitter.addWidget(self.plot_frame)
 
         self.is_displaying_deformation: bool = False
@@ -494,33 +493,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             Flattened density frame produced by the optimizer. For
             multi-material problems the array may be 2D (n_mat, nel).
         """
-        # Ensure a plot exist to update
-        if not self.figure.get_axes():
+        if not self.last_params:
             return
 
-        ax = self.figure.get_axes()[0]
+        nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        is_3d = nelz > 0
 
-        # Get dimensions and update the image data
-        is_3d = (
-            self.last_params["Dimensions"]["nelxyz"][2] > 0
-            if self.last_params
-            else False
-        )
-
-        # Multi-material frames have shape (n_mat, nel) — use full replot
-        is_multi = xPhys_frame.ndim == 2
-
-        if is_3d or is_multi:
-            self._plot_material(ax, is_3d=is_3d, xPhys_data=xPhys_frame)
-            self._redraw_non_material_layers(ax, is_3d=is_3d)
-        else:
-            if not ax.images:
-                return
-            im = ax.images[0]  # The imshow object is the first image on the axes
-            nelx, nely = self.last_params["Dimensions"]["nelxyz"][:2]
-            im.set_array(xPhys_frame.reshape((nelx, nely)).T)
-
-        self.canvas.draw()
+        # _plot_material updates the existing 2D grid in place when possible
+        self._plot_material(is_3d=is_3d, xPhys_data=xPhys_frame)
+        self._render()
 
         if self.optimizer_widget.save_frames_cb.isChecked():
             preset_name = self.preset.presets_combo.currentText()
@@ -531,7 +512,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 filename = os.path.join(
                     folder, f"{preset_name}_creation_{iteration}.png"
                 )
-                self.figure.savefig(filename, dpi=300, bbox_inches="tight")
+                self._save_screenshot(filename)
 
     def _handle_optimization_results(
         self, result: Tuple[np.ndarray, np.ndarray]
@@ -603,10 +584,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             except Exception as e:
                 print(f"Failed to save cache: {e}")
 
-            try:
-                exporters.save_loss(self.loss_history, base_dir, preset_name)
-            except Exception as e:
-                print(f"Failed to save loss function CSV: {e}")
+            if self.loss_history:
+                success, error = exporters.save_loss(
+                    self.loss_history, base_dir, preset_name
+                )
+                if not success:
+                    print(f"Failed to save loss function CSV: {error}")
 
         self.replot()
 
@@ -742,54 +725,22 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             field or multi-material (n_mat, nel) array depending on the
             current result.
         """
-        # Safety checks to ensure a plot exists and parameters are available
-        if not self.figure.get_axes() or not self.last_params:
+        # Safety check to ensure parameters are available
+        if not self.last_params:
             return
-        ax = self.figure.get_axes()[0]
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
         is_3d = nelz > 0
         self.last_displayed_frame_data = np.array(frame_data, copy=True)
 
-        if is_3d:
-            ax.clear()
-            self._plot_material(ax, is_3d, frame_data)
+        # _plot_material updates the existing 2D grid in place when possible
+        self._plot_material(is_3d=is_3d, xPhys_data=frame_data)
+        # Redraw overlays: this drops stale layers like previous forces,
+        # regions, and especially the undeformed displacement preview that
+        # were drawn prior to the animation starting.
+        self._redraw_non_material_layers(is_3d=is_3d)
 
-        else:
-            # we don't use _plot_material here because we use set_array instead of imshow
-            if not ax.images:
-                return
-            im = ax.images[0]
-
-            is_multi = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
-            if is_multi:
-                n_mat, nel = frame_data.shape
-                rgb_image = np.ones((nel, 3))  # Start white
-
-                for i in range(n_mat):
-                    mat_rgb = np.array(
-                        to_rgb(self.materials_widget.inputs[i]["color"].get_color())
-                    )
-                    # Blend: pixel = sum(rho_i * color_i)
-                    rgb_image += frame_data[i, :, np.newaxis] * (mat_rgb - 1.0)
-
-                rgb_image = np.clip(rgb_image, 0.0, 1.0)
-                # Reshape to (nelx, nely, 3 -RGB-) and transpose spatial dimensions to (nely, nelx, 2)
-                final_image = rgb_image.reshape((nelx, nely, 3)).transpose(1, 0, 2)
-
-                im.set_array(final_image)
-            else:
-                im.set_array(frame_data.reshape((nelx, nely)).T)
-
-            # Remove old layers like previous forces, regions, and especially the undeformed displacement preview
-            # that were drawn prior to the animation starting.
-            for coll in list(ax.collections):
-                coll.remove()
-            for patch in list(ax.patches):
-                patch.remove()
-        self._redraw_non_material_layers(ax, is_3d)
-
-        # Redraw the canvas to show the changes
-        self.canvas.draw()
+        # Render the scene to show the changes
+        self._render()
 
         if self.last_params.get("Displacement", {}).get("save_frames", False):
             preset_name = self.preset.presets_combo.currentText()
@@ -802,7 +753,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 filename = os.path.join(
                     folder, f"{preset_name}_displacement_{iteration}.png"
                 )
-                self.figure.savefig(filename, dpi=300, bbox_inches="tight")
+                self._save_screenshot(filename)
 
     def _on_displacement_preview_changed(self) -> None:
         """Triggers a replot if the preview is active when displacement factor changes."""
@@ -974,7 +925,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             colors = self.last_params.get("Materials", {}).get("color", [])
 
             if file_type == "png":
-                self.figure.savefig(filepath, dpi=300, bbox_inches="tight")
+                self._save_screenshot(filepath)
 
             elif file_type == "vti":
                 success, error_msg = exporters.save_as_vti(
@@ -1537,8 +1488,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             return (nx_old, ny_old, 0)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Close figure when the app is closed"""
+        """Close the PyVista plotter when the app is closed"""
         # Needed for the tests
-        if self.figure:
-            plt.close(self.figure)
+        if self.plotter is not None:
+            self.plotter.close()
         super().closeEvent(event)

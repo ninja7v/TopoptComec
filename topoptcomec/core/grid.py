@@ -129,3 +129,21 @@ class StructuredGrid:
     def from_spatial(self, spatial: FloatArray) -> FloatArray:
         """Flatten a spatial element array back to flat ordering (nel,)."""
         return np.asarray(spatial).reshape(-1)
+
+    def to_vtk_cell_order(self, flat: npt.NDArray) -> npt.NDArray:
+        """Reorder element data so VTK's x-fastest cell indexing is preserved.
+
+        ``flat`` may contain scalar values shaped ``(nel,)`` or values with
+        trailing components such as RGB colors shaped ``(nel, 3)``.
+        """
+        array = np.asarray(flat)
+        if array.shape[0] != self.nel:
+            raise ValueError(f"Expected {self.nel} elements, got {array.shape[0]}")
+
+        trailing_shape = array.shape[1:]
+        spatial = array.reshape((*self.spatial_shape, *trailing_shape))
+        trailing_axes = tuple(range(self.ndim, spatial.ndim))
+        spatial_axes = (0, 2, 1) if self.is_3d else (1, 0)
+        return spatial.transpose((*spatial_axes, *trailing_axes)).reshape(
+            (self.nel, *trailing_shape)
+        )

@@ -3,15 +3,32 @@
 # Fixture for the tests.
 
 import os
+import warnings
 
-import matplotlib
 import pytest
-
-# Use a non-interactive backend for tests to prevent warnings and errors
-matplotlib.use("Agg")
 
 # You can also move your qt_app fixture here to make it available to all test files
 from PySide6.QtWidgets import QApplication
+
+
+@pytest.fixture(autouse=True)
+def _suppress_vtk_numpy_deprecation():
+    """Suppress vtk's NumPy 2.5 deprecation warning for the duration of each test.
+
+    vtk 9.x sets array shapes in-place (``arr.shape = shape``) which is
+    deprecated in NumPy 2.5.  The warning fires inside vtkmodules and
+    cannot be fixed from our code.  When CI runs ``pytest -W error`` this
+    would turn into a test failure, so we wrap every test in a
+    ``catch_warnings`` block that ignores this specific third-party
+    deprecation.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"Setting the shape on a NumPy array has been deprecated.*",
+            category=DeprecationWarning,
+        )
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +44,10 @@ def qt_app() -> QApplication:
     # Force Qt to use offscreen platform to avoid crashes in CI
     if "QT_QPA_PLATFORM" not in os.environ:
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    # Unset DISPLAY so VTK falls back to EGL headless rendering instead
+    # of trying to use an X server that the offscreen Qt platform can't
+    # provide a valid window handle for.
+    os.environ.pop("DISPLAY", None)
 
     app = QApplication.instance()
     if app is None:

@@ -49,7 +49,7 @@ used as a library.
 The GUI layer lives in `topoptcomec/gui/`.
 - `widgets.py`: parameter-entry widgets
 - `parameter_manager.py`: gathers, normalizes, and scales parameters
-- `plotting.py`: 2D/3D visualization
+- `plotting.py`: interactive 2D/3D visualization using PyVista/PyVistaQt
 - `workers.py`: background threads for optimization, analysis, and displacement
 
 ## Runtime Flow

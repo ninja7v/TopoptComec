@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import shutil
-from matplotlib.colors import to_rgb
 
 import numpy as np
 import numpy.typing as npt
@@ -48,7 +47,20 @@ def _resolve_colors(colors: list[str] | None, n_mat: int) -> np.ndarray:
         colors = ["#000000"] * n_mat
     while len(colors) < n_mat:
         colors.append("#000000")
-    rgb = np.array([to_rgb(c) for c in colors[:n_mat]], dtype=np.float64)
+    rgb = (
+        np.array(
+            [
+                [
+                    int(s.lstrip("#")[0:2], 16),
+                    int(s.lstrip("#")[2:4], 16),
+                    int(s.lstrip("#")[4:6], 16),
+                ]
+                for s in colors[:n_mat]
+            ],
+            dtype=np.float64,
+        )
+        / 255.0
+    )
     return rgb
 
 
@@ -226,7 +238,7 @@ def render_preview(
     the layout.
 
     Each pixel is rendered with the colour of its material on a white
-    background, matching the GUI matplotlib plot.  When *colors* is
+    background, matching the GUI plot. When *colors* is
     ``None`` or empty, all materials default to black.
 
     Parameters
