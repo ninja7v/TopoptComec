@@ -238,3 +238,21 @@ def test_boundary_conditions_radius(fem_2d: FEM):
     assert fixed_nodes == expected_nodes, (
         f"Expected fixed nodes {expected_nodes}, got {fixed_nodes}"
     )
+
+
+def test_structured_grid_vtk_cell_order():
+    """VTK conversion preserves element coordinates for scalar and RGB data."""
+    grid = StructuredGrid(2, 3, 2)
+    values = np.arange(grid.nel)
+    expected = np.array(
+        [
+            grid.element_index(ex, ey, ez)
+            for ez in range(grid.nelz)
+            for ey in range(grid.nely)
+            for ex in range(grid.nelx)
+        ]
+    )
+
+    np.testing.assert_array_equal(grid.to_vtk_cell_order(values), expected)
+    rgb = np.column_stack((values, values + grid.nel, values + 2 * grid.nel))
+    np.testing.assert_array_equal(grid.to_vtk_cell_order(rgb), rgb[expected])

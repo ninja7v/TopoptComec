@@ -40,7 +40,7 @@ Quick map of the repository.
 - `main_window.py`: main window and action flow
 - `parameter_manager.py`: parameter gathering, normalization, and scaling
 - `widgets.py`: GUI widgets
-- `plotting.py`: plotting and visualization
+- `plotting.py`: PyVista/PyVistaQt plotting and visualization
 - `workers.py`: background workers
 - `themes.py`: stylesheets
 - `icons.py`: icon handling

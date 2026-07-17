@@ -8,13 +8,14 @@ import ctypes
 import warnings
 from pathlib import Path
 import mcubes
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
+import pyvista as pv
 import vtk
-from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from stl import mesh
 from vtk.util.numpy_support import get_vtk_array_type, numpy_to_vtk
+
+from topoptcomec.core.grid import StructuredGrid
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="lib3mf")
@@ -23,12 +24,76 @@ with warnings.catch_warnings():
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
 
+# pv.ImageData replaced pv.UniformGrid in PyVista 0.44
+_ImageData = pv.ImageData if hasattr(pv, "ImageData") else pv.UniformGrid
+
+_VOXEL_OPACITY_MIN = 0.4
+_VOXEL_OPACITY_MAX = 0.95
+
+
+def _hex_to_rgb_int(color: str) -> tuple[int, int, int]:
+    """
+    Convert a ``#RRGGBB`` hex string to an ``(r, g, b)`` tuple in 0-255.
+
+    Parameters
+    ----------
+    color : str
+        Hex color string (``"#FF0000"`` or ``"FF0000"``).
+
+    Returns
+    -------
+    tuple[int, int, int]
+        RGB components as integers in the 0-255 range.
+    """
+    c = color.lstrip("#")
+    return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+
+
+def _compute_element_colors(
+    data: FloatArray,
+    is_multi: bool,
+    colors: list[str] | None,
+) -> np.ndarray:
+    """
+    Compute per-element RGB colors (uint8) pre-blended against white.
+
+    Parameters
+    ----------
+    data : FloatArray
+        Density data of shape ``(nel,)`` or ``(n_mat, nel)``.
+    is_multi : bool
+        Whether this is multi-material data.
+    colors : list[str] | None
+        Hex color strings, one per material. ``None`` defaults to black.
+    Returns
+    -------
+    np.ndarray
+        uint8 RGB array of shape ``(nel, 3)``.
+    """
+    if colors is None or len(colors) == 0:
+        colors = ["#000000"] * (data.shape[0] if is_multi else 1)
+
+    if is_multi:
+        n_mat, nel = data.shape
+        rgb = np.ones((nel, 3))
+        for i in range(n_mat):
+            c = colors[i] if i < len(colors) else "#000000"
+            mat_rgb = np.array(_hex_to_rgb_int(c), dtype=np.float64) / 255.0
+            rgb += data[i, :, np.newaxis] * (mat_rgb - 1.0)
+        rgb = np.clip(rgb, 0.0, 1.0)
+    else:
+        c = colors[0] if colors else "#000000"
+        mat_rgb = np.array(_hex_to_rgb_int(c), dtype=np.float64) / 255.0
+        rgb = np.clip(1.0 + data[:, np.newaxis] * (mat_rgb - 1.0), 0.0, 1.0)
+
+    return (rgb * 255).astype(np.uint8)
+
 
 def save_as_png(
     xPhys: FloatArray, nelxyz: list[int], filename: str, colors: list[str] | None = None
 ) -> tuple[bool, str | None]:
     """
-    Saves the density field as a .png image.
+    Saves the density field as a .png image using PyVista off-screen rendering.
 
     Parameters
     ----------
@@ -46,101 +111,60 @@ def save_as_png(
     tuple[bool, str | None]
         (success, error_message) - True if successful, error string otherwise.
     """
+    plotter: pv.Plotter | None = None
     try:
         nx, ny, nz = nelxyz
         is_3d = nz > 0
         is_multi = xPhys.ndim == 2
 
-        fig = plt.figure()
+        plotter = pv.Plotter(off_screen=True)
+        plotter.set_background("white")
+
         if is_3d:
-            ax = fig.add_subplot(111, projection="3d")
-            ax.set_facecolor("white")
-            # Avoids plotting fully transparent points.
-            if is_multi:
-                eff_density = xPhys.sum(axis=0)
-                visible_elements_mask = eff_density > 0.01
-                visible_indices = np.where(visible_elements_mask)[0]
-
-                z = visible_indices // (nx * ny)
-                x = (visible_indices % (nx * ny)) // ny
-                y = visible_indices % ny
-
-                n_mat = xPhys.shape[0]
-                voxel_colors = np.ones((len(visible_indices), 4))
-                for i in range(n_mat):
-                    mat_rgb = np.array(
-                        to_rgb(colors[i] if colors and i < len(colors) else "black")
-                    )
-                    rho_vis = xPhys[i, visible_indices]
-                    voxel_colors[:, :3] += rho_vis[:, np.newaxis] * (mat_rgb - 1.0)
-                voxel_colors[:, :3] = np.clip(voxel_colors[:, :3], 0.0, 1.0)
-                voxel_colors[:, 3] = np.clip(eff_density[visible_indices], 0.0, 1.0)
-            else:
-                visible_elements_mask = xPhys > 0.01
-                visible_indices = np.where(visible_elements_mask)[0]
-                densities = xPhys[visible_indices]
-
-                z = visible_indices // (nx * ny)
-                x = (visible_indices % (nx * ny)) // ny
-                y = visible_indices % ny
-
-                voxel_colors = np.zeros((len(densities), 4))
-                base_color_rgb = to_rgb(colors[0] if colors else "black")
-                voxel_colors[:, :3] = base_color_rgb
-                voxel_colors[:, 3] = densities
-
-            ax.scatter(
-                x + 0.5,
-                y + 0.5,
-                z + 0.5,
-                s=6000 / max(nx, ny, nz),
-                marker="s",
-                c=voxel_colors,
-                alpha=None,
+            eff_density = xPhys.sum(axis=0) if is_multi else xPhys
+            elem_colors = _compute_element_colors(xPhys, is_multi, colors)
+            opacity = np.interp(
+                np.clip(eff_density, 0.0, 1.0),
+                (0.0, 1.0),
+                (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
             )
-            ax.set_box_aspect([nx, ny, nz])
-            # Hide axes for cleaner output
-            ax.set_axis_off()
+            elem_colors = np.column_stack(
+                (elem_colors, np.round(opacity * 255).astype(np.uint8))
+            )
+
+            structured_grid = StructuredGrid(nx, ny, nz)
+            grid = _ImageData(dimensions=(nx + 1, ny + 1, nz + 1))
+            grid.cell_data["density"] = structured_grid.to_vtk_cell_order(eff_density)
+            grid.cell_data["colors"] = structured_grid.to_vtk_cell_order(elem_colors)
+            visible = grid.threshold(0.01, scalars="density")
+            if visible.n_cells > 0:
+                plotter.add_mesh(
+                    visible,
+                    scalars="colors",
+                    rgb=True,
+                    lighting=False,
+                )
+            plotter.view_isometric()
         else:
-            ax = fig.add_subplot(111)
-            ax.set_facecolor("white")
+            elem_colors = _compute_element_colors(xPhys, is_multi, colors)
+            # Element ordering: app uses idx = y + x*nely, VTK uses x-fastest
+            vtk_colors = (
+                elem_colors.reshape((nx, ny, 3)).transpose(1, 0, 2).reshape(-1, 3)
+            )
 
-            if is_multi:
-                n_mat, nel = xPhys.shape
-                rgb_image = np.ones((nel, 3))
-                for i in range(n_mat):
-                    mat_rgb = np.array(
-                        to_rgb(colors[i] if colors and i < len(colors) else "black")
-                    )
-                    rgb_image += xPhys[i, :, np.newaxis] * (mat_rgb - 1.0)
-                rgb_image = np.clip(rgb_image, 0.0, 1.0)
-                rgb_image = rgb_image.reshape((nx, ny, 3)).transpose(1, 0, 2)
+            grid = _ImageData(dimensions=(nx + 1, ny + 1, 1))
+            grid.cell_data["colors"] = vtk_colors
+            plotter.add_mesh(grid, scalars="colors", rgb=True, lighting=False)
+            plotter.view_xy()
+            plotter.enable_parallel_projection()
 
-                ax.imshow(
-                    rgb_image,
-                    interpolation="nearest",
-                    origin="lower",
-                )
-            else:
-                mat_color = colors[0] if colors else "black"
-                cmap = LinearSegmentedColormap.from_list(
-                    "custom_cmap", ["white", mat_color]
-                )
-                ax.imshow(
-                    xPhys.reshape((nx, ny)).T,
-                    cmap=cmap,
-                    interpolation="nearest",
-                    origin="lower",
-                    norm=plt.Normalize(0, 1),
-                )
-            ax.set_aspect("equal", "box")
-            ax.axis("off")
-
-        fig.savefig(filename, dpi=300, bbox_inches="tight")
-        plt.close(fig)
+        plotter.screenshot(filename, scale=2)
         return True, None
     except Exception as e:
         return False, str(e)
+    finally:
+        if plotter is not None:
+            plotter.close()
 
 
 def save_as_vti(
@@ -336,7 +360,7 @@ def save_as_3mf(
 
             color_ids = []
             for c in colors:
-                r, g, b = [int(v * 255) for v in to_rgb(c)]
+                r, g, b = _hex_to_rgb_int(c)
                 # Explicitly populate the color structure fields
                 col = lib3mf.Color()
                 col.Red = r

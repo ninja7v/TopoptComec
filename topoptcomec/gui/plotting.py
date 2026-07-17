@@ -1,44 +1,107 @@
 # topoptcomec/ui/plotting.py
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
-# Plotting class.
+# Plotting class (PyVista backend).
+
+import os
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap, to_hex, to_rgb
-from matplotlib.patches import Rectangle
+import pyvista as pv
+from PySide6.QtGui import QColor
+
+from topoptcomec.core.grid import StructuredGrid
+
+# pv.ImageData replaced pv.UniformGrid in PyVista 0.44
+ImageData = pv.ImageData if hasattr(pv, "ImageData") else pv.UniformGrid
+
+# Small z-offset keeping 2D overlay lines above the flat material mesh
+_OVERLAY_Z = 0.05
+
+_VOXEL_OPACITY_MIN = 0.25
+_VOXEL_OPACITY_MAX = 0.95
 
 
 class PlottingMixin:
-    """Mixin for MainWindow to handle all plotting operations."""
+    """Mixin for MainWindow to handle all plotting operations with PyVista."""
+
+    def _init_plotting_state(self) -> None:
+        """Initialize the scene bookkeeping (called once from MainWindow.__init__)."""
+        self._material_actor = None
+        self._material_grid = None
+        self._overlay_actors = []
+        self._message_actor = None
+        self._camera_mode = None  # "2d" or "3d"
+        self._camera_dims = None  # (nelx, nely, nelz) the camera was fitted on
 
     def _style_plot_default(self) -> None:
         """
         Apply the default white theme styling to the plot.
 
-        Sets figure and axes background to white with black labels and spines.
+        Sets the plot background to white; text and axes are drawn in black.
         """
-        self.figure.patch.set_facecolor("white")
-        if self.figure.get_axes():
-            ax = self.figure.get_axes()[0]
-            ax.set_facecolor("white")
-            ax.xaxis.label.set_color("black")
-            ax.yaxis.label.set_color("black")
-            ax.tick_params(axis="x", colors="black")
-            ax.tick_params(axis="y", colors="black")
-            for spine in ax.spines.values():
-                spine.set_edgecolor("black")
-        self.canvas.draw()
+        self.plotter.set_background("white")
+        self._render()
 
-    def _plot_deformation(
-        self, ax: plt.Axes, is_3d: bool, nelx: int, nely: int, nelz: int
-    ):
+    @staticmethod
+    def _color_to_rgb(color: str) -> np.ndarray:
+        """
+        Convert a color string to an RGB float array in [0, 1].
+
+        Parameters
+        ----------
+        color : str
+            Color as "#RRGGBB" (or any string accepted by QColor).
+
+        Returns
+        -------
+        np.ndarray
+            RGB components as floats in [0, 1].
+        """
+        r, g, b, _ = QColor(color).getRgbF()
+        return np.array([r, g, b])
+
+    def _material_colors(self, data: np.ndarray, is_multi: bool) -> np.ndarray:
+        """
+        Compute per-element RGB colors for a density field.
+
+        Colors are pre-blended against a white background according to each
+        element's material density.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Density data of shape (nel,) or (n_mat, nel).
+        is_multi : bool
+            Whether this is multi-material data.
+        Returns
+        -------
+        np.ndarray
+            uint8 RGB array of shape (nel, 3).
+        """
+        if is_multi:
+            n_mat, nel = data.shape
+            rgb = np.ones((nel, 3))  # Start white
+            for i in range(n_mat):
+                mat_rgb = self._color_to_rgb(
+                    self.materials_widget.inputs[i]["color"].get_color()
+                )
+                # Blend: pixel = sum(rho_i * color_i)
+                rgb += data[i, :, np.newaxis] * (mat_rgb - 1.0)
+            rgb = np.clip(rgb, 0.0, 1.0)
+        else:
+            mat_rgb = self._color_to_rgb(
+                self.materials_widget.inputs[0]["color"].get_color()
+            )
+            # white -> material color gradient
+            rgb = np.clip(1.0 + data[:, np.newaxis] * (mat_rgb - 1.0), 0.0, 1.0)
+
+        return (rgb * 255).astype(np.uint8)
+
+    def _plot_deformation(self, is_3d: bool, nelx: int, nely: int, nelz: int):
         """
         Plot the deformed shape based on displacement results.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D problem.
         nelx, nely, nelz : int
@@ -47,6 +110,8 @@ class PlottingMixin:
         if (
             self.last_params["Displacement"]["disp_iterations"] == 1
         ):  # Single-frame grid plot
+            if self.xPhys is None:
+                return
             if is_3d:
                 # Compute original element centers
                 nel: int = nelx * nely * nelz
@@ -92,84 +157,69 @@ class PlottingMixin:
                     + Z[x_idx + 1, y_idx + 1, z_idx + 1]
                 ) / 8.0
 
-                # Colors with alpha = density
+                # Colors pre-blended against white with alpha = density
                 is_multi_3d: bool = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
-                if is_multi_3d:
-                    n_mat, _ = self.xPhys.shape
-                    rgb_3d: np.ndarray = np.ones((nel, 3))
-                    for i in range(n_mat):
-                        mat_rgb: np.ndarray = np.array(
-                            to_rgb(self.materials_widget.inputs[i]["color"].get_color())
-                        )
-                        rgb_3d += self.xPhys[i, :, np.newaxis] * (mat_rgb - 1.0)
-                    rgb_3d = np.clip(rgb_3d, 0.0, 1.0)
-                    alpha_3d: np.ndarray = self.xPhys.sum(axis=0).clip(0.0, 1.0)
-                    colors: np.ndarray = np.zeros((nel, 4))
-                    colors[:, :3] = rgb_3d
-                    colors[:, 3] = alpha_3d
-                else:
-                    colors = np.zeros((nel, 4))
-                    colors[:, :3] = to_rgb(
-                        self.materials_widget.inputs[0]["color"].get_color()
-                    )
-                    colors[:, 3] = self.xPhys
-
-                # Scatter plot of displaced centers
-                ax.scatter(
-                    cx,
-                    cy,
-                    cz,
-                    s=6000 / max(nelx, nely, nelz),
-                    marker="s",
-                    c=colors,
-                    alpha=None,
+                eff_density: np.ndarray = (
+                    self.xPhys.sum(axis=0) if is_multi_3d else self.xPhys
                 )
+                mask: np.ndarray = eff_density > 0.01
+                if not np.any(mask):
+                    return
+                colors: np.ndarray = self._material_colors(self.xPhys, is_multi_3d)[
+                    mask
+                ]
+                opacity: np.ndarray = np.interp(
+                    np.clip(eff_density[mask], 0.0, 1.0),
+                    (0.0, 1.0),
+                    (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
+                )
+                if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                    colors = np.column_stack(
+                        (colors, np.round(opacity * 255).astype(np.uint8))
+                    )
 
-                ax.set_box_aspect([nelx, nely, nelz])
+                # One cube glyph per visible displaced voxel center
+                points: np.ndarray = np.column_stack([cx[mask], cy[mask], cz[mask]])
+                poly = pv.PolyData(points)
+                poly.point_data["colors"] = colors
+                cube = pv.Cube(x_length=1.0, y_length=1.0, z_length=1.0)
+                glyphs = poly.glyph(geom=cube, orient=False, scale=False, factor=1.0)
+
+                self._remove_material_actor()
+                self._material_actor = self.plotter.add_mesh(
+                    glyphs,
+                    scalars="colors",
+                    rgb=True,
+                    reset_camera=False,
+                    render=False,
+                )
+                self._material_grid = None
             else:
                 X, Y = self.last_displayed_frame_data
 
                 is_multi: bool = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
-                if is_multi:
-                    n_mat, nel = self.xPhys.shape
-                    rgb_image: np.ndarray = np.ones((nel, 3))  # Start white
-                    for i in range(n_mat):
-                        mat_rgb: np.ndarray = np.array(
-                            to_rgb(self.materials_widget.inputs[i]["color"].get_color())
-                        )
-                        # Blend: pixel = sum(rho_i * color_i)
-                        rgb_image += self.xPhys[i, :, np.newaxis] * (mat_rgb - 1.0)
-                    rgb_image = np.clip(rgb_image, 0.0, 1.0)
-                    # Matplotlib's pcolormesh natively accepts 3D RGB arrays for the C parameter.
-                    # We reshape the (nel, 3) list into the 2D grid shape (nelx, nely, 3).
-                    ax.pcolormesh(
-                        X,
-                        Y,
-                        rgb_image.reshape((nelx, nely, 3)),
-                        shading="auto",
-                    )
-                else:
-                    # Single-material logic
-                    hex_color: str = to_hex(
-                        self.materials_widget.inputs[0]["color"].get_color()
-                    )
-                    color_cmap: LinearSegmentedColormap = (
-                        LinearSegmentedColormap.from_list(
-                            "material_shades",
-                            [hex_color, "#ffffff"],  # selected material color → white
-                        )
-                    )
-                    ax.pcolormesh(
-                        X,
-                        Y,
-                        -self.xPhys.reshape((nelx, nely)),
-                        cmap=color_cmap,
-                        shading="auto",
-                    )
+                colors: np.ndarray = self._material_colors(self.xPhys, is_multi)
+
+                # Structured grid of displaced nodes, colored per element
+                grid = pv.StructuredGrid(X, Y, np.zeros_like(X))
+                # Element ordering: app uses idx = y + x*nely, VTK uses x-fastest
+                grid.cell_data["colors"] = (
+                    colors.reshape((nelx, nely, 3)).transpose(1, 0, 2).reshape(-1, 3)
+                )
+
+                self._remove_material_actor()
+                self._material_actor = self.plotter.add_mesh(
+                    grid,
+                    scalars="colors",
+                    rgb=True,
+                    lighting=False,
+                    reset_camera=False,
+                    render=False,
+                )
+                self._material_grid = None
         else:
             if self.sections["Materials"].visibility_button.isChecked():
                 self._plot_material(
-                    ax,
                     is_3d=is_3d,
                     xPhys_data=self.last_displayed_frame_data,
                 )
@@ -341,43 +391,31 @@ class PlottingMixin:
                     if mat >= 0:
                         self.xPhys[mat, flat_idx] = 1.0
 
-    def _show_initial_message(self, ax: plt.Axes, is_3d: bool) -> None:
+    def _show_initial_message(self, is_3d: bool) -> None:
         """
         Display placeholder message on the plot before optimization results exist.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         """
+        self._message_actor = None
         if self.footer.create_button.graphicsEffect() is not None:
             init_message: str = 'Configure parameters and press "Create"'
-            if is_3d:
-                ax.text2D(
-                    0.5,
-                    0.5,
+            try:
+                self._message_actor = self.plotter.add_text(
                     init_message,
-                    transform=ax.transAxes,
-                    ha="center",
-                    va="center",
-                    fontsize=16,
-                    alpha=0.5,
+                    position=(0.5, 0.5),
+                    viewport=True,
+                    font_size=8,  # PyVista doubles this internally (≈16 pt)
                     color="black",
                 )
-            else:
-                ax.text(
-                    0.5,
-                    0.5,
-                    s=init_message,
-                    transform=ax.transAxes,
-                    ha="center",
-                    va="center",
-                    fontsize=16,
-                    alpha=0.5,
-                    color="black",
-                )
+                text_prop = self._message_actor.GetTextProperty()
+                text_prop.SetJustificationToCentered()
+                text_prop.SetVerticalJustificationToCentered()
+            except Exception:
+                self._message_actor = None
 
     def replot(self) -> None:
         """
@@ -388,51 +426,111 @@ class PlottingMixin:
         """
         if not self.last_params:
             return  # Do nothing if triggerd in sections initialization
-        self.figure.clear()
-        self.figure.patch.set_facecolor("white")
+        self.plotter.clear()
+        self._material_actor = None
+        self._material_grid = None
+        self._overlay_actors = []
+        self._message_actor = None
+        self.plotter.set_background("white")
+
         nelx: int
         nely: int
         nelz: int
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
         is_3d: bool = nelz > 0
-        if is_3d:
-            ax = self.figure.add_subplot(111, projection="3d", facecolor="white")
-        else:
-            ax = self.figure.add_subplot(111, facecolor="white")
 
         # Layer 1: The Main Result (Material)
         if (
             self.is_displaying_deformation
             and self.last_displayed_frame_data is not None
         ):
-            self._plot_deformation(ax, is_3d, nelx, nely, nelz)
+            self._plot_deformation(is_3d, nelx, nely, nelz)
         else:
             if self.sections["Materials"].visibility_button.isChecked():
                 if self.xPhys is None:
                     self._initialize_xphys(nelx, nely, nelz, is_3d)
-                self._plot_material(ax, is_3d=is_3d)
-            # Show initial message if xPhys is not a result (even partial) of optimization
-            self._show_initial_message(ax, is_3d)
+                self._plot_material(is_3d=is_3d)
 
-        self._redraw_non_material_layers(ax, is_3d)
-        if not is_3d:
-            ax.set_aspect("equal", "box")
-        ax.autoscale(tight=True)
-        self.figure.subplots_adjust(
-            left=0.07, right=0.93, bottom=0.07, top=0.93, wspace=0, hspace=0
-        )
-        self.canvas.draw()
+        # Layer 2: Overlays
+        self._redraw_non_material_layers(is_3d)
 
-    def _plot_material(
-        self, ax: plt.Axes, is_3d: bool, xPhys_data: np.ndarray | None = None
-    ) -> None:
+        # Show initial message if xPhys is not a result (even partial) of optimization
+        if not self.is_displaying_deformation:
+            self._show_initial_message(is_3d)
+
+        self._update_camera(is_3d, (nelx, nely, nelz))
+        self._render()
+
+    def _update_camera(self, is_3d: bool, dims: tuple) -> None:
+        """
+        Set the default camera for the current problem type.
+
+        The camera is only repositioned when switching between 2D and 3D or
+        when the design-space dimensions change, so manual camera changes are
+        preserved across replots. 2D interaction permits pan and zoom only.
+
+        Parameters
+        ----------
+        is_3d : bool
+            Whether this is a 3D plot.
+        dims : tuple
+            (nelx, nely, nelz) of the design space.
+        """
+        mode = "3d" if is_3d else "2d"
+        dims = tuple(dims)
+        if self._camera_mode == mode and self._camera_dims == dims:
+            return
+        self._camera_mode = mode
+        self._camera_dims = dims
+        if is_3d:
+            self.plotter.enable_trackball_style()
+            self.plotter.disable_parallel_projection()
+            self.plotter.view_isometric()
+            bounds = (0, dims[0], 0, dims[1], 0, dims[2])
+        else:
+            self.plotter.enable_image_style()
+            self.plotter.view_xy()
+            self.plotter.enable_parallel_projection()
+            bounds = (0, dims[0], 0, dims[1], -_OVERLAY_Z, _OVERLAY_Z)
+        self.plotter.reset_camera(bounds=bounds)
+        self.plotter.camera.zoom(1.08)
+
+    def _save_screenshot(self, filename: str) -> None:
+        """
+        Save the current view as a PNG image (2x resolution).
+
+        Parameters
+        ----------
+        filename : str
+            Target PNG file path.
+        """
+        self._fix_bounds_axes_ranges()
+        try:
+            self.plotter.screenshot(filename, scale=2)
+        except (TypeError, ValueError):
+            self.plotter.screenshot(filename)
+
+    def _remove_actor(self, actor) -> None:
+        """Remove an actor from the plotter, ignoring stale references."""
+        if actor is None:
+            return
+        try:
+            self.plotter.remove_actor(actor)
+        except (ValueError, KeyError, RuntimeError):
+            pass
+
+    def _remove_material_actor(self) -> None:
+        """Remove the material actor and forget its grid."""
+        self._remove_actor(self._material_actor)
+        self._material_actor = None
+        self._material_grid = None
+
+    def _plot_material(self, is_3d: bool, xPhys_data: np.ndarray | None = None) -> None:
         """
         Plot the material density field.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         xPhys_data : np.ndarray, optional
@@ -445,26 +543,26 @@ class PlottingMixin:
         data_to_plot: np.ndarray = self.xPhys if xPhys_data is None else xPhys_data
         if data_to_plot is None:
             return
+        if not self.sections["Materials"].visibility_button.isChecked():
+            return
 
         # Detect multi-material: shape (n_mat, nel)
         is_multi: bool = data_to_plot.ndim == 2
 
-        ax.clear()
         if is_3d:
-            self._plot_material_3d(ax, data_to_plot, nelx, nely, nelz, is_multi)
+            self._plot_material_3d(data_to_plot, nelx, nely, nelz, is_multi)
         else:
-            self._plot_material_2d(ax, data_to_plot, nelx, nely, is_multi)
+            self._plot_material_2d(data_to_plot, nelx, nely, is_multi)
 
-    def _plot_material_2d(
-        self, ax: plt.Axes, data: np.ndarray, nelx: int, nely: int, is_multi: bool
-    ):
+    def _plot_material_2d(self, data: np.ndarray, nelx: int, nely: int, is_multi: bool):
         """
-        Plot 2D material density field.
+        Plot 2D material density field as a flat colored grid.
+
+        When a grid with matching dimensions already exists, only its cell
+        colors are updated in place (fast path used for live frames).
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         data : np.ndarray
             Density data of shape (nel,) or (n_mat, nel).
         nelx, nely : int
@@ -472,44 +570,39 @@ class PlottingMixin:
         is_multi : bool
             Whether this is multi-material data.
         """
-        if is_multi:
-            n_mat: int
-            nel: int
-            n_mat, nel = data.shape
-            rgb_image: np.ndarray = np.ones((nel, 3))  # Start white
-            for i in range(n_mat):
-                mat_rgb: np.ndarray = np.array(
-                    to_rgb(self.materials_widget.inputs[i]["color"].get_color())
-                )
-                # Blend: pixel = sum(rho_i * color_i)
-                rgb_image += data[i, :, np.newaxis] * (mat_rgb - 1.0)
-            rgb_image = np.clip(rgb_image, 0.0, 1.0)
-            rgb_image = rgb_image.reshape((nelx, nely, 3)).transpose(1, 0, 2)
+        colors: np.ndarray = self._material_colors(data, is_multi)
+        # Element ordering: app uses idx = y + x*nely, VTK uses x-fastest
+        vtk_colors: np.ndarray = (
+            colors.reshape((nelx, nely, 3)).transpose(1, 0, 2).reshape(-1, 3)
+        )
 
-            ax.imshow(
-                rgb_image,
-                interpolation="nearest",
-                origin="lower",
-                extent=[0, nelx, 0, nely],
-            )
-        else:
-            mat_color = self.materials_widget.inputs[0]["color"].get_color()
-            cmap = LinearSegmentedColormap.from_list(
-                "custom_cmap", ["white", mat_color]
-            )
-            image = data.reshape((nelx, nely)).T
-            ax.imshow(
-                image,
-                cmap=cmap,
-                interpolation="nearest",
-                origin="lower",
-                norm=plt.Normalize(0, 1),
-                extent=[0, nelx, 0, nely],
-            )
+        grid = self._material_grid
+        if (
+            grid is not None
+            and self._material_actor is not None
+            and self._material_actor in self.plotter.actors.values()
+            and tuple(grid.dimensions) == (nelx + 1, nely + 1, 1)
+        ):
+            # Fast in-place update of the cell colors (replaces im.set_array)
+            grid.cell_data["colors"] = vtk_colors
+            return
+
+        self._remove_material_actor()
+        grid = ImageData(dimensions=(nelx + 1, nely + 1, 1))
+        grid.cell_data["colors"] = vtk_colors
+        self._material_actor = self.plotter.add_mesh(
+            grid,
+            scalars="colors",
+            rgb=True,
+            lighting=False,
+            name="material",
+            reset_camera=False,
+            render=False,
+        )
+        self._material_grid = grid
 
     def _plot_material_3d(
         self,
-        ax: plt.Axes,
         data: np.ndarray,
         nelx: int,
         nely: int,
@@ -517,12 +610,13 @@ class PlottingMixin:
         is_multi: bool,
     ):
         """
-        Plot 3D material density field as a scatter plot.
+        Plot 3D material density field as voxels.
+
+        Elements denser than 0.01 are extracted with a threshold and shown
+        as solid voxels colored by material (faded by effective density).
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib 3D axes object.
         data : np.ndarray
             Density data of shape (nel,) or (n_mat, nel).
         nelx, nely, nelz : int
@@ -530,85 +624,81 @@ class PlottingMixin:
         is_multi : bool
             Whether this is multi-material data.
         """
+        self._remove_material_actor()
+
         eff_density: np.ndarray = data.sum(axis=0) if is_multi else data
-        visible_mask: np.ndarray = eff_density > 0.01
-        visible_idx: np.ndarray = np.where(visible_mask)[0]
-        if len(visible_idx) == 0:
-            return
-
-        z: np.ndarray = visible_idx // (nelx * nely)
-        x: np.ndarray = (visible_idx % (nelx * nely)) // nely
-        y: np.ndarray = visible_idx % nely
-        colors: np.ndarray = np.ones((len(visible_idx), 4))  # RGBA, start white
-        if is_multi:
-            n_mat: int = data.shape[0]
-            for i in range(n_mat):
-                mat_rgb: np.ndarray = np.array(
-                    to_rgb(self.materials_widget.inputs[i]["color"].get_color())
-                )
-                rho_vis: np.ndarray = data[i, visible_idx]
-                colors[:, :3] += rho_vis[:, np.newaxis] * (mat_rgb - 1.0)
-            colors[:, :3] = np.clip(colors[:, :3], 0.0, 1.0)
-            colors[:, 3] = np.clip(eff_density[visible_idx], 0.0, 1.0)
-        else:
-            base_color_rgb: np.ndarray = to_rgb(
-                self.materials_widget.inputs[0]["color"].get_color()
-            )
-            colors[:, :3] = base_color_rgb
-            colors[:, 3] = eff_density[visible_idx]
-
-        ax.scatter(
-            x + 0.5,
-            y + 0.5,
-            z + 0.5,
-            s=6000 / max(nelx, nely, nelz),
-            marker="s",
-            c=colors,
-            alpha=None,
+        colors: np.ndarray = self._material_colors(data, is_multi)
+        opacity: np.ndarray = np.interp(
+            np.clip(eff_density, 0.0, 1.0),
+            (0.0, 1.0),
+            (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
         )
-        ax.set_box_aspect([nelx, nely, nelz])
+        if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            colors = np.column_stack((colors, np.round(opacity * 255).astype(np.uint8)))
 
-    def _redraw_non_material_layers(self, ax: plt.Axes, is_3d: bool) -> None:
+        structured_grid = StructuredGrid(nelx, nely, nelz)
+        grid = ImageData(dimensions=(nelx + 1, nely + 1, nelz + 1))
+        grid.cell_data["density"] = structured_grid.to_vtk_cell_order(eff_density)
+        grid.cell_data["colors"] = structured_grid.to_vtk_cell_order(colors)
+        visible = grid.threshold(0.01, scalars="density")
+        if visible.n_cells == 0:
+            return
+        self._material_actor = self.plotter.add_mesh(
+            visible,
+            scalars="colors",
+            rgb=True,
+            name="material",
+            reset_camera=False,
+            render=False,
+        )
+        self._material_grid = None  # no in-place fast path for 3D
+
+    def _redraw_non_material_layers(self, is_3d: bool) -> None:
         """
         Redraw overlay layers (forces, supports, regions, dimensions, displacement preview).
 
+        Previously drawn overlay actors are removed first so layers never
+        accumulate on the scene.
+
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         """
-        # Layer 2: Overlays
-        self._plot_forces(ax, is_3d=is_3d)
-        self._plot_supports(ax, is_3d=is_3d)
-        self._plot_regions(ax, is_3d=is_3d)
-        self._plot_dimensions_frame(ax, is_3d=is_3d)
-        self._plot_displacement_preview(ax, is_3d=is_3d)
+        for actor in self._overlay_actors:
+            self._remove_actor(actor)
+        self._overlay_actors = []
+        try:
+            self.plotter.remove_bounds_axes()
+        except (AttributeError, RuntimeError):
+            pass
 
-    def _plot_dimensions_frame(self, ax: plt.Axes, is_3d: bool) -> None:
+        self._plot_forces(is_3d=is_3d)
+        self._plot_supports(is_3d=is_3d)
+        self._plot_regions(is_3d=is_3d)
+        self._plot_dimensions_frame(is_3d=is_3d)
+        self._plot_displacement_preview(is_3d=is_3d)
+
+    @staticmethod
+    def _set_dotted(actor) -> None:
+        """Best-effort dotted line style (ignored if the backend lacks support)."""
+        try:
+            actor.prop.SetLineStipplePattern(0x00FF)
+            actor.prop.SetLineStippleRepeatFactor(1)
+        except (AttributeError, RuntimeError):
+            pass
+
+    def _plot_dimensions_frame(self, is_3d: bool) -> None:
         """
-        Draw a dotted frame around the design space.
+        Draw a dotted frame around the design space with axis labels.
         Controlled by the Dimensions section's visibility button.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         """
         if not self.sections["Dimensions"].visibility_button.isChecked():
-            ax.set_xlabel("")
-            ax.set_ylabel("")
-            if is_3d:
-                ax.set_zlabel("")
-            ax.set_xticks([])
-            ax.set_yticks([])
-            if is_3d:
-                ax.set_zticks([])
-            for spine in ax.spines.values():
-                spine.set_visible(False)
             return
 
         nelx: int
@@ -617,69 +707,83 @@ class PlottingMixin:
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
 
         if is_3d:
-            # Define the 8 vertices of the box
-            verts: list[tuple[int, int, int]] = [
-                (0, 0, 0),
-                (nelx, 0, 0),
-                (nelx, nely, 0),
-                (0, nely, 0),
-                (0, 0, nelz),
-                (nelx, 0, nelz),
-                (nelx, nely, nelz),
-                (0, nely, nelz),
-            ]
-            # Define the 12 edges by connecting the vertices
-            edges: list[tuple[int, int]] = [
-                (0, 1),
-                (1, 2),
-                (2, 3),
-                (3, 0),
-                (4, 5),
-                (5, 6),
-                (6, 7),
-                (7, 4),
-                (0, 4),
-                (1, 5),
-                (2, 6),
-                (3, 7),
-            ]
-            for edge in edges:
-                points = [verts[edge[0]], verts[edge[1]]]
-                x, y, z = zip(*points)
-                ax.plot(x, y, z, color="gray", linestyle=":", linewidth=1.5)
-        else:
-            rect: Rectangle = Rectangle(
-                (0, 0),
-                nelx,
-                nely,
-                fill=False,
-                edgecolor="gray",
-                linestyle=":",
-                linewidth=1.5,
+            box = pv.Box(bounds=(0, nelx, 0, nely, 0, nelz))
+            actor = self.plotter.add_mesh(
+                box,
+                style="wireframe",
+                color="gray",
+                line_width=1.5,
+                reset_camera=False,
+                render=False,
             )
-            ax.add_patch(rect)
+            self._set_dotted(actor)
+            self._overlay_actors.append(actor)
+            self.plotter.show_bounds(
+                xtitle="X",
+                ytitle="Y",
+                ztitle="Z",
+                color="black",
+                font_size=10,
+                bold=False,
+            )
+        else:
+            corners = np.array(
+                [
+                    [0, 0, _OVERLAY_Z],
+                    [nelx, 0, _OVERLAY_Z],
+                    [nelx, nely, _OVERLAY_Z],
+                    [0, nely, _OVERLAY_Z],
+                ],
+                dtype=float,
+            )
+            rect = pv.lines_from_points(corners, close=True)
+            actor = self.plotter.add_mesh(
+                rect, color="gray", line_width=1.5, reset_camera=False, render=False
+            )
+            self._set_dotted(actor)
+            self._overlay_actors.append(actor)
+            self.plotter.show_bounds(
+                xtitle="X",
+                ytitle="Y",
+                color="black",
+                font_size=10,
+                bold=False,
+            )
 
-        ax.set_xlabel("X", color="black")
-        ax.set_ylabel("Y", color="black")
-        ax.yaxis.label.set_rotation(0)  # Display Y label vertically
-        if is_3d:
-            ax.set_zlabel("Z", color="black")
-        ax.tick_params(axis="x", colors="black")
-        ax.tick_params(axis="y", colors="black")
-        if is_3d:
-            ax.tick_params(axis="z", colors="black")
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_edgecolor("black")
-
-    def _plot_forces(self, ax: plt.Axes, is_3d: bool) -> None:
+    def _fix_bounds_axes_ranges(self) -> None:
         """
-        Plot force vectors on the axes.
+        Force the bounds-axes ticks to span the design space exactly.
+
+        PyVista resets the axis label ranges to the (padded) scene bounds
+        every time an actor is added, so this must be re-applied after the
+        last actor of a render cycle has been added (see _render).
+        """
+        if not self.last_params or "Dimensions" not in self.last_params:
+            return
+        try:
+            cube_axes = self.plotter.renderer.cube_axes_actor
+            if cube_axes is None:
+                return
+            nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+            # Use the property setters (they also regenerate the labels)
+            cube_axes.x_axis_range = (0.0, float(nelx))
+            cube_axes.y_axis_range = (0.0, float(nely))
+            if nelz > 0:
+                cube_axes.z_axis_range = (0.0, float(nelz))
+        except (AttributeError, RuntimeError):
+            pass
+
+    def _render(self) -> None:
+        """Render the scene after re-applying the exact axis tick ranges."""
+        self._fix_bounds_axes_ranges()
+        self.plotter.render()
+
+    def _plot_forces(self, is_3d: bool) -> None:
+        """
+        Plot force vectors on the scene.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         """
@@ -697,9 +801,9 @@ class PlottingMixin:
             and self.u is not None
             and self.displacement_widget.mov_iter.value() == 1
         ):
-            self._plot_deformed_forces(ax, is_3d, pd, length)
+            self._plot_deformed_forces(is_3d, pd, length)
         else:
-            self._plot_initial_forces(ax, is_3d, pf, length)
+            self._plot_initial_forces(is_3d, pf, length)
 
     def _arrow_vectors(
         self, dirs: list, length: float, is_3d: bool
@@ -742,16 +846,50 @@ class PlottingMixin:
 
         return dx, dy, dz
 
-    def _plot_initial_forces(
-        self, ax: plt.Axes, is_3d: bool, pf: dict, length: float
-    ) -> None:
+    def _add_arrows(
+        self,
+        starts: np.ndarray,
+        directions: np.ndarray,
+        color: str,
+        length: float,
+    ):
+        """
+        Draw arrow glyphs of uniform length.
+
+        Parameters
+        ----------
+        starts : np.ndarray
+            (N, 3) arrow tail positions.
+        directions : np.ndarray
+            (N, 3) vectors giving the arrow orientations.
+        color : str
+            Arrow color.
+        length : float
+            Arrow length in scene units.
+
+        Returns
+        -------
+        The created actor (also tracked as an overlay actor).
+        """
+        starts = np.atleast_2d(np.asarray(starts, dtype=float))
+        directions = np.atleast_2d(np.asarray(directions, dtype=float))
+        if len(starts) == 0:
+            return None
+        poly = pv.PolyData(starts)
+        poly.point_data["direction"] = directions
+        glyphs = poly.glyph(orient="direction", scale=False, factor=length)
+        actor = self.plotter.add_mesh(
+            glyphs, color=color, reset_camera=False, render=False
+        )
+        self._overlay_actors.append(actor)
+        return actor
+
+    def _plot_initial_forces(self, is_3d: bool, pf: dict, length: float) -> None:
         """
         Plot force vectors at their initial positions.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         pf : dict
@@ -759,7 +897,7 @@ class PlottingMixin:
         length : float
             Arrow length scaling factor.
         """
-        for prefix, color in [("fi", "r"), ("fo", "b")]:
+        for prefix, color in [("fi", "red"), ("fo", "blue")]:
             dirs: np.ndarray = np.array(pf[f"{prefix}dir"])
             active: np.ndarray = dirs != "-"
             if not np.any(active):
@@ -767,8 +905,10 @@ class PlottingMixin:
 
             x: np.ndarray = np.array(pf[f"{prefix}x"])[active]
             y: np.ndarray = np.array(pf[f"{prefix}y"])[active]
-            z: np.ndarray | None = (
-                np.array(pf.get(f"{prefix}z", []))[active] if is_3d else None
+            z: np.ndarray = (
+                np.array(pf.get(f"{prefix}z", []))[active]
+                if is_3d
+                else np.zeros_like(x)
             )
 
             dx: np.ndarray
@@ -776,32 +916,16 @@ class PlottingMixin:
             dz: np.ndarray | None
             dx, dy, dz = self._arrow_vectors(dirs[active], length, is_3d)
 
-            if is_3d:
-                ax.quiver(
-                    x,
-                    y,
-                    z,
-                    dx,
-                    dy,
-                    dz,
-                    color=color,
-                    length=length,
-                    normalize=True,
-                    arrow_length_ratio=0.3,
-                )
-            else:
-                ax.quiver(x, y, dx, dy, color=color, units="xy", scale=1, width=0.5)
+            starts = np.column_stack([x, y, z])
+            vectors = np.column_stack([dx, dy, dz if is_3d else np.zeros_like(dx)])
+            self._add_arrows(starts, vectors, color, length)
 
-    def _plot_deformed_forces(
-        self, ax: plt.Axes, is_3d: bool, pd: dict, length: float
-    ) -> None:
+    def _plot_deformed_forces(self, is_3d: bool, pd: dict, length: float) -> None:
         """
         Plot force vectors at their displaced positions.
 
         Parameters
         ----------
-        ax : plt.Axes
-            Matplotlib axes object.
         is_3d : bool
             Whether this is a 3D plot.
         pd : dict
@@ -813,8 +937,8 @@ class PlottingMixin:
         disp_factor: float = self.displacement_widget.mov_disp.value()
 
         for xk, yk, zk, dk, color in [
-            ("fix", "fiy", "fiz", "fidir", "r"),
-            ("fox", "foy", "foz", "fodir", "b"),
+            ("fix", "fiy", "fiz", "fidir", "red"),
+            ("fox", "foy", "foz", "fodir", "blue"),
         ]:
             active: list = [
                 g
@@ -854,33 +978,20 @@ class PlottingMixin:
             dz: np.ndarray | None
             dx, dy, dz = self._arrow_vectors(dirs, length, is_3d)
 
-            if is_3d:
-                ax.quiver(
-                    fx,
-                    fy,
-                    fz,
-                    dx,
-                    dy,
-                    dz,
-                    color=color,
-                    length=length,
-                    normalize=True,
-                    arrow_length_ratio=0.3,
-                )
-            else:
-                ax.quiver(fx, fy, dx, dy, color=color, units="xy", scale=1, width=0.5)
+            starts = np.column_stack([fx, fy, fz if is_3d else np.zeros_like(fx)])
+            vectors = np.column_stack([dx, dy, dz if is_3d else np.zeros_like(dx)])
+            self._add_arrows(starts, vectors, color, length)
 
-    def _plot_supports(self, ax: plt.Axes, is_3d: bool) -> None:
+    def _plot_supports(self, is_3d: bool) -> None:
         """
-        Plot support markers on the provided axes.
+        Plot support markers on the scene.
+
+        Supports are drawn as black cones.
 
         Parameters
         ----------
-        ax : matplotlib.axes.Axes
-            Target axes (2D or 3D) where supports will be drawn.
         is_3d : bool
-            Whether the axes represent a 3D plot. Controls marker placement
-            and plotting API used.
+            Whether the scene represents a 3D plot. Controls marker placement.
         """
         if not self.sections["Supports"].visibility_button.isChecked():
             return
@@ -888,36 +999,42 @@ class PlottingMixin:
             return
         # No need to consider the case is_displaying_deformation since the supports don't move
         ps: dict = self.last_params["Supports"]
+        max_dimension = max(self.last_params["Dimensions"]["nelxyz"])
+        base_scale = max_dimension / 30.0
+        positions: list = []
+        scales: list = []
         for i, d in enumerate(ps["sdim"]):
             if d == "-":
                 continue
-            pos: list = [ps["sx"][i], ps["sy"][i], ps["sz"][i]]
-            size: int = 80 + 200 * ps["sr"][i] ** 2
-            if is_3d:
-                ax.scatter(
-                    pos[0],
-                    pos[1],
-                    pos[2],
-                    s=size,
-                    marker="^",
-                    c="black",
-                    depthshade=False,
-                )
-            else:
-                ax.scatter(pos[0], pos[1], s=size, marker="^", c="black")
+            positions.append([ps["sx"][i], ps["sy"][i], ps["sz"][i] if is_3d else 0.0])
+            scales.append(base_scale * np.sqrt(1.0 + ps["sr"][i] ** 2))
+        if not positions:
+            return
 
-    def _plot_regions(self, ax: plt.Axes, is_3d: bool) -> None:
+        poly = pv.PolyData(np.array(positions, dtype=float))
+        poly.point_data["marker_scale"] = np.asarray(scales)
+        cone = pv.Cone(
+            center=(0, 0, 0),
+            direction=(0, 0, 1) if is_3d else (0, 1, 0),
+            height=1.0,
+            radius=0.5,
+            resolution=24,
+        )
+        glyphs = poly.glyph(geom=cone, orient=False, scale="marker_scale", factor=1.0)
+        actor = self.plotter.add_mesh(
+            glyphs, color="black", reset_camera=False, render=False
+        )
+        self._overlay_actors.append(actor)
+
+    def _plot_regions(self, is_3d: bool) -> None:
         """
-        Draw region outlines (square/cube or circle/sphere) on the axes.
+        Draw region outlines (square/cube or circle/sphere) on the scene.
 
-        Regions are drawn with a green, dashed outline. In 2D a `matplotlib`
-        patch (Rectangle or Circle) is added, while in 3D the function plots
-        the corresponding edges or a wireframe sphere.
+        Regions are drawn with a green, dashed outline. In 2D a line loop is
+        used, while in 3D the function draws a wireframe box or sphere.
 
         Parameters
         ----------
-        ax : matplotlib.axes.Axes
-            Target axes for drawing.
         is_3d : bool
             Whether the plot is 3D.
         """
@@ -939,87 +1056,72 @@ class PlottingMixin:
             if is_3d:
                 rz: int = pr["rz"][i]
                 if shape == "□":  # Square/Cube
-                    # Define the 8 vertices of the cube
-                    verts = np.array(
-                        [
-                            [rx - r, ry - r, rz - r],
-                            [rx + r, ry - r, rz - r],
-                            [rx + r, ry + r, rz - r],
-                            [rx - r, ry + r, rz - r],
-                            [rx - r, ry - r, rz + r],
-                            [rx + r, ry - r, rz + r],
-                            [rx + r, ry + r, rz + r],
-                            [rx - r, ry + r, rz + r],
-                        ]
+                    mesh = pv.Box(
+                        bounds=(rx - r, rx + r, ry - r, ry + r, rz - r, rz + r)
                     )
-                    # Define the 12 edges connecting the vertices
-                    edges = [
-                        (0, 1),
-                        (1, 2),
-                        (2, 3),
-                        (3, 0),
-                        (4, 5),
-                        (5, 6),
-                        (6, 7),
-                        (7, 4),
-                        (0, 4),
-                        (1, 5),
-                        (2, 6),
-                        (3, 7),
-                    ]
-                    for edge in edges:
-                        points = verts[list(edge)]
-                        # Note: Matplotlib's 3D axes are ordered (X, Y, Z)
-                        ax.plot(
-                            points[:, 0],
-                            points[:, 1],
-                            points[:, 2],
-                            color="green",
-                            linestyle=":",
-                        )
-
-                elif shape == "◯":  # Circle/Sphere
-                    # Create the surface grid for the sphere
-                    u = np.linspace(0, 2 * np.pi, 20)
-                    v = np.linspace(0, np.pi, 20)
-                    # Parametric equations for a sphere
-                    x = rx + r * np.outer(np.cos(u), np.sin(v))
-                    y = ry + r * np.outer(np.sin(u), np.sin(v))
-                    z = rz + r * np.outer(np.ones(np.size(u)), np.cos(v))
-                    ax.plot_wireframe(x, y, z, color="green", linestyle=":")
+                else:  # "◯" Circle/Sphere
+                    mesh = pv.Sphere(
+                        radius=r,
+                        center=(rx, ry, rz),
+                        theta_resolution=20,
+                        phi_resolution=20,
+                    )
+                actor = self.plotter.add_mesh(
+                    mesh,
+                    style="wireframe",
+                    color="green",
+                    line_width=1.0,
+                    reset_camera=False,
+                    render=False,
+                )
+                self._set_dotted(actor)
+                self._overlay_actors.append(actor)
 
             else:
                 if shape == "□":  # Square/Cube
-                    rect: plt.Rectangle = plt.Rectangle(
-                        (rx - r, ry - r),
-                        2 * r,
-                        2 * r,
-                        fill=False,
-                        edgecolor="green",
-                        linestyle=":",
+                    corners = np.array(
+                        [
+                            [rx - r, ry - r, _OVERLAY_Z],
+                            [rx + r, ry - r, _OVERLAY_Z],
+                            [rx + r, ry + r, _OVERLAY_Z],
+                            [rx - r, ry + r, _OVERLAY_Z],
+                        ],
+                        dtype=float,
                     )
-                    ax.add_patch(rect)
-                elif shape == "◯":  # Circle/Sphere
-                    circ: plt.Circle = plt.Circle(
-                        (rx, ry), r, fill=False, edgecolor="green", linestyle=":"
+                    mesh = pv.lines_from_points(corners, close=True)
+                else:  # "◯" Circle/Sphere
+                    theta = np.linspace(0, 2 * np.pi, 64, endpoint=False)
+                    points = np.column_stack(
+                        [
+                            rx + r * np.cos(theta),
+                            ry + r * np.sin(theta),
+                            np.full(theta.size, _OVERLAY_Z),
+                        ]
                     )
-                    ax.add_patch(circ)
+                    mesh = pv.lines_from_points(points, close=True)
+                actor = self.plotter.add_mesh(
+                    mesh,
+                    color="green",
+                    line_width=1.5,
+                    reset_camera=False,
+                    render=False,
+                )
+                self._set_dotted(actor)
+                self._overlay_actors.append(actor)
 
-    def _plot_displacement_preview(self, ax: plt.Axes, is_3d: bool) -> None:
+    def _plot_displacement_preview(self, is_3d: bool) -> None:
         """
-        Overlay displacement preview vectors (quivers) on the plot.
+        Overlay displacement preview arrows on the scene.
 
-        The function samples a subset of elements/nodes and draws quiver
-        arrows representing the displacement vector at those locations. Only
+        The function samples a subset of elements/nodes and draws arrow
+        glyphs representing the displacement vector at those locations. Only
         elements considered to contain material are shown. Scaling and arrow
         density depend on the current UI controls.
 
         Parameters
         ----------
-        ax : matplotlib.axes.Axes
-            Target axes to draw displacement arrows.
         is_3d : bool
-            Whether to draw 3D quivers or 2D arrows.
+            Whether to draw 3D arrows or 2D arrows.
         """
         if not self.sections["Displacement"].visibility_button.isChecked():
             return
@@ -1036,8 +1138,8 @@ class PlottingMixin:
         nely: int
         nelz: int
         nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
-        step: int = (
-            max(nelx, nely, nelz) / 10
+        step: int = max(
+            1, int(max(nelx, nely, nelz) / 10)
         )  # number of elements to skip between 2 arrows
         if is_3d:
             x_coords, y_coords, z_coords = np.meshgrid(
@@ -1069,16 +1171,14 @@ class PlottingMixin:
             uy: np.ndarray = -self.u[3 * node_valid + 1] * factor
             uz: np.ndarray = self.u[3 * node_valid + 2] * factor
 
-            ax.quiver(
-                x_valid,
-                y_valid,
-                z_valid,
-                ux,
-                uy,
-                uz,
-                color="red",
-                length=disp_factor / 4.0,
-                normalize=True,
+            starts = np.column_stack([x_valid, y_valid, z_valid])
+            vectors = np.column_stack([ux, uy, uz])
+            # Skip near-zero vectors (undefined glyph orientation)
+            keep = np.linalg.norm(vectors, axis=1) > 1e-12
+            if not np.any(keep):
+                return
+            self._add_arrows(
+                starts[keep], vectors[keep], "red", length=disp_factor / 4.0
             )
         else:
             x_coords, y_coords = np.meshgrid(
@@ -1102,13 +1202,21 @@ class PlottingMixin:
             ux = self.u[2 * node_valid] * factor
             uy = -self.u[2 * node_valid + 1] * factor
 
-            ax.quiver(
-                x_valid,
-                y_valid,
-                ux,
-                uy,
-                color="red",
-                scale=40,
-                scale_units="xy",
-                angles="xy",
+            starts = np.column_stack([x_valid, y_valid, np.zeros_like(x_valid)])
+            vectors = np.column_stack([ux, uy, np.zeros_like(ux)])
+            magnitudes = np.linalg.norm(vectors, axis=1)
+            max_mag = magnitudes.max() if magnitudes.size else 0.0
+            if max_mag <= 0:
+                return
+
+            # Scale arrows so the longest one spans one sampling step
+            poly = pv.PolyData(starts)
+            poly.point_data["direction"] = vectors
+            poly.point_data["magnitude"] = magnitudes
+            glyphs = poly.glyph(
+                orient="direction", scale="magnitude", factor=step / max_mag
             )
+            actor = self.plotter.add_mesh(
+                glyphs, color="red", reset_camera=False, render=False
+            )
+            self._overlay_actors.append(actor)
