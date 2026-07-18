@@ -24,3 +24,6 @@ __pycache__/
 
 # Serena AI tool cache
 .serena/
+
+# Headroom generated files
+AGENTS.md
