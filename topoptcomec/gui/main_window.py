@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QInputDialog,
+    QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -133,8 +134,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         """Creates the right-hand side control panel with all settings."""
         self.control_panel_frame = QFrame()
         # Must be big enough to accomodate the widest section + the right scrollbar
-        self.control_panel_frame.setFixedWidth(375)
+        # so that no horizontal scrollbar appears at the bottom of the panel.
+        self.control_panel_frame.setFixedWidth(340)
         panel_layout = QVBoxLayout(self.control_panel_frame)
+        panel_layout.setContentsMargins(4, 4, 4, 4)
+        panel_layout.setSpacing(4)
 
         # Header
         self.header = self._create_header()
@@ -150,6 +154,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         scroll_widget = QWidget()
         self.sections_layout = QVBoxLayout(scroll_widget)
         self.sections_layout.setAlignment(Qt.AlignTop)
+        self.sections_layout.setContentsMargins(2, 2, 2, 2)
+        self.sections_layout.setSpacing(4)
         scroll_widget.setLayout(self.sections_layout)
         scroll_area.setWidget(scroll_widget)
         panel_layout.addWidget(scroll_area)
@@ -225,7 +231,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     def _create_forces_section(self) -> CollapsibleSection:
         """Creates the third section for forces parameters."""
         self.forces_widget = ForcesWidget()
-        section = CollapsibleSection("💪 Forces", self.forces_widget)
+        section = CollapsibleSection("➡️ Forces", self.forces_widget)
         section.set_visibility_toggle(True)
         section.visibility_button.toggled.connect(self._on_visibility_toggled)
 
@@ -836,25 +842,21 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.progress_bar.setValue(iteration)
         self.status_bar.showMessage(f"Running analysis: step {iteration}...")
 
+    def _set_result_badge(self, label: QLabel, value: bool, ok: bool) -> None:
+        """Set an analysis result label's text and semantic state badge."""
+        label.setText("yes" if value else "no")
+        label.setProperty("resultState", "ok" if ok else "bad")
+        label.style().unpolish(label)
+        label.style().polish(label)
+
     def _handle_analysis_finished(self, results: Tuple[bool, bool, bool, bool]) -> None:
         """Handles the results after analysis finishes successfully."""
         aw = self.analysis_widget
-        aw.checkerboard_result.setText("yes" if results[0] else "no")
-        aw.checkerboard_result.setStyleSheet(
-            "color: green;" if not results[0] else "color: red;"
-        )
-        aw.watertight_result.setText("yes" if results[1] else "no")
-        aw.watertight_result.setStyleSheet(
-            "color: green;" if results[1] else "color: red;"
-        )
-        aw.threshold_result.setText("yes" if results[2] else "no")
-        aw.threshold_result.setStyleSheet(
-            "color: green;" if results[2] else "color: red;"
-        )
-        aw.efficiency_result.setText("yes" if results[3] else "no")
-        aw.efficiency_result.setStyleSheet(
-            "color: green;" if results[3] else "color: red;"
-        )
+        # Checkerboard patterns are a defect: detecting them is a bad outcome.
+        self._set_result_badge(aw.checkerboard_result, results[0], not results[0])
+        self._set_result_badge(aw.watertight_result, results[1], results[1])
+        self._set_result_badge(aw.threshold_result, results[2], results[2])
+        self._set_result_badge(aw.efficiency_result, results[3], results[3])
         self.status_bar.showMessage("Analysis finished successfully.", 5000)
         self.progress_bar.setVisible(False)
         self.footer.create_button.setEnabled(True)
@@ -1404,6 +1406,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         # Update header icons
         self.header.info_button.setIcon(icons._get("info"))
         self.header.help_button.setIcon(icons._get("help"))
+        self.header.issue_button.setIcon(icons._get("bug"))
+        # Update analysis icons
+        self.analysis_widget.run_analysis_button.setIcon(icons._get("search"))
+        self.analysis_widget.stop_analysis_button.setIcon(icons._get("stop"))
         # Update presets icons
         self.preset.save_preset_button.setIcon(icons._get("save"))
         self.preset.delete_preset_button.setIcon(icons._get("delete"))
@@ -1417,6 +1423,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.footer.create_button.setIcon(icons._get("create"))
         self.footer.stop_button.setIcon(icons._get("stop"))
         self.footer.save_button.setIcon(icons._get("save"))
+        # Reapply the estimated-time color (the global stylesheet re-polish can
+        # reset the button's background to the default primary color).
+        color = getattr(self.footer, "_create_color", "#00FF0D")
+        self.footer.set_create_button_color(color)
 
         # Update dynamic icons (like the visibility and collapsible arrows)
         for section in self.sections.values():

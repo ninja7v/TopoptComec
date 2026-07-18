@@ -201,14 +201,16 @@ class ParameterManagerMixin:
             self.sections["Displacement"].visibility_button.setEnabled(False)
 
             # Reset the analysis
-            self.analysis_widget.checkerboard_result.setText("-")
-            self.analysis_widget.watertight_result.setText("-")
-            self.analysis_widget.threshold_result.setText("-")
-            self.analysis_widget.efficiency_result.setText("-")
-            self.analysis_widget.checkerboard_result.setStyleSheet("")
-            self.analysis_widget.watertight_result.setStyleSheet("")
-            self.analysis_widget.threshold_result.setStyleSheet("")
-            self.analysis_widget.efficiency_result.setStyleSheet("")
+            for result in (
+                self.analysis_widget.checkerboard_result,
+                self.analysis_widget.watertight_result,
+                self.analysis_widget.threshold_result,
+                self.analysis_widget.efficiency_result,
+            ):
+                result.setText("-")
+                result.setProperty("resultState", "")
+                result.style().unpolish(result)
+                result.style().polish(result)
 
             # Inform the user what happened
             self.status_bar.showMessage(
@@ -219,6 +221,7 @@ class ParameterManagerMixin:
         self.last_params = self._gather_parameters()
         color, label = TimeEstimation(self.last_params).optimization_indicators()
         tooltip_text = f"Start the optimization process\n\nEstimation: {label}"
+        self.footer.set_create_button_color(color)
         self.footer.start_create_button_effect(color_hex=color)
         self.footer.create_button.setToolTip(tooltip_text)
 
