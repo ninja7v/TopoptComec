@@ -114,6 +114,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.progress_bar.setVisible(False)
         self.status_bar.addPermanentWidget(self.progress_bar)
 
+        # Wire up interactive overlay repositioning
+        # (2D: pick with 'p', move with arrow keys, deselect with Esc).
+        self._setup_interactive_overlay_tools()
+
         self._load_presets()
 
         default_preset_name: str = "ForceInverter_2Sup_2D"
