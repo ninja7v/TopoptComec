@@ -31,6 +31,15 @@ class PlottingMixin:
         self._message_actor = None
         self._camera_mode = None  # "2d" or "3d"
         self._camera_dims = None  # (nelx, nely, nelz) the camera was fitted on
+        # Interactive overlay repositioning (2D only).
+        # Maps id(actor) -> ("force_in"|"force_out"|"support", original_index).
+        self._overlay_actor_map: dict = {}
+        # Logical selection: (kind, idx). Survives replots.
+        self._selected_overlay: tuple | None = None
+        # Visual highlight actor for the selected overlay element.
+        self._highlight_actor = None
+        # Whether interactive overlay tools have been wired up.
+        self._interactive_tools_setup: bool = False
 
     def _style_plot_default(self) -> None:
         """
@@ -658,16 +667,21 @@ class PlottingMixin:
         Redraw overlay layers (forces, supports, regions, dimensions, displacement preview).
 
         Previously drawn overlay actors are removed first so layers never
-        accumulate on the scene.
+        accumulate on the scene. The actor -> element map is rebuilt each
+        time, and the selection highlight is re-applied last so it stays on
+        top of the freshly drawn overlays.
 
         Parameters
         ----------
         is_3d : bool
             Whether this is a 3D plot.
         """
-        for actor in self._overlay_actors:
-            self._remove_actor(actor)
+        for actors in (self._overlay_actors, [self._highlight_actor]):
+            for a in actors:
+                self._remove_actor(a)
         self._overlay_actors = []
+        self._highlight_actor = None
+        self._overlay_actor_map = {}
         try:
             self.plotter.remove_bounds_axes()
         except (AttributeError, RuntimeError):
@@ -678,6 +692,9 @@ class PlottingMixin:
         self._plot_regions(is_3d=is_3d)
         self._plot_dimensions_frame(is_3d=is_3d)
         self._plot_displacement_preview(is_3d=is_3d)
+
+        # Re-apply selection highlight on top of the new overlay actors.
+        self._apply_selection_highlight()
 
     @staticmethod
     def _set_dotted(actor) -> None:
@@ -796,6 +813,261 @@ class PlottingMixin:
         self._fix_bounds_axes_ranges()
         self.plotter.render()
 
+    # ------------------------------------------------------------------
+    # Interactive overlay repositioning (2D, no worker, no deformation)
+    # ------------------------------------------------------------------
+
+    def _setup_interactive_overlay_tools(self) -> None:
+        """Wire up picking + arrow-key bindings for overlay repositioning.
+
+        Called once from ``MainWindow.__init__`` after the control panel
+        is built. Safe to call multiple times: the wiring is idempotent.
+        """
+        if self._interactive_tools_setup:
+            return
+        self._interactive_tools_setup = True
+        # Picking: default trigger is the 'p' key (also right-click, but
+        # that conflicts with the image-style zoom). 'p' does not.
+        self.plotter.enable_mesh_picking(
+            callback=self._on_overlay_picked,
+            show=False,
+            show_message=False,
+            use_actor=True,
+            left_clicking=False,
+        )
+        # Clear PyVista's default zoom_camera bindings on Up/Down; otherwise
+        # arrow presses would both move the element and zoom the camera.
+        for key in ("Left", "Right", "Up", "Down", "r", "R"):
+            self.plotter.clear_events_for_key(key)
+        # Arrow keys for movement. Shift modifier = larger step.
+        for key, vec in (
+            ("Left", (-1, 0)),
+            ("Right", (1, 0)),
+            ("Up", (0, 1)),
+            ("Down", (0, -1)),
+        ):
+            self.plotter.add_key_event(key, lambda vec=vec: self._move_selected(*vec))
+        # 'r' / 'R' rotate the selected force's direction.
+        self.plotter.add_key_event("r", self._rotate_selected_force)
+        self.plotter.add_key_event("R", self._rotate_selected_force)
+        # Esc clears the selection.
+        self.plotter.add_key_event("Escape", self._deselect_overlay)
+
+    def _can_interact_with_overlays(self) -> bool:
+        """Base gate: selection and rotation are allowed.
+
+        Blocks when a worker is running, when displaying the deformation
+        view, or when the design space is not yet valid. Does NOT block 3D
+        mode: picking and rotation both work in 3D. Movement in the XY
+        plane is restricted to 2D via ``_can_move_selected``.
+        """
+        if getattr(self, "worker", None) is not None:
+            return False
+        if getattr(self, "is_displaying_deformation", False):
+            return False
+        if not self.last_params or "Dimensions" not in self.last_params:
+            return False
+        nelx, nely, _ = self.last_params["Dimensions"]["nelxyz"]
+        if nelx <= 0 or nely <= 0:
+            return False
+        return True
+
+    def _can_move_selected(self) -> bool:
+        """Movement gate: base gate + 2D only (XY-plane movement)."""
+        if not self._can_interact_with_overlays():
+            return False
+        return self.last_params["Dimensions"]["nelxyz"][2] <= 0
+
+    def _can_rotate_selected_force(self) -> bool:
+        """Rotation gate: base gate + selection exists and is a force."""
+        if not self._can_interact_with_overlays():
+            return False
+        if self._selected_overlay is None:
+            return False
+        kind, _ = self._selected_overlay
+        return kind in ("force_in", "force_out")
+
+    def _on_overlay_picked(self, actor) -> None:
+        """Picking callback: select the picked overlay element (2D only)."""
+        if not self._can_interact_with_overlays():
+            return
+        key = id(actor)
+        if key not in self._overlay_actor_map:
+            # Clicked on something that is not an interactive overlay.
+            return
+        self._selected_overlay = self._overlay_actor_map[key]
+        self._apply_selection_highlight()
+        self.status_bar.showMessage(
+            "Selected. Arrow keys to move, Esc to deselect.", 3000
+        )
+
+    def _deselect_overlay(self) -> None:
+        """Clear the current overlay selection."""
+        self._selected_overlay = None
+        self._apply_selection_highlight()
+        self.status_bar.clearMessage()
+
+    def _apply_selection_highlight(self) -> None:
+        """Draw (or refresh) the selection highlight around the element.
+
+        2D: a yellow ring in the XY plane. 3D: a yellow wireframe sphere
+        centered on the element. The highlight is dropped if the selection
+        is stale (e.g. user entered the deformation view).
+        """
+        # Remove any previous highlight actor.
+        if self._highlight_actor is not None:
+            self._remove_actor(self._highlight_actor)
+            self._highlight_actor = None
+
+        if self._selected_overlay is None:
+            return
+        if not self._can_interact_with_overlays():
+            # Selection is stale (e.g. user entered deformation view): drop it.
+            self._selected_overlay = None
+            return
+
+        pos = self._selected_overlay_position()
+        if pos is None:
+            self._selected_overlay = None
+            return
+        x, y, z = pos
+        nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        radius = max(nelx, nely) / 25.0
+        if nelz > 0:
+            # 3D: wireframe sphere around the element.
+            mesh = pv.Sphere(
+                radius=radius,
+                center=(x, y, z),
+                theta_resolution=20,
+                phi_resolution=20,
+            )
+            self._highlight_actor = self.plotter.add_mesh(
+                mesh,
+                style="wireframe",
+                color="yellow",
+                line_width=2.0,
+                reset_camera=False,
+                render=False,
+            )
+        else:
+            # 2D: ring in the XY plane, slightly above the overlay layer.
+            theta = np.linspace(0, 2 * np.pi, 48, endpoint=False)
+            pts = np.column_stack(
+                [
+                    x + radius * np.cos(theta),
+                    y + radius * np.sin(theta),
+                    np.full(theta.size, _OVERLAY_Z + 0.02),
+                ]
+            )
+            ring = pv.lines_from_points(pts, close=True)
+            self._highlight_actor = self.plotter.add_mesh(
+                ring,
+                color="yellow",
+                line_width=3.0,
+                reset_camera=False,
+                render=False,
+            )
+
+    def _selected_overlay_position(self) -> tuple | None:
+        """Return the (x, y, z) of the currently selected element, or None."""
+        if self._selected_overlay is None:
+            return None
+        kind, idx = self._selected_overlay
+        widgets = self._overlay_position_widgets(kind, idx)
+        if widgets is None:
+            return None
+        x_w, y_w, z_w = widgets
+        return (float(x_w.value()), float(y_w.value()), float(z_w.value()))
+
+    def _overlay_position_widgets(self, kind: str, idx: int) -> tuple | None:
+        """Return (x_spinbox, y_spinbox, z_spinbox) for the given overlay element."""
+        try:
+            if kind == "force_in":
+                group = self.forces_widget.input_forces[idx]
+                return (group["fix"], group["fiy"], group["fiz"])
+            if kind == "force_out":
+                group = self.forces_widget.output_forces[idx]
+                return (group["fox"], group["foy"], group["foz"])
+            if kind == "support":
+                group = self.supports_widget.inputs[idx]
+                return (group["sx"], group["sy"], group["sz"])
+        except (IndexError, KeyError, AttributeError):
+            return None
+        return None
+
+    def _move_selected(self, dx: int, dy: int) -> None:
+        """Move the currently selected overlay element by (dx, dy).
+
+        Shift modifier multiplies the step by 5. The move commits a single
+        ``on_parameter_changed`` (signals are blocked while both spinboxes
+        are updated), which triggers one replot. Selection survives the
+        replot and is re-highlighted by ``_redraw_non_material_layers``.
+
+        Movement is restricted to the XY plane and thus to 2D problems.
+        """
+        if not self._can_move_selected():
+            return
+        if self._selected_overlay is None:
+            return
+        kind, idx = self._selected_overlay
+        widgets = self._overlay_position_widgets(kind, idx)
+        if widgets is None:
+            return
+        x_w, y_w, _ = widgets
+        nelx, nely, _ = self.last_params["Dimensions"]["nelxyz"]
+        # Shift modifier => larger step (only when invoked via key press).
+        step = 5 if self._shift_pressed() else 1
+        new_x = int(np.clip(x_w.value() + dx * step, 0, nelx))
+        new_y = int(np.clip(y_w.value() + dy * step, 0, nely))
+        if new_x == x_w.value() and new_y == y_w.value():
+            return
+        # Block signals to avoid two replots (one per setValue).
+        self._block_all_parameter_signals(True)
+        try:
+            x_w.setValue(new_x)
+            y_w.setValue(new_y)
+        finally:
+            self._block_all_parameter_signals(False)
+        # Single commit -> single replot. Selection is preserved across it.
+        self.on_parameter_changed()
+
+    def _rotate_selected_force(self) -> None:
+        """Rotate the selected force's direction (works in 2D and 3D).
+
+        Pressing 'r' advances the direction to the next in the cycle:
+        - 2D (clockwise): X:→ → Y:↓ → X:← → Y:↑ → X:→ (indices [1,4,2,3])
+        - 3D: X:→ → X:← → Y:↑ → Y:↓ → Z:< → Z:> → X:→ (indices [1,2,3,4,5,6])
+
+        Shift+r reverses the cycle. If the force is currently inactive
+        ("-"), it activates at the first element of the cycle. Commits a
+        single ``on_parameter_changed`` via the combo's signal.
+        """
+        if not self._can_rotate_selected_force():
+            return
+        kind, idx = self._selected_overlay
+        if kind == "force_in":
+            combo = self.forces_widget.input_forces[idx]["fidir"]
+        else:
+            combo = self.forces_widget.output_forces[idx]["fodir"]
+        nelz = self.last_params["Dimensions"]["nelxyz"][2]
+        cycle = [1, 2, 3, 4, 5, 6] if nelz > 0 else [1, 4, 2, 3]
+        current = combo.currentIndex()
+        direction = -1 if self._shift_pressed() else 1
+        if current not in cycle:
+            # Currently inactive: activate at the first cycle element.
+            next_idx = cycle[0]
+        else:
+            pos = cycle.index(current)
+            next_idx = cycle[(pos + direction) % len(cycle)]
+        combo.setCurrentIndex(next_idx)
+
+    def _shift_pressed(self) -> bool:
+        """Best-effort shift-modifier detection from the VTK interactor."""
+        try:
+            return bool(self.plotter.interactor.GetShiftKey())
+        except (AttributeError, RuntimeError):
+            return False
+
     def _plot_forces(self, is_3d: bool) -> None:
         """
         Plot force vectors on the scene.
@@ -906,6 +1178,10 @@ class PlottingMixin:
         """
         Plot force vectors at their initial positions.
 
+        Each active force is drawn as its own actor so it can be picked and
+        moved independently. The actor -> element mapping is recorded in
+        ``self._overlay_actor_map`` for the interactive selection callback.
+
         Parameters
         ----------
         is_3d : bool
@@ -915,28 +1191,25 @@ class PlottingMixin:
         length : float
             Arrow length scaling factor.
         """
-        for prefix, color in [("fi", "red"), ("fo", "blue")]:
-            dirs: np.ndarray = np.array(pf[f"{prefix}dir"])
-            active: np.ndarray = dirs != "-"
-            if not np.any(active):
-                continue
-
-            x: np.ndarray = np.array(pf[f"{prefix}x"])[active]
-            y: np.ndarray = np.array(pf[f"{prefix}y"])[active]
-            z: np.ndarray = (
-                np.array(pf.get(f"{prefix}z", []))[active]
-                if is_3d
-                else np.zeros_like(x)
-            )
-
-            dx: np.ndarray
-            dy: np.ndarray
-            dz: np.ndarray | None
-            dx, dy, dz = self._arrow_vectors(dirs[active], length, is_3d)
-
-            starts = np.column_stack([x, y, z])
-            vectors = np.column_stack([dx, dy, dz if is_3d else np.zeros_like(dx)])
-            self._add_arrows(starts, vectors, color, length)
+        for prefix, color, kind in (
+            ("fi", "red", "force_in"),
+            ("fo", "blue", "force_out"),
+        ):
+            dirs = pf[f"{prefix}dir"]
+            for orig_idx, d in enumerate(dirs):
+                if d == "-":
+                    continue
+                x = pf[f"{prefix}x"][orig_idx]
+                y = pf[f"{prefix}y"][orig_idx]
+                z = pf.get(f"{prefix}z", [0])[orig_idx] if is_3d else 0.0
+                dx, dy, dz = self._arrow_vectors([d], length, is_3d)
+                starts = np.array([[x, y, z]], dtype=float)
+                vectors = np.array(
+                    [[dx[0], dy[0], dz[0] if is_3d else 0.0]], dtype=float
+                )
+                actor = self._add_arrows(starts, vectors, color, length)
+                if actor is not None:
+                    self._overlay_actor_map[id(actor)] = (kind, orig_idx)
 
     def _plot_deformed_forces(self, is_3d: bool, pd: dict, length: float) -> None:
         """
@@ -1004,7 +1277,9 @@ class PlottingMixin:
         """
         Plot support markers on the scene.
 
-        Supports are drawn as black cones.
+        Supports are drawn as black cones. Each active support is its own
+        actor so it can be picked and moved independently. The actor ->
+        element mapping is recorded in ``self._overlay_actor_map``.
 
         Parameters
         ----------
@@ -1019,18 +1294,6 @@ class PlottingMixin:
         ps: dict = self.last_params["Supports"]
         max_dimension = max(self.last_params["Dimensions"]["nelxyz"])
         base_scale = max_dimension / 30.0
-        positions: list = []
-        scales: list = []
-        for i, d in enumerate(ps["sdim"]):
-            if d == "-":
-                continue
-            positions.append([ps["sx"][i], ps["sy"][i], ps["sz"][i] if is_3d else 0.0])
-            scales.append(base_scale * np.sqrt(1.0 + ps["sr"][i] ** 2))
-        if not positions:
-            return
-
-        poly = pv.PolyData(np.array(positions, dtype=float))
-        poly.point_data["marker_scale"] = np.asarray(scales)
         cone = pv.Cone(
             center=(0, 0, 0),
             direction=(0, 0, 1) if is_3d else (0, 1, 0),
@@ -1038,11 +1301,23 @@ class PlottingMixin:
             radius=0.5,
             resolution=24,
         )
-        glyphs = poly.glyph(geom=cone, orient=False, scale="marker_scale", factor=1.0)
-        actor = self.plotter.add_mesh(
-            glyphs, color="black", reset_camera=False, render=False
-        )
-        self._overlay_actors.append(actor)
+        for orig_idx, d in enumerate(ps["sdim"]):
+            if d == "-":
+                continue
+            x = ps["sx"][orig_idx]
+            y = ps["sy"][orig_idx]
+            z = ps["sz"][orig_idx] if is_3d else 0.0
+            scale = base_scale * np.sqrt(1.0 + ps["sr"][orig_idx] ** 2)
+            poly = pv.PolyData(np.array([[x, y, z]], dtype=float))
+            poly.point_data["marker_scale"] = np.array([scale])
+            glyphs = poly.glyph(
+                geom=cone, orient=False, scale="marker_scale", factor=1.0
+            )
+            actor = self.plotter.add_mesh(
+                glyphs, color="black", reset_camera=False, render=False
+            )
+            self._overlay_actors.append(actor)
+            self._overlay_actor_map[id(actor)] = ("support", orig_idx)
 
     def _plot_regions(self, is_3d: bool) -> None:
         """
