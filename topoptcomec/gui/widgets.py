@@ -2,13 +2,14 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Custom PySide6 widgets for the TopoptComec UI.
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
+    QFormLayout,
     QFrame,
     QGraphicsDropShadowEffect,
     QGridLayout,
@@ -162,14 +163,16 @@ class CollapsibleSection(QWidget):
         self.title_bar = QFrame()
         self.title_bar.setObjectName("collapsibleTitleBar")
         self.title_bar.setLayout(QHBoxLayout())
-        self.title_bar.layout().setContentsMargins(5, 2, 5, 2)
+        self.title_bar.layout().setContentsMargins(8, 2, 5, 2)
         # Expand/Collapse Button
         self.toggle_button = QPushButton()
-        self.toggle_button.setFixedSize(18, 18)
+        self.toggle_button.setObjectName("collapsibleToggle")
+        self.toggle_button.setFixedSize(14, 14)
+        self.toggle_button.setIconSize(QSize(10, 10))
         self.toggle_button.setIcon(icons._get("arrow_right"))
         self.toggle_button.setCheckable(True)
         self.toggle_button.setChecked(False)
-        self.title_bar.layout().addWidget(self.toggle_button)
+        self.title_bar.layout().addWidget(self.toggle_button, alignment=Qt.AlignVCenter)
         # Title
         self.title_label = QLabel(title)
         self.title_label.setObjectName("collapsibleTitleLabel")
@@ -178,6 +181,7 @@ class CollapsibleSection(QWidget):
         self.title_bar.layout().addStretch()
         # Visibility Toggle Button
         self.visibility_button = QPushButton()
+        self.visibility_button.setObjectName("collapsibleEye")
         self.visibility_button.setIcon(icons._get("eye_open"))
         self.visibility_button.setCheckable(True)
         self.visibility_button.setChecked(True)
@@ -185,8 +189,10 @@ class CollapsibleSection(QWidget):
             "Toggle visibility of this element on the plot"
         )
         self.visibility_button.setVisible(False)
-        self.visibility_button.setFixedSize(25, 18)
-        self.title_bar.layout().addWidget(self.visibility_button)
+        self.visibility_button.setFixedSize(22, 16)
+        self.title_bar.layout().addWidget(
+            self.visibility_button, alignment=Qt.AlignVCenter
+        )
 
         # Content area
         self.content_widget = content_widget if content_widget else QWidget()
@@ -199,7 +205,7 @@ class CollapsibleSection(QWidget):
         self.main_layout.addWidget(self.title_bar)
         self.main_layout.addWidget(self.content_widget)
 
-        self.title_bar.setFixedHeight(25)
+        self.title_bar.setFixedHeight(26)
 
         self.toggle_button.toggled.connect(self.toggle_collapse)
         self.title_bar.mousePressEvent = lambda event: self.toggle_button.toggle()
@@ -330,18 +336,11 @@ class HeaderWidget(QWidget):
         super().__init__()
         title_layout = QHBoxLayout(self)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        title_layout.addStretch()
-        # Title
-        title = QLabel("TopoptComec")
-        title_font = QFont("JetBrains Mono", 20, QFont.Bold)
-        title.setFont(title_font)
-        title.setToolTip("Topology Optimization for Compliant Mechanisms")
-        title.setAlignment(Qt.AlignCenter)
-        title_layout.addWidget(title)
         # Info
         self.info_button = QPushButton()
         self.info_button.setIcon(icons._get("info"))
         self.info_button.setFixedSize(24, 24)
+        self.info_button.setIconSize(QSize(25, 25))
         self.info_button.setToolTip("Open the project's GitHub page")
         self.info_button.setFlat(True)
         title_layout.addWidget(self.info_button)
@@ -349,15 +348,25 @@ class HeaderWidget(QWidget):
         self.help_button = QPushButton()
         self.help_button.setIcon(icons._get("help"))
         self.help_button.setFixedSize(24, 24)
+        self.help_button.setIconSize(QSize(20, 20))
         self.help_button.setToolTip("Open the wiki")
         self.help_button.setFlat(True)
         title_layout.addWidget(self.help_button)
         # Issue
-        self.issue_button = QPushButton("🪲")
+        self.issue_button = QPushButton()
+        self.issue_button.setIcon(icons._get("bug"))
         self.issue_button.setFixedSize(24, 24)
         self.issue_button.setToolTip("Report an issue")
         self.issue_button.setFlat(True)
         title_layout.addWidget(self.issue_button)
+        # Title
+        title = QLabel("TopoptComec")
+        title_font = QFont("Segoe UI", 20, QFont.Bold)
+        title.setFont(title_font)
+        title.setToolTip("Topology Optimization for Compliant Mechanisms")
+        title.setAlignment(Qt.AlignCenter)
+        title_layout.addWidget(title)
+        title_layout.addStretch()
         # Theme Toggle
         self.theme_button = QPushButton()
         if icons.theme == "dark":
@@ -392,11 +401,15 @@ class PresetWidget(QFrame):
         # Save
         self.save_preset_button = QPushButton()
         self.save_preset_button.setIcon(icons._get("save"))
+        self.save_preset_button.setFixedSize(24, 24)
+        self.save_preset_button.setFlat(True)
         self.save_preset_button.setToolTip("Save current parameters as a new preset")
         preset_layout.addWidget(self.save_preset_button)
         # Delete
         self.delete_preset_button = QPushButton()
         self.delete_preset_button.setIcon(icons._get("delete"))
+        self.delete_preset_button.setFixedSize(24, 24)
+        self.delete_preset_button.setFlat(True)
         self.delete_preset_button.setToolTip("Delete the selected preset")
         self.delete_preset_button.setEnabled(False)
         preset_layout.addWidget(self.delete_preset_button)
@@ -442,6 +455,8 @@ class DimensionsWidget(QWidget):
         scale_layout.addWidget(self.scale)
         self.scale_button = QPushButton()
         self.scale_button.setIcon(icons._get("scale"))
+        self.scale_button.setFixedSize(24, 24)
+        self.scale_button.setFlat(True)
         self.scale_button.setToolTip("Scale elements")
         scale_layout.addWidget(self.scale_button)
         scale_layout.addStretch(1)
@@ -464,16 +479,17 @@ class RegionsWidget(QWidget):
         self._materials: list[str] = ["#000000"]  # hex color per material
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setSpacing(10)
+        self.main_layout.setSpacing(6)
 
         # Layout to hold the region containers
         self.regions_layout = QVBoxLayout()
-        self.regions_layout.setSpacing(10)
+        self.regions_layout.setSpacing(6)
         self.main_layout.addLayout(self.regions_layout)
 
         # Add button
         self.add_btn = QPushButton("+ Add Region")
         self.add_btn.clicked.connect(lambda: self.add_region())
+        self.add_btn.setFlat(True)
         self.add_btn.setToolTip("Add a region")
         self.main_layout.addWidget(self.add_btn, alignment=Qt.AlignLeft)
         self.main_layout.addStretch()
@@ -548,15 +564,16 @@ class RegionsWidget(QWidget):
 
         # Container Widget for this region
         container = QWidget()
+        container.setObjectName("entityCard")
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 5, 0, 5)
+        container_layout.setContentsMargins(0, 2, 0, 2)
 
         # --- Line 1: [Minus] "Shape" [Combo] "Radius" [Spin] ---
         line1_layout = QHBoxLayout()
 
         # Remove button
         remove_btn = QPushButton("−")
-        remove_btn.setFixedWidth(30)
+        remove_btn.setFixedWidth(26)
         remove_btn.setToolTip("Remove this region")
         remove_btn.clicked.connect(lambda: self.remove_region_by_widget(container))
         line1_layout.addWidget(remove_btn)
@@ -574,7 +591,7 @@ class RegionsWidget(QWidget):
 
         # --- Line 2: "Contains:" [combo] ---
         line2_layout = QHBoxLayout()
-        line2_layout.addSpacing(40)  # Align with line above
+        line2_layout.addSpacing(35)  # Align with line above
         line2_layout.addWidget(QLabel("Contains:"))
         rstate_combo = QComboBox()
         rstate_combo.setToolTip("State of the region")
@@ -592,7 +609,7 @@ class RegionsWidget(QWidget):
 
         # --- Line 3: "Center" [X] [Y] [Z] ---
         line3_layout = QHBoxLayout()
-        line3_layout.addSpacing(40)  # Align with line above
+        line3_layout.addSpacing(35)  # Align with line above
         line3_layout.addWidget(QLabel("Center:"))
         rx = _make_spin(0, 1000, pos[0], "X")
         line3_layout.addWidget(rx)
@@ -693,21 +710,22 @@ class ForcesWidget(QWidget):
         self.output_forces = []
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setSpacing(10)
+        self.main_layout.setSpacing(6)
 
         self.arrows = ["-", "X:→", "X:←", "Y:↑", "Y:↓", "Z:<", "Z:>"]
 
         # Input forces section
         input_label = QLabel("Input")
-        input_label.setStyleSheet("color: red;")
+        input_label.setObjectName("inputForcesLabel")
         self.main_layout.addWidget(input_label)
 
         self.input_layout = QVBoxLayout()
-        self.input_layout.setSpacing(10)
+        self.input_layout.setSpacing(6)
         self.main_layout.addLayout(self.input_layout)
 
         self.add_if_btn = QPushButton("+ Add Input Force")
         self.add_if_btn.clicked.connect(lambda: self.add_input_force())
+        self.add_if_btn.setFlat(True)
         self.add_if_btn.setToolTip("Add an input force")
         self.main_layout.addWidget(self.add_if_btn, alignment=Qt.AlignLeft)
 
@@ -719,15 +737,16 @@ class ForcesWidget(QWidget):
 
         # Output forces section
         output_label = QLabel("Output")
-        output_label.setStyleSheet("color: blue;")
+        output_label.setObjectName("outputForcesLabel")
         self.main_layout.addWidget(output_label)
 
         self.output_layout = QVBoxLayout()
-        self.output_layout.setSpacing(10)
+        self.output_layout.setSpacing(6)
         self.main_layout.addLayout(self.output_layout)
 
         self.add_of_btn = QPushButton("+ Add Output Force")
         self.add_of_btn.clicked.connect(lambda: self.add_output_force())
+        self.add_of_btn.setFlat(True)
         self.add_of_btn.setToolTip("Add an output force")
         self.main_layout.addWidget(self.add_of_btn, alignment=Qt.AlignLeft)
 
@@ -775,13 +794,14 @@ class ForcesWidget(QWidget):
             pos = [0, 0, 0]
 
         container = QWidget()
+        container.setObjectName("entityCard")
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 5, 0, 5)
+        container_layout.setContentsMargins(0, 2, 0, 2)
 
         # Line 1
         line1_layout = QHBoxLayout()
         remove_btn = QPushButton("−")
-        remove_btn.setFixedWidth(30)
+        remove_btn.setFixedWidth(26)
         remove_btn.setToolTip("Remove this input force")
         remove_btn.clicked.connect(lambda: self.remove_force_by_widget(container, True))
         line1_layout.addWidget(remove_btn)
@@ -798,11 +818,11 @@ class ForcesWidget(QWidget):
 
         # Line 2
         line2_layout = QHBoxLayout()
-        line2_layout.addSpacing(40)
+        line2_layout.addSpacing(35)  # Align with line above
         line2_layout.addWidget(QLabel("Dir:"))
         fdir = _make_combo(self.arrows, arrow_idx, "Force direction")
         line2_layout.addWidget(fdir)
-        line2_layout.addSpacing(20)
+        line2_layout.addSpacing(10)
         line2_layout.addWidget(QLabel("Force (N):"))
         fnorm = _make_dspin(0, 10, norm, 0.01, "Force magnitude for input")
         line2_layout.addWidget(fnorm)
@@ -854,13 +874,14 @@ class ForcesWidget(QWidget):
             pos = [0, 0, 0]
 
         container = QWidget()
+        container.setObjectName("entityCard")
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 5, 0, 5)
+        container_layout.setContentsMargins(0, 2, 0, 2)
 
         # Line 1
         line1_layout = QHBoxLayout()
         remove_btn = QPushButton("−")
-        remove_btn.setFixedWidth(30)
+        remove_btn.setFixedWidth(26)
         remove_btn.setToolTip("Remove this output force")
         remove_btn.clicked.connect(
             lambda: self.remove_force_by_widget(container, False)
@@ -879,11 +900,11 @@ class ForcesWidget(QWidget):
 
         # Line 2
         line2_layout = QHBoxLayout()
-        line2_layout.addSpacing(40)
+        line2_layout.addSpacing(35)  # Align with line above
         line2_layout.addWidget(QLabel("Dir:"))
         fdir = _make_combo(self.arrows, arrow_idx, "Force direction")
         line2_layout.addWidget(fdir)
-        line2_layout.addSpacing(20)
+        line2_layout.addSpacing(10)
         line2_layout.addWidget(QLabel("Spring (N/m):"))
         fnorm = _make_dspin(0, 10, norm, 0.01, "Spring stiffness for output")
         line2_layout.addWidget(fnorm)
@@ -994,12 +1015,13 @@ class SupportWidget(QWidget):
         self.supports_container = QWidget()
         self.supports_list_layout = QVBoxLayout(self.supports_container)
         self.supports_list_layout.setContentsMargins(0, 0, 0, 0)
-        self.supports_list_layout.setSpacing(10)
+        self.supports_list_layout.setSpacing(6)
         self.main_layout.addWidget(self.supports_container)
 
         # Add button
         self.add_btn = QPushButton("+ Add Support")
         self.add_btn.clicked.connect(lambda: self.add_support())
+        self.add_btn.setFlat(True)
         self.add_btn.setToolTip("Add a support")
         self.main_layout.addWidget(self.add_btn, alignment=Qt.AlignLeft)
 
@@ -1035,14 +1057,15 @@ class SupportWidget(QWidget):
 
         # Container Widget for this support
         container = QWidget()
+        container.setObjectName("entityCard")
         container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 5, 0, 5)
+        container_layout.setContentsMargins(0, 2, 0, 2)
 
         # Line 1: [Minus] "Center:" [X] [Y] [Z]
         line1_layout = QHBoxLayout()
 
         remove_btn = QPushButton("−")
-        remove_btn.setFixedWidth(30)
+        remove_btn.setFixedWidth(26)
         remove_btn.setToolTip("Remove this support")
         remove_btn.clicked.connect(lambda: self.remove_support_by_widget(container))
         line1_layout.addWidget(remove_btn)
@@ -1063,7 +1086,7 @@ class SupportWidget(QWidget):
         line2_layout.addWidget(QLabel("Fixed:"))
         sdim = _make_combo(self.dims, self.dims.index(dim), "Fixed direction(s)")
         line2_layout.addWidget(sdim)
-        line2_layout.addSpacing(20)
+        line2_layout.addSpacing(10)
         line2_layout.addWidget(QLabel("Radius:"))
         sr = _make_spin(0, 10, radius, "Support's radius (0 = single node)")
         line2_layout.addWidget(sr)
@@ -1153,7 +1176,7 @@ class MaterialsWidget(QWidget):
         self.inputs = []
 
         self.main_layout = QVBoxLayout(self)
-        self.main_layout.setSpacing(10)
+        self.main_layout.setSpacing(6)
 
         # Initialization Type (Global for all materials)
         init_layout = QHBoxLayout()
@@ -1168,12 +1191,13 @@ class MaterialsWidget(QWidget):
 
         # Layout for material items
         self.materials_layout = QVBoxLayout()
-        self.materials_layout.setSpacing(10)
+        self.materials_layout.setSpacing(6)
         self.main_layout.addLayout(self.materials_layout)
 
         # Add button
         self.add_btn = QPushButton("+ Add Material")
         self.add_btn.clicked.connect(lambda: self.add_material())
+        self.add_btn.setFlat(True)
         self.add_btn.setToolTip("Add a material (max 2)")
         self.main_layout.addWidget(self.add_btn, alignment=Qt.AlignLeft)
 
@@ -1210,13 +1234,14 @@ class MaterialsWidget(QWidget):
             return
 
         container = QWidget()
+        container.setObjectName("entityCard")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 5, 0, 5)
+        layout.setContentsMargins(0, 2, 0, 2)
 
         # Line 1: [Minus] Color [Btn] % [Spin]
         line1 = QHBoxLayout()
         remove_btn = QPushButton("−")
-        remove_btn.setFixedWidth(30)
+        remove_btn.setFixedWidth(26)
         remove_btn.setToolTip("Remove this material")
         remove_btn.clicked.connect(lambda: self.remove_material_by_widget(container))
         line1.addWidget(remove_btn)
@@ -1226,7 +1251,7 @@ class MaterialsWidget(QWidget):
             color = QColor(color)
         color_btn = ColorPickerButton(color)
         line1.addWidget(color_btn)
-        line1.addSpacing(20)
+        line1.addSpacing(10)
         # Percentage
         line1.addWidget(QLabel("%:"))
         mat_percent = _make_spin(0, 100, percent, "Volume Fraction percentage")
@@ -1238,14 +1263,14 @@ class MaterialsWidget(QWidget):
 
         # Line 2: E [Spin] nu [Spin]
         line2 = QHBoxLayout()
-        line2.addSpacing(40)  # Align with line above
+        line2.addSpacing(35)  # Align with line above
         # Young's Modulus
         line2.addWidget(QLabel("E:"))
         mat_E = _make_dspin(
             0.1, 100.0, E, 0.05, "Young's Modulus, material’s stiffness"
         )
         line2.addWidget(mat_E)
-        line2.addSpacing(20)
+        line2.addSpacing(10)
         # Poisson's Ratio
         line2.addWidget(QLabel("ν:"))
         mat_nu = _make_dspin(
@@ -1360,7 +1385,11 @@ class OptimizerWidget(QWidget):
     def __init__(self) -> None:
         """Initialize the optimizer widget."""
         super().__init__()
-        layout = QGridLayout(self)
+
+        main_layout = QVBoxLayout(self)
+        # Filter line
+
+        filter_layout = QHBoxLayout()
         # Filter type
         tip = (
             "Regularization to avoid checkerboards and mesh dependency\n"
@@ -1368,16 +1397,21 @@ class OptimizerWidget(QWidget):
             "Density: Smooths the material distribution to avoid checkerboard patterns and mesh dependency."
         )
         self.opt_ft = _make_combo(["Sensitivity", "Density", "None"], 0, tip)
-        layout.addWidget(QLabel("Filter Type:"), 0, 0)
-        layout.addWidget(self.opt_ft, 0, 1)
+        filter_layout.addWidget(QLabel("Filter:"))
+        filter_layout.addWidget(self.opt_ft)
+        filter_layout.addSpacing(10)
         # Filter Radius
-        layout.addWidget(QLabel("Filter Radius:"), 1, 0)
-        self.opt_fr = _make_dspin(
-            0.1, 10.0, 1.3, 0.01, "Range of the filter coverage", None
-        )
-        layout.addWidget(self.opt_fr, 1, 1)
+        self.opt_fr = _make_dspin(0.1, 10.0, 1.3, 0.01, "Range of the filter coverage")
+        filter_layout.addWidget(QLabel("Radius:"))
+        filter_layout.addWidget(self.opt_fr)
+        filter_layout.addStretch()
+
+        main_layout.addLayout(filter_layout)
+
+        # Remaining parameters
+        form_layout = QFormLayout()
         # Penalization
-        layout.addWidget(QLabel("Penalization:"), 2, 0)
+
         self.opt_p = _make_dspin(
             1.0,
             10.0,
@@ -1386,20 +1420,19 @@ class OptimizerWidget(QWidget):
             "Exponent in the SIMP method to penalize intermediate densities",
             None,
         )
-        layout.addWidget(self.opt_p, 2, 1)
+        form_layout.addRow("Penalization:", self.opt_p)
         # Eta
-        layout.addWidget(QLabel("Eta:"), 3, 0)
         self.opt_eta = _make_dspin(
             0.05,
             1.0,
             0.3,
             0.05,
-            "Damping factor in OC update rule to controls aggressiveness of density updates.\nLower eta: slower, more stable convergence; Higher eta: faster, but risk",
+            "Damping factor in OC update rule to controls aggressiveness of density updates.\n"
+            "Lower eta: slower, more stable convergence; Higher eta: faster, but risk",
             None,
         )
-        layout.addWidget(self.opt_eta, 3, 1)
+        form_layout.addRow("Eta:", self.opt_eta)
         # Max change
-        layout.addWidget(QLabel("Max change:"), 4, 0)
         self.opt_max_change = _make_dspin(
             0.01,
             0.5,
@@ -1408,15 +1441,13 @@ class OptimizerWidget(QWidget):
             "Bound the density change between two iterations to a maximum value",
             None,
         )
-        layout.addWidget(self.opt_max_change, 4, 1)
+        form_layout.addRow("Max change:", self.opt_max_change)
         # Iterations
-        layout.addWidget(QLabel("Iterations:"), 5, 0)
         self.opt_n_it = _make_spin(
             1, 100, 30, "Number of optimization iterations", None
         )
-        layout.addWidget(self.opt_n_it, 5, 1)
+        form_layout.addRow("Iterations:", self.opt_n_it)
         # Solver
-        layout.addWidget(QLabel("Solver:"), 6, 0)
         tip = (
             "Solver type for the linear system\n"
             "Auto: Chooses the best solver based on the problem size\n"
@@ -1424,12 +1455,13 @@ class OptimizerWidget(QWidget):
             "Iterative: Uses Conjugate Gradient (cg) with preconditioning\n"
         )
         self.opt_solver = _make_combo(["Auto", "Direct", "Iterative"], 0, tip)
-        layout.addWidget(self.opt_solver, 6, 1)
+        form_layout.addRow("Solver:", self.opt_solver)
 
-        # Save frames
         self.save_frames_cb = QCheckBox("Save frames")
         self.save_frames_cb.setToolTip("Save intermediate optimization frames as PNG")
-        layout.addWidget(self.save_frames_cb, 7, 0, 1, 2)
+        form_layout.addRow(self.save_frames_cb)
+
+        main_layout.addLayout(form_layout)
 
 
 class AnalysisWidget(QWidget):
@@ -1467,17 +1499,24 @@ class AnalysisWidget(QWidget):
             "Compare output displacement with input displacement"
         )
         layout.addWidget(self.efficiency_result, 3, 1)
+        for result in (
+            self.checkerboard_result,
+            self.watertight_result,
+            self.threshold_result,
+            self.efficiency_result,
+        ):
+            result.setObjectName("resultValue")
         self.button_stack = QStackedLayout()
         # Analyze button
-        self.run_analysis_button = QPushButton("🔍 Analyze")
+        self.run_analysis_button = QPushButton(" Analyze")
+        self.run_analysis_button.setIcon(icons._get("search"))
         self.run_analysis_button.setToolTip("Start the analysis process")
         self.button_stack.addWidget(self.run_analysis_button)
         # Stop button
         self.stop_analysis_button = QPushButton(" Stop")
-        self.stop_analysis_button.setObjectName("stop_analysis_button")
+        self.stop_analysis_button.setObjectName("dangerButton")
         self.stop_analysis_button.setIcon(icons._get("stop"))
         self.stop_analysis_button.setToolTip("Stop the analysis process")
-        self.stop_analysis_button.setStyleSheet("background-color: #C0392B;")
         self.button_stack.addWidget(self.stop_analysis_button)
         self.button_stack_widget = QWidget()
         self.button_stack_widget.setLayout(self.button_stack)
@@ -1529,9 +1568,9 @@ class DisplacementWidget(QWidget):
         self.button_stack.addWidget(self.run_disp_button)
         # Stop button
         self.stop_disp_button = QPushButton(" Stop")
+        self.stop_disp_button.setObjectName("dangerButton")
         self.stop_disp_button.setIcon(icons._get("stop"))
         self.stop_disp_button.setToolTip("Stop the displacement process")
-        self.stop_disp_button.setStyleSheet("background-color: #C0392B;")
         self.button_stack.addWidget(self.stop_disp_button)
         # Reset button
         self.reset_disp_button = QPushButton("Reset View")
@@ -1560,33 +1599,41 @@ class FooterWidget(QWidget):
         # Create button
         action_layout = QHBoxLayout(self)
         self.create_button = QPushButton(" Create")
+        self.create_button.setObjectName("primaryButton")
         self.create_button.setIcon(icons._get("create"))
         self.create_button.setToolTip("Start the optimization process")
-        self.create_button.setFont(QFont("JetBrains Mono", 14, QFont.Bold))
+        self.create_button.setFixedHeight(30)
+        self.create_button.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.set_create_button_color("#00FF0D")  # default: very fast
         self.start_create_button_effect()
         action_layout.addWidget(self.create_button)
         # Stop button
         self.stop_button = QPushButton(" Stop")
+        self.stop_button.setObjectName("dangerButton")
         self.stop_button.setIcon(icons._get("stop"))
         self.stop_button.setToolTip("Stop the optimization process")
-        self.stop_button.setFont(QFont("JetBrains Mono", 14, QFont.Bold))
-        self.stop_button.setStyleSheet("background-color: #C0392B;")
+        self.stop_button.setFixedHeight(30)
+        self.stop_button.setFont(QFont("Segoe UI", 14, QFont.Bold))
         self.stop_button.hide()  # Hidden by default
         action_layout.addWidget(self.stop_button)
         # Binarize button
         self.binarize_button = QPushButton()
+        self.binarize_button.setObjectName("footerIconButton")
         self.binarize_button.setIcon(icons._get("binarize"))
         self.binarize_button.setToolTip(
             "Apply threshold to make all colors solid (0 or 1)"
         )
-        self.binarize_button.setFixedSize(29, 29)
+        self.binarize_button.setFixedSize(30, 30)
+        self.binarize_button.setIconSize(QSize(24, 24))
         self.binarize_button.setEnabled(False)
         action_layout.addWidget(self.binarize_button)
         # Save button
         self.save_button = QToolButton()
+        self.save_button.setObjectName("footerIconButton")
         self.save_button.setIcon(icons._get("save"))
         self.save_button.setToolTip("Save the current result")
-        self.save_button.setFixedSize(30, 30)  # A bit wider to accommodate the arrow
+        self.save_button.setFixedSize(35, 35)
+        self.save_button.setIconSize(QSize(24, 24))
         self.save_button.setEnabled(False)
         self.save_button.setPopupMode(QToolButton.InstantPopup)
 
@@ -1604,6 +1651,47 @@ class FooterWidget(QWidget):
         self.save_button.setMenu(save_menu)
 
         action_layout.addWidget(self.save_button)
+
+    def set_create_button_color(self, color_hex: str) -> None:
+        """
+        Color the Create button from the estimated optimization runtime.
+
+        The color ranges from green (fast) to red (very slow). The text color
+        is chosen for contrast against the colored background.
+
+        Parameters
+        ----------
+        color_hex : str
+            Hex color code for the button background.
+        """
+        self._create_color = color_hex
+        color = QColor(color_hex)
+        # Relative luminance (Rec. 709) to pick a readable text color.
+        luminance = (
+            0.2126 * color.redF() + 0.7152 * color.greenF() + 0.0722 * color.blueF()
+        )
+        text_color = "#121212" if luminance > 0.5 else "#FFFFFF"
+        self.create_button.setStyleSheet(
+            f"QPushButton#primaryButton {{"
+            f" background-color: {color_hex};"
+            f" border: 1px solid {color_hex};"
+            f" color: {text_color};"
+            f"}}"
+            f" QPushButton#primaryButton:hover {{"
+            f" background-color: {color.lighter(120).name()};"
+            f" border: 1px solid {color.lighter(120).name()};"
+            f"}}"
+            f" QPushButton#primaryButton:pressed {{"
+            f" background-color: {color.darker(130).name()};"
+            f" border: 1px solid {color.darker(130).name()};"
+            f"}}"
+            f" QPushButton#primaryButton:disabled {{"
+            f" background-color: #3A3A3A;"
+            f" border: 1px solid #3A3A3A;"
+            f" color: #6E6E6E;"
+            f"}}"
+        )
+        self.create_button.setFixedHeight(30)
 
     def start_create_button_effect(self, color_hex: str = "#F97316") -> None:
         """

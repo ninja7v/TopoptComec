@@ -98,6 +98,8 @@ class IconProvider:
             "move": QStyle.StandardPixmap.SP_ArrowRight,
             "reset": QStyle.StandardPixmap.SP_BrowserReload,
             "scale": QStyle.StandardPixmap.SP_ArrowRight,
+            "bug": QStyle.StandardPixmap.SP_MessageBoxWarning,
+            "search": QStyle.StandardPixmap.SP_FileDialogContentsView,
         }
         pixmap: QStyle.StandardPixmap | None = icon_map.get(icon_name)
         if pixmap:
