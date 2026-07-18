@@ -97,26 +97,26 @@
       "disp_iterations": 1
     }
   },
-  "ForceInverter_3D": {
+  "KeyboardKey_3D": {
     "Dimensions": {
-      "nelxyz": [12, 12, 8],
+      "nelxyz": [18, 18, 10],
       "volfrac": 0.15
     },
     "Forces": {
-      "fix": [6],
-      "fiy": [6],
+      "fix": [9],
+      "fiy": [9],
       "fiz": [0],
       "fidir": ["Z:<"],
       "finorm": [0.01],
-      "fox": [6],
-      "foy": [6],
-      "foz": [8],
+      "fox": [9],
+      "foy": [9],
+      "foz": [10],
       "fodir": ["Z:>"],
       "fonorm": [0.01]
     },
     "Supports": {
-      "sx": [0, 0, 12, 12],
-      "sy": [0, 12, 0, 12],
+      "sx": [0, 0, 18, 18],
+      "sy": [0, 18, 0, 18],
       "sz": [0, 0, 0, 0],
       "sdim": ["XYZ", "XYZ", "XYZ", "XYZ"],
       "sr": [1, 1, 1, 1]
