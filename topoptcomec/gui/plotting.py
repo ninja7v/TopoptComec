@@ -719,6 +719,7 @@ class PlottingMixin:
             self._set_dotted(actor)
             self._overlay_actors.append(actor)
             self.plotter.show_bounds(
+                bounds=(0, nelx, 0, nely, 0, nelz),
                 xtitle="X",
                 ytitle="Y",
                 ztitle="Z",
@@ -743,6 +744,7 @@ class PlottingMixin:
             self._set_dotted(actor)
             self._overlay_actors.append(actor)
             self.plotter.show_bounds(
+                bounds=(0, nelx, 0, nely, 0, 0),
                 xtitle="X",
                 ytitle="Y",
                 color="black",
@@ -752,11 +754,14 @@ class PlottingMixin:
 
     def _fix_bounds_axes_ranges(self) -> None:
         """
-        Force the bounds-axes ticks to span the design space exactly.
+        Force the bounds-axes box and ticks to span the design space exactly.
 
         PyVista resets the axis label ranges to the (padded) scene bounds
         every time an actor is added, so this must be re-applied after the
-        last actor of a render cycle has been added (see _render).
+        last actor of a render cycle has been added (see _render). The
+        physical extent (bounds) is also pinned to the design space so that
+        overlay actors like force arrows extending beyond the mechanism
+        cannot stretch the axis box.
         """
         if not self.last_params or "Dimensions" not in self.last_params:
             return
@@ -765,6 +770,19 @@ class PlottingMixin:
             if cube_axes is None:
                 return
             nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+            # Pin the physical extent of the axis box to the design space.
+            # Use z extent of 0 in 2D so the box stays flat on the xy plane.
+            if nelz > 0:
+                cube_axes.bounds = (
+                    0.0,
+                    float(nelx),
+                    0.0,
+                    float(nely),
+                    0.0,
+                    float(nelz),
+                )
+            else:
+                cube_axes.bounds = (0.0, float(nelx), 0.0, float(nely), 0.0, 0.0)
             # Use the property setters (they also regenerate the labels)
             cube_axes.x_axis_range = (0.0, float(nelx))
             cube_axes.y_axis_range = (0.0, float(nely))
