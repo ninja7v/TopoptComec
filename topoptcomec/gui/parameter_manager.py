@@ -142,6 +142,7 @@ class ParameterManagerMixin:
 
     def on_parameter_changed(self) -> None:
         """React when a parameter is changed."""
+        had_result = self.u is not None
         # Scale last_successful_xPhys if option is "From current result" and size mismatches
         if hasattr(self, "materials_widget") and self.materials_widget is not None:
             init_type = self.materials_widget.mat_init_type.currentIndex()
@@ -225,6 +226,19 @@ class ParameterManagerMixin:
         self.footer.start_create_button_effect(color_hex=color)
         self.footer.create_button.setToolTip(tooltip_text)
 
+        self._sync_preset_selection()
+
+        sender = self.sender()
+        if (
+            had_result
+            or sender is None
+            or not self._is_display_irrelevant_sender(sender)
+        ):
+            self.replot()
+
+    def _sync_preset_selection(self) -> None:
+        """Match current parameters against known presets and update the
+        preset combo box; load cached result when a preset is matched."""
         # Check if the current state matches the selected preset
         current_preset_name = self.preset.presets_combo.currentText()
         if current_preset_name in self.presets:
@@ -281,7 +295,64 @@ class ParameterManagerMixin:
                             print(f"Failed to load cache: {e}")
                     break
 
-        self.replot()
+    def _is_display_irrelevant_sender(self, sender) -> bool:
+        """
+        Return True if a change in ``sender`` does not affect the plot.
+
+        Used by :meth:`on_parameter_changed` to skip the replot when no
+        optimization result is displayed. The relevant widgets are:
+
+        * All optimizer section widgets (filter, penalization, iterations, ...).
+        * Material ``E`` and ``nu`` (mechanical props, no visual impact).
+        * Support ``sdim`` ("Fixed" combo): the cone marker shape does not
+          depend on the chosen direction.
+        * Force ``finorm`` / ``fonorm`` (force magnitude): arrow length is
+          fixed and does not reflect the magnitude.
+
+        Parameters
+        ----------
+        sender : QObject or None
+            The widget that emitted the signal, or None when called directly.
+
+        Returns
+        -------
+        bool
+            True if the widget is display-irrelevant.
+        """
+        if sender is None:
+            return False
+
+        # Optimizer section: all widgets display-irrelevant
+        optimizer_widgets = (
+            self.optimizer_widget.opt_ft,
+            self.optimizer_widget.opt_fr,
+            self.optimizer_widget.opt_p,
+            self.optimizer_widget.opt_eta,
+            self.optimizer_widget.opt_max_change,
+            self.optimizer_widget.opt_n_it,
+            self.optimizer_widget.opt_solver,
+        )
+        if any(sender is w for w in optimizer_widgets):
+            return True
+
+        # Material section: E and nu only (percent, color, init_type affect display)
+        for mw in self.materials_widget.inputs:
+            if sender is mw["E"] or sender is mw["nu"]:
+                return True
+
+        # Support section: sdim ("Fixed" combo)
+        for sw in self.supports_widget.inputs:
+            if sender is sw["sdim"]:
+                return True
+
+        # Force section: finorm, fonorm (force magnitude)
+        for fw in self.forces_widget.inputs:
+            if "finorm" in fw and sender is fw["finorm"]:
+                return True
+            if "fonorm" in fw and sender is fw["fonorm"]:
+                return True
+
+        return False
 
     def _are_parameters_equivalent(self, params1: dict, params2: dict) -> bool:
         """Compares two parameter dictionaries, ignoring irrelevant data."""
