@@ -204,13 +204,6 @@
       "fodir": ["X:\u2190", "X:\u2192"],
       "fonorm": [0.01, 0.01]
     },
-    "Supports": {
-      "sx": [],
-      "sy": [],
-      "sz": [],
-      "sdim": [],
-      "sr": []
-    },
     "Materials": {
       "init_type": 0,
       "E": [1.0, 1.1],

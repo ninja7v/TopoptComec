@@ -440,11 +440,13 @@ class ParameterManagerMixin:
                         pr["rz"],
                     ) = map(list, zip(*active))
                 else:
-                    for key in ["rshape", "rstate", "rradius", "rx", "ry", "rz"]:
-                        pr.pop(key, None)  # pop them, not just empty them
+                    p.pop("Regions", None)
+                    return
 
                 if is_2d and "rz" in pr:
                     pr.pop("rz")
+            else:
+                p.pop("Regions", None)
 
     def _normalize_supports(self, p: dict, is_2d: bool) -> None:
         """
@@ -474,8 +476,12 @@ class ParameterManagerMixin:
                     )
                 else:
                     p.pop("Supports", None)
+                    return
+
                 if is_2d and "sz" in ps:
                     ps.pop("sz")
+            else:
+                p.pop("Supports", None)
 
     def _normalize_forces(self, p: dict, is_2d: bool) -> None:
         """
