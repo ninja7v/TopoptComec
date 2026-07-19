@@ -184,8 +184,14 @@ def test_on_parameter_changed_resets_result(qt_app):
     window.u: np.ndarray = np.ones((ndof, 1))
     window.is_displaying_deformation: bool = True
 
+    # Change a parameter so the state no longer matches any preset:
+    # without this, _sync_preset_selection would reload the cached
+    # density field if the params happen to match a preset.
+    window.dim_widget.nx.setValue(nelx + 1)
+
     window.on_parameter_changed()
 
+    # xPhys is cleared and then reinitialized by the replot.
     assert not np.array_equal(window.xPhys, result)
     assert window.u is None
     assert window.is_displaying_deformation is False

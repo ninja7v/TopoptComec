@@ -184,8 +184,12 @@ class ParameterManagerMixin:
                     if scaled is not None:
                         self.last_successful_xPhys = scaled
 
-        # First, check if a valid result from a previous run exists.
-        if self.xPhys is not None:
+        sender = self.sender()
+
+        needs_reinit = (
+            had_result or sender is None or self._sender_needs_density_reinit(sender)
+        )
+        if needs_reinit:
             self.xPhys = None
             self.u = None
             self.is_displaying_deformation = False
@@ -226,19 +230,188 @@ class ParameterManagerMixin:
         self.footer.start_create_button_effect(color_hex=color)
         self.footer.create_button.setToolTip(tooltip_text)
 
-        self._sync_preset_selection()
+        cache_loaded = self._sync_preset_selection()
 
-        sender = self.sender()
-        if (
-            had_result
-            or sender is None
-            or not self._is_display_irrelevant_sender(sender)
-        ):
+        # A cached npz was just loaded by the preset sync: a full replot is
+        # needed to display it. This check must come before the had_result
+        # and partial-replot branches so the npz is always shown.
+        if cache_loaded:
             self.replot()
+            return
+        if had_result:
+            # A previous result is now stale: a full replot is needed to
+            # drop the material actor and show the "press Create" placeholder.
+            self.replot()
+            return
+        if sender is None:
+            # No specific sender (e.g. programmatic parameter change): be
+            # safe and refresh everything.
+            self.replot()
+            return
 
-    def _sync_preset_selection(self) -> None:
+        layers = self._sender_to_layers(sender)
+        if layers is None:
+            # Unknown sender or dimensions changed -> full replot.
+            self.replot()
+        elif layers == ():
+            # Display-irrelevant sender (volfrac, optimizer, E, nu, sdim,
+            # finorm, fonorm): nothing to redraw.
+            return
+        else:
+            self.replot_partial(*layers)
+
+    def _sender_needs_density_reinit(self, sender) -> bool:
+        """Check whether ``sender`` affects the density field itself.
+
+        Returns True when the changed parameter requires re-initializing
+        ``xPhys`` (and therefore a full material replot), False for
+        display-only changes (force position, material color, ...).
+
+        Parameters
+        ----------
+        sender : QObject or None
+            The widget that emitted the signal.
+
+        Returns
+        -------
+        bool
+            True if ``xPhys`` must be cleared and re-initialized.
+        """
+        if sender is None:
+            return True  # direct call: safe fallback
+
+        # Dimensions change the mesh shape: xPhys has the wrong size.
+        if (
+            sender is self.dim_widget.nx
+            or sender is self.dim_widget.ny
+            or sender is self.dim_widget.nz
+        ):
+            return True
+
+        # Regions modify the density field via _apply_regions.
+        for rw in self.regions_widget.inputs:
+            for key in ("rshape", "rstate", "rradius", "rx", "ry", "rz"):
+                if sender is rw[key]:
+                    return True
+
+        # init_type changes the initialization method.
+        if sender is self.materials_widget.mat_init_type:
+            return True
+
+        # percent changes proportions only in multi-material mode.
+        if len(self.materials_widget.inputs) > 1:
+            for mw in self.materials_widget.inputs:
+                if sender is mw["percent"]:
+                    return True
+
+        return False
+
+    def _sender_to_layers(self, sender) -> tuple | None:
+        """Map a sender widget to the plot layer(s) it affects.
+
+        Returns
+        -------
+        tuple or None
+            * ``()``: the sender is display-irrelevant (no replot needed).
+            * non-empty tuple: partial replot refreshing only those layers.
+            * ``None``: a full :meth:`replot` is required (e.g. the design
+              space dimensions changed, or the sender is not recognized).
+        """
+        from topoptcomec.gui.plotting import (
+            LAYER_MATERIAL,
+            LAYER_FORCES,
+            LAYER_SUPPORTS,
+            LAYER_REGIONS,
+            LAYER_DISPLACEMENT_PREVIEW,
+        )
+
+        # Dimensions: nelx/nely/nelz change the grid shape -> full replot.
+        # volfrac has no visual impact (the displayed density is initialized
+        # from the init_type, not from volfrac) -> skip replot.
+        if (
+            sender is self.dim_widget.nx
+            or sender is self.dim_widget.ny
+            or sender is self.dim_widget.nz
+        ):
+            return None
+        if sender is self.dim_widget.volfrac:
+            return ()
+
+        # Optimizer section: all widgets display-irrelevant.
+        optimizer_widgets = (
+            self.optimizer_widget.opt_ft,
+            self.optimizer_widget.opt_fr,
+            self.optimizer_widget.opt_p,
+            self.optimizer_widget.opt_eta,
+            self.optimizer_widget.opt_max_change,
+            self.optimizer_widget.opt_n_it,
+            self.optimizer_widget.opt_solver,
+        )
+        if any(sender is w for w in optimizer_widgets):
+            return ()
+
+        # Material section.
+        if sender is self.materials_widget.mat_init_type:
+            return (LAYER_MATERIAL,)
+        for mw in self.materials_widget.inputs:
+            if sender is mw["E"] or sender is mw["nu"]:
+                return ()  # mechanical props, no visual impact
+            if sender is mw["percent"]:
+                return (LAYER_MATERIAL,)
+            # ColorButton signal is connected directly to replot_partial
+            # elsewhere; if we ever receive the color button here, treat it
+            # as a material layer change.
+
+        # Force section.
+        for fw in self.forces_widget.inputs:
+            if "fix" in fw:
+                for key in ("fix", "fiy", "fiz", "fidir"):
+                    if sender is fw[key]:
+                        return (LAYER_FORCES,)
+                if sender is fw["finorm"]:
+                    return ()  # arrow length is fixed
+            elif "fox" in fw:
+                for key in ("fox", "foy", "foz", "fodir"):
+                    if sender is fw[key]:
+                        return (LAYER_FORCES,)
+                if sender is fw["fonorm"]:
+                    return ()
+
+        # Support section.
+        for sw in self.supports_widget.inputs:
+            if sender is sw["sdim"]:
+                return ()  # cone marker shape does not depend on direction
+            for key in ("sx", "sy", "sz", "sr"):
+                if sender is sw[key]:
+                    return (LAYER_SUPPORTS,)
+
+        # Region section. Regions modify the density field, so the material
+        # layer must also be refreshed (re-initialized with the new region
+        # applied).
+        for rw in self.regions_widget.inputs:
+            for key in ("rshape", "rstate", "rradius", "rx", "ry", "rz"):
+                if sender is rw[key]:
+                    return (LAYER_REGIONS, LAYER_MATERIAL)
+
+        # Displacement preview: only the spinboxes that change the preview
+        # arrows (visibility toggle is handled separately in _on_visibility_toggled).
+        if sender is self.displacement_widget.mov_disp:
+            return (LAYER_DISPLACEMENT_PREVIEW,)
+
+        # Unknown sender -> fall back to full replot.
+        return None
+
+    def _sync_preset_selection(self) -> bool:
         """Match current parameters against known presets and update the
-        preset combo box; load cached result when a preset is matched."""
+        preset combo box; load cached result when a preset is matched.
+
+        Returns
+        -------
+        bool
+            True if a preset's cached density field was loaded into
+            ``self.xPhys``, False otherwise. Callers use this to decide
+            whether a full replot is needed to display the cached result.
+        """
         # Check if the current state matches the selected preset
         current_preset_name = self.preset.presets_combo.currentText()
         if current_preset_name in self.presets:
@@ -252,48 +425,59 @@ class ParameterManagerMixin:
                 )  # Set to "Select a preset..."
                 self.preset.presets_combo.blockSignals(False)
                 self.preset.delete_preset_button.setEnabled(False)
-        else:  # Check if the current state matches any preset
-            for preset_name, preset_params in self.presets.items():
-                if self._are_parameters_equivalent(preset_params, self.last_params):
-                    # Found a matching preset, select it
-                    self.preset.presets_combo.blockSignals(True)
-                    index = self.preset.presets_combo.findText(preset_name)
-                    if index != -1:
-                        self.preset.presets_combo.setCurrentIndex(index)
-                        self.preset.delete_preset_button.setEnabled(True)
-                    self.preset.presets_combo.blockSignals(False)
-                    # Apply the exising result if available
-                    cache_file = os.path.join(
-                        "results", preset_name, f"{preset_name}_density_field.npz"
-                    )
-                    if os.path.exists(cache_file):
-                        try:
-                            data = np.load(cache_file)
-                            self.xPhys = data["xPhys"]
-                            self.u = combine_load_case_displacements(data["u"])
-                            mean_density: float = (
-                                np.mean(self.xPhys.sum(axis=0))
-                                if self.xPhys.ndim == 2
-                                else np.mean(self.xPhys)
-                            )
-                            if mean_density < 0.01:
-                                self.xPhys_valid = False
-                            else:
-                                self.xPhys_valid = True
-                                self.footer.binarize_button.setEnabled(True)
-                                self.footer.save_button.setEnabled(True)
-                                self.analysis_widget.run_analysis_button.setEnabled(
-                                    True
-                                )
-                                self.displacement_widget.run_disp_button.setEnabled(
-                                    True
-                                )
-                                self.sections[
-                                    "Displacement"
-                                ].visibility_button.setEnabled(True)
-                        except Exception as e:
-                            print(f"Failed to load cache: {e}")
-                    break
+                return False
+            # Preset still matches: reload the cached result (xPhys may
+            # have been cleared by on_parameter_changed).
+            self._load_preset_cache(current_preset_name)
+            return self.xPhys is not None
+        # Check if the current state matches any preset
+        for preset_name, preset_params in self.presets.items():
+            if self._are_parameters_equivalent(preset_params, self.last_params):
+                # Found a matching preset, select it
+                self.preset.presets_combo.blockSignals(True)
+                index = self.preset.presets_combo.findText(preset_name)
+                if index != -1:
+                    self.preset.presets_combo.setCurrentIndex(index)
+                    self.preset.delete_preset_button.setEnabled(True)
+                self.preset.presets_combo.blockSignals(False)
+                # Apply the existing result if available
+                self._load_preset_cache(preset_name)
+                return self.xPhys is not None
+        return False
+
+    def _load_preset_cache(self, preset_name: str) -> None:
+        """Load the cached density field and displacement for a preset.
+
+        Parameters
+        ----------
+        preset_name : str
+            Name of the preset whose cached result should be loaded.
+        """
+        cache_file = os.path.join(
+            "results", preset_name, f"{preset_name}_density_field.npz"
+        )
+        if not os.path.exists(cache_file):
+            return
+        try:
+            data = np.load(cache_file)
+            self.xPhys = data["xPhys"]
+            self.u = combine_load_case_displacements(data["u"])
+            mean_density: float = (
+                np.mean(self.xPhys.sum(axis=0))
+                if self.xPhys.ndim == 2
+                else np.mean(self.xPhys)
+            )
+            if mean_density < 0.01:
+                self.xPhys_valid = False
+            else:
+                self.xPhys_valid = True
+                self.footer.binarize_button.setEnabled(True)
+                self.footer.save_button.setEnabled(True)
+                self.analysis_widget.run_analysis_button.setEnabled(True)
+                self.displacement_widget.run_disp_button.setEnabled(True)
+                self.sections["Displacement"].visibility_button.setEnabled(True)
+        except Exception as e:
+            print(f"Failed to load cache: {e}")
 
     def _is_display_irrelevant_sender(self, sender) -> bool:
         """
@@ -722,4 +906,7 @@ class ParameterManagerMixin:
             + self.materials_widget.inputs
         ):
             for w in group.values():
-                w.blockSignals(block)
+                # Skip non-widget metadata (e.g. the "_signals_connected"
+                # flag set by MainWindow._connect_*_signals).
+                if hasattr(w, "blockSignals"):
+                    w.blockSignals(block)
