@@ -284,13 +284,34 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.regions_widget.set_materials(colors)
 
     def _connect_material_signals(self) -> None:
-        """(Re)connects on_parameter_changed signals to all current material widgets."""
+        """Connect on_parameter_changed signals to all current material widgets.
+
+        Each widget is connected at most once; the ``_signals_connected``
+        flag on the widget dict prevents duplicate connections when this
+        method is called again (e.g. when applying a preset or adding a
+        row). New rows get connected; existing rows are skipped; removed
+        rows are garbage-collected along with their connections.
+        """
         for mw in self.materials_widget.inputs:
+            if mw.get("_signals_connected"):
+                continue
             mw["color"].colorChanged.connect(self._update_region_materials)
-            mw["color"].colorChanged.connect(self.replot)
+            mw["color"].colorChanged.connect(self._on_material_color_changed)
             mw["E"].valueChanged.connect(self.on_parameter_changed)
             mw["nu"].valueChanged.connect(self.on_parameter_changed)
             mw["percent"].valueChanged.connect(self.on_parameter_changed)
+            mw["_signals_connected"] = True
+
+    def _on_material_color_changed(self) -> None:
+        """Refresh only the material layer when a material color changes.
+
+        Connected to the ``ColorButton.colorChanged`` signal in place of a
+        full :meth:`replot`: only the material colors need to be recomputed,
+        so the expensive ``plotter.clear()`` + pipeline rebuild is skipped.
+        Falls back to :meth:`replot` when a deformation view is active
+        (handled inside :meth:`replot_partial`).
+        """
+        self.replot_partial("material")
 
     def _create_optimizer_section(self) -> CollapsibleSection:
         """Creates the sixth section for optimization parameters."""
@@ -766,9 +787,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 self._save_screenshot(filename)
 
     def _on_displacement_preview_changed(self) -> None:
-        """Triggers a replot if the preview is active when displacement factor changes."""
+        """Refresh only the displacement-preview layer when the factor changes.
+
+        Falls back to a full :meth:`replot` only when the preview section is
+        hidden (in which case nothing visible needs updating but the camera
+        message actor is irrelevant) or when a deformation view is active
+        (handled inside :meth:`replot_partial`).
+        """
         if self.sections["Displacement"].visibility_button.isChecked():
-            self.replot()
+            self.replot_partial("displacement_preview")
 
     def _handle_displacement_finished(self, message: str) -> None:
         """Handles the results after displacement computation finishes successfully."""
@@ -1282,33 +1309,51 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
 
     def _connect_forces_signals(self) -> None:
-        """(Re)connects on_parameter_changed signals to all current forces widgets."""
+        """Connect on_parameter_changed signals to all current forces widgets.
+
+        Each widget is connected at most once; the ``_signals_connected``
+        flag on the widget dict prevents duplicate connections when this
+        method is called again (e.g. when applying a preset or adding a
+        row). New rows get connected; existing rows are skipped; removed
+        rows are garbage-collected along with their connections.
+        """
         for force_group in self.forces_widget.input_forces:
+            if force_group.get("_signals_connected"):
+                continue
             force_group["fix"].valueChanged.connect(self.on_parameter_changed)
             force_group["fiy"].valueChanged.connect(self.on_parameter_changed)
             force_group["fiz"].valueChanged.connect(self.on_parameter_changed)
             force_group["fidir"].currentIndexChanged.connect(self.on_parameter_changed)
             force_group["finorm"].valueChanged.connect(self.on_parameter_changed)
+            force_group["_signals_connected"] = True
         for force_group in self.forces_widget.output_forces:
+            if force_group.get("_signals_connected"):
+                continue
             force_group["fox"].valueChanged.connect(self.on_parameter_changed)
             force_group["foy"].valueChanged.connect(self.on_parameter_changed)
             force_group["foz"].valueChanged.connect(self.on_parameter_changed)
             force_group["fodir"].currentIndexChanged.connect(self.on_parameter_changed)
             force_group["fonorm"].valueChanged.connect(self.on_parameter_changed)
+            force_group["_signals_connected"] = True
 
     def _connect_support_signals(self) -> None:
-        """(Re)connects on_parameter_changed signals to all current support widgets."""
+        """Connect on_parameter_changed signals to all current support widgets."""
         for support_group in self.supports_widget.inputs:
+            if support_group.get("_signals_connected"):
+                continue
             support_group["sx"].valueChanged.connect(self.on_parameter_changed)
             support_group["sy"].valueChanged.connect(self.on_parameter_changed)
             support_group["sz"].valueChanged.connect(self.on_parameter_changed)
             support_group["sdim"].currentIndexChanged.connect(self.on_parameter_changed)
             support_group["sr"].valueChanged.connect(self.on_parameter_changed)
+            support_group["_signals_connected"] = True
             # there is a special "nbSupportsChanged" signal for the remove button
 
     def _connect_region_signals(self) -> None:
-        """(Re)connects on_parameter_changed signals to all current region widgets."""
+        """Connect on_parameter_changed signals to all current region widgets."""
         for region_group in self.regions_widget.inputs:
+            if region_group.get("_signals_connected"):
+                continue
             region_group["rshape"].currentIndexChanged.connect(
                 self.on_parameter_changed
             )
@@ -1319,6 +1364,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             region_group["rx"].valueChanged.connect(self.on_parameter_changed)
             region_group["ry"].valueChanged.connect(self.on_parameter_changed)
             region_group["rz"].valueChanged.connect(self.on_parameter_changed)
+            region_group["_signals_connected"] = True
             # there is a special "nbRegionsChanged" signal for the remove button
 
     ############

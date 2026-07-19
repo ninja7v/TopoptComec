@@ -27,6 +27,24 @@ def _make_window(qt_app) -> MainWindow:
     return window
 
 
+def _make_window_no_result(qt_app) -> MainWindow:
+    """Build a MainWindow with no cached result (u=None, xPhys=None).
+
+    The default MainWindow constructor applies the default preset and
+    loads its cached npz if available, which sets ``u`` and ``xPhys``.
+    Tests that exercise the *partial* replot path need ``had_result``
+    to be False, otherwise ``on_parameter_changed`` takes the full-replot
+    branch.
+    """
+    window = _make_window(qt_app)
+    window.xPhys = None
+    window.u = None
+    # Force a replot so the material grid is initialized from the
+    # init_type (uniform), not from the cached npz.
+    window.replot()
+    return window
+
+
 def test_actor_per_element_map_populated(qt_app):
     """Each active force/support produces its own actor entry in the map."""
     window = _make_window(qt_app)
@@ -405,4 +423,300 @@ def test_rotate_activates_inactive_force(qt_app):
     window._rotate_selected_force()
     # First cycle element in 2D is index 1 (X:→).
     assert combo.currentIndex() == 1
+    window.close()
+
+
+# --- Partial replot and preset cache display tests ---
+
+
+def test_partial_replot_forces_keeps_material_grid(qt_app):
+    """Changing a force position refreshes only the forces layer.
+
+    The material grid (ImageData) must survive the partial replot (same
+    Python identity), proving the material was not rebuilt.
+    """
+    window = _make_window_no_result(qt_app)
+    # Ensure a 2D material grid exists (uniform init).
+    assert window._material_grid is not None
+    grid_before = window._material_grid
+
+    # Change a force position -> should route to replot_partial("forces").
+    window.forces_widget.inputs[0]["fix"].setValue(10)
+
+    assert window._material_grid is grid_before
+
+
+def test_partial_replot_material_inplace_2d(qt_app):
+    """Changing material color updates the 2D grid colors in place.
+
+    The existing ImageData grid object is kept (same Python identity),
+    only its cell_data is replaced — the matplotlib ``im.set_array``
+    equivalent. Color is a display-only parameter (does not affect the
+    density field), so the in-place fast path applies.
+    """
+    window = _make_window_no_result(qt_app)
+    assert window._material_grid is not None
+    grid_before = window._material_grid
+
+    # Change material color -> display-only change -> in-place fast path.
+    window._on_material_color_changed()
+
+    assert window._material_grid is grid_before
+
+
+def test_param_change_no_match_shows_uniform_material(qt_app):
+    """Changing a parameter so no preset matches shows the uniform-initialized
+    density field, not a cached npz result."""
+    import os
+    import numpy as np
+
+    window = _make_window_no_result(qt_app)
+    nelx = window.dim_widget.nx.value()
+
+    # Load the npz to know what the cached density looks like.
+    cache_file = os.path.join(
+        "results", "ForceInverter_2Sup_2D", "ForceInverter_2Sup_2D_density_field.npz"
+    )
+    if os.path.exists(cache_file):
+        npz_xphys = np.load(cache_file)["xPhys"]
+    else:
+        npz_xphys = None
+
+    # Change nelx so params don't match any preset -> full replot,
+    # xPhys is initialized from scratch (uniform), not from a cache.
+    window.dim_widget.nx.setValue(nelx + 5)
+
+    # xPhys should exist (initialized by replot) but NOT be the cached npz.
+    assert window.xPhys is not None
+    if npz_xphys is not None:
+        # Different dimensions -> different shape -> not the cached result.
+        assert window.xPhys.shape != npz_xphys.shape or not np.allclose(
+            window.xPhys.ravel(), npz_xphys.ravel()
+        )
+
+
+def test_param_change_matching_preset_loads_npz(qt_app):
+    """Changing parameters to match a preset with a cached npz result
+    displays the cached density field, not the uniform initialization."""
+    import json
+    import os
+    import numpy as np
+
+    window = MainWindow()
+    with open("topoptcomec/presets.json") as f:
+        presets = json.load(f)
+
+    # Use a preset that has a cached npz result.
+    preset_name = "ForceInverter_2Sup_2D"
+    cache_file = os.path.join(
+        "results", preset_name, f"{preset_name}_density_field.npz"
+    )
+    if not os.path.exists(cache_file):
+        pytest.skip(f"No cached result for {preset_name}")
+
+    expected = np.load(cache_file)["xPhys"]
+
+    # Apply the preset, then deselect and clear xPhys (simulating user
+    # editing params away from the preset).
+    window._apply_parameters(presets[preset_name])
+    window._on_preset_selected()
+    window.preset.presets_combo.setCurrentIndex(0)
+    window.xPhys = None
+    window.u = None
+
+    # Change fix away from the preset value, then back to trigger
+    # on_parameter_changed (setValue is a no-op if the value is unchanged).
+    fix_val = presets[preset_name]["Forces"]["fix"][0]
+    window.forces_widget.inputs[0]["fix"].setValue(fix_val + 1)
+    # Now change back to match the preset.
+    window.forces_widget.inputs[0]["fix"].setValue(fix_val)
+
+    # The cached npz should have been loaded by _sync_preset_selection.
+    assert window.xPhys is not None
+    assert np.allclose(window.xPhys, expected)
+    window.close()
+
+
+def test_param_change_while_preset_selected_keeps_npz(qt_app):
+    """Changing a parameter away from and back to the preset restores npz.
+
+    The preset is deselected when a param changes, then re-selected when
+    the param is restored. The cached density field must be reloaded by
+    _sync_preset_selection.
+    """
+    import json
+    import os
+    import numpy as np
+
+    window = MainWindow()
+    with open("topoptcomec/presets.json") as f:
+        presets = json.load(f)
+
+    preset_name = "ForceInverter_2Sup_2D"
+    cache_file = os.path.join(
+        "results", preset_name, f"{preset_name}_density_field.npz"
+    )
+    if not os.path.exists(cache_file):
+        pytest.skip(f"No cached result for {preset_name}")
+
+    expected = np.load(cache_file)["xPhys"]
+
+    # Apply preset (loads npz via _on_preset_selected).
+    window._apply_parameters(presets[preset_name])
+    window._on_preset_selected()
+    assert window.xPhys is not None
+
+    # Change finorm away from preset value -> preset deselected.
+    finorm_orig = presets[preset_name]["Forces"]["finorm"][0]
+    window.forces_widget.inputs[0]["finorm"].setValue(finorm_orig + 0.1)
+    assert window.preset.presets_combo.currentText() == "Select a preset..."
+
+    # Change back -> preset re-matches, npz reloaded.
+    window.forces_widget.inputs[0]["finorm"].setValue(finorm_orig)
+    assert window.preset.presets_combo.currentText() == preset_name
+    assert window.xPhys is not None
+    assert np.allclose(window.xPhys, expected)
+    window.close()
+
+
+def test_axis_bounds_pinned_after_force_move(qt_app):
+    """Moving a force beyond the design space does not stretch the axis.
+
+    The cube-axes actor bounds must stay pinned to [0, nelx] x [0, nely]
+    even when overlay actors (force arrows) extend beyond the design
+    space.
+    """
+    window = _make_window_no_result(qt_app)
+    nelx = window.dim_widget.nx.value()
+    nely = window.dim_widget.ny.value()
+
+    # Move a force far beyond the design space.
+    window.forces_widget.inputs[0]["fix"].setValue(nelx + 50)
+
+    ca = window.plotter.renderer.cube_axes_actor
+    assert ca is not None
+    bounds = ca.GetBounds()
+    assert bounds[0] == 0.0
+    assert bounds[1] == float(nelx)
+    assert bounds[2] == 0.0
+    assert bounds[3] == float(nely)
+
+
+def test_no_duplicate_signal_connections(qt_app):
+    """Applying a preset twice does not create duplicate signal connections.
+
+    Each _connect_*_signals call must skip already-connected widgets (via
+    the ``_signals_connected`` flag on the widget dict); otherwise
+    on_parameter_changed fires N times per setValue (once per
+    duplicate connection), causing visible replot flicker.
+    """
+    import json
+
+    window = MainWindow()
+    with open("topoptcomec/presets.json") as f:
+        presets = json.load(f)
+
+    # Apply the same preset twice to trigger _connect_*_signals twice.
+    window._apply_parameters(presets["ForceInverter_2Sup_2D"])
+    window._apply_parameters(presets["ForceInverter_2Sup_2D"])
+
+    # Count receivers: the fix spinbox should have exactly one connection
+    # to on_parameter_changed (not one per _apply_parameters call).
+    fix_sb = window.forces_widget.inputs[0]["fix"]
+    count = fix_sb.receivers("2valueChanged(int)")
+    assert count == 1, f"Expected 1 receiver, got {count}"
+    window.close()
+
+
+def test_region_change_rebuilds_material(qt_app):
+    """Changing a region parameter must rebuild the material layer.
+
+    Regions modify the density field via ``_apply_regions``, so any region
+    change requires re-initializing ``xPhys`` and replotting the material.
+    A region-only partial replot (refreshing only the green outline) is
+    insufficient: the density field itself changes.
+    """
+    import numpy as np
+
+    window = _make_window_no_result(qt_app)
+    # Add a solid region so the density field changes when we move it.
+    # Use emit_signal=True so the add button fires _connect_region_signals,
+    # wiring the new spinboxes to on_parameter_changed.
+    window.regions_widget.add_btn.click()
+    # Configure the newly added region as a solid square at (30, 15).
+    rw = window.regions_widget.inputs[-1]
+    rw["rshape"].setCurrentText("□")
+    rw["rstate"].setCurrentText("Material 1")
+    rw["rradius"].setValue(10)
+    rw["rx"].setValue(30)
+    rw["ry"].setValue(15)
+    window.on_parameter_changed()  # commit the region addition
+    assert window.xPhys is not None
+    xphys_before = window.xPhys.copy()
+    grid_before = window._material_grid
+
+    # Move the region to a new position. This changes which elements are
+    # forced to solid, so the material must be rebuilt.
+    window.regions_widget.inputs[-1]["rx"].setValue(60)
+
+    # The density field must have been re-initialized (region moved).
+    assert window.xPhys is not None
+    assert not np.array_equal(window.xPhys, xphys_before), (
+        "Region move did not change the density field: material was not re-initialized"
+    )
+    # The material grid must have been rebuilt (not just color-updated).
+    assert window._material_grid is not grid_before, (
+        "Region move did not rebuild the material grid"
+    )
+    window.close()
+
+
+def test_preset_npz_displayed_after_param_change(qt_app):
+    """Changing a parameter to match a preset displays the cached npz.
+
+    When the user edits parameters and they happen to match a preset with
+    a cached result, ``_sync_preset_selection`` loads the npz into
+    ``self.xPhys``. The material layer must then be replotted to show it.
+    This test starts from an *initialized* xPhys (not None), which is the
+    real-world scenario: the user is editing an already-initialized view.
+    """
+    import json
+    import os
+    import numpy as np
+
+    window = MainWindow()
+    with open("topoptcomec/presets.json") as f:
+        presets = json.load(f)
+
+    preset_name = "ForceInverter_2Sup_2D"
+    cache_file = os.path.join(
+        "results", preset_name, f"{preset_name}_density_field.npz"
+    )
+    if not os.path.exists(cache_file):
+        pytest.skip(f"No cached result for {preset_name}")
+
+    expected = np.load(cache_file)["xPhys"]
+
+    # Apply preset, then deselect. xPhys is the npz (from _on_preset_selected),
+    # u is set. Deselecting leaves xPhys as-is (the npz data).
+    window._apply_parameters(presets[preset_name])
+    window._on_preset_selected()
+    assert window.xPhys is not None
+    window.preset.presets_combo.setCurrentIndex(0)
+
+    # Change fix away (params no longer match) -> full replot re-initializes
+    # xPhys to uniform. Now xPhys is the uniform placeholder, u is None.
+    fix_val = presets[preset_name]["Forces"]["fix"][0]
+    window.forces_widget.inputs[0]["fix"].setValue(fix_val + 1)
+    assert window.preset.presets_combo.currentText() == "Select a preset..."
+
+    # Change fix back -> params match the preset again. sync should load
+    # the npz and the material layer must be replotted to display it.
+    window.forces_widget.inputs[0]["fix"].setValue(fix_val)
+
+    assert window.preset.presets_combo.currentText() == preset_name
+    assert window.xPhys is not None
+    assert np.allclose(window.xPhys, expected), (
+        "Params match preset but xPhys is not the cached npz"
+    )
     window.close()

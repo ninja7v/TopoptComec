@@ -19,6 +19,15 @@ _OVERLAY_Z = 0.05
 _VOXEL_OPACITY_MIN = 0.25
 _VOXEL_OPACITY_MAX = 0.95
 
+# Layer names tracked by _layer_actors for partial replot.
+LAYER_MATERIAL = "material"
+LAYER_FORCES = "forces"
+LAYER_SUPPORTS = "supports"
+LAYER_REGIONS = "regions"
+LAYER_DIMENSIONS = "dimensions"
+LAYER_DISPLACEMENT_PREVIEW = "displacement_preview"
+LAYER_MESSAGE = "message"
+
 
 class PlottingMixin:
     """Mixin for MainWindow to handle all plotting operations with PyVista."""
@@ -28,6 +37,11 @@ class PlottingMixin:
         self._material_actor = None
         self._material_grid = None
         self._overlay_actors = []
+        # Per-layer actor tracking for partial replot. Keyed by layer name
+        # (e.g. "forces", "supports", "regions", "dimensions",
+        # "displacement_preview"). The flat _overlay_actors list is kept in
+        # sync for code that iterates all overlay actors.
+        self._layer_actors: dict = {}
         self._message_actor = None
         self._camera_mode = None  # "2d" or "3d"
         self._camera_dims = None  # (nelx, nely, nelz) the camera was fitted on
@@ -50,24 +64,6 @@ class PlottingMixin:
         self.plotter.set_background("white")
         self._render()
 
-    @staticmethod
-    def _color_to_rgb(color: str) -> np.ndarray:
-        """
-        Convert a color string to an RGB float array in [0, 1].
-
-        Parameters
-        ----------
-        color : str
-            Color as "#RRGGBB" (or any string accepted by QColor).
-
-        Returns
-        -------
-        np.ndarray
-            RGB components as floats in [0, 1].
-        """
-        r, g, b, _ = QColor(color).getRgbF()
-        return np.array([r, g, b])
-
     def _material_colors(self, data: np.ndarray, is_multi: bool) -> np.ndarray:
         """
         Compute per-element RGB colors for a density field.
@@ -88,17 +84,21 @@ class PlottingMixin:
         """
         if is_multi:
             n_mat, nel = data.shape
-            rgb = np.ones((nel, 3))  # Start white
+            rgb: np.ndarray = np.ones((nel, 3))  # Start white
             for i in range(n_mat):
-                mat_rgb = self._color_to_rgb(
-                    self.materials_widget.inputs[i]["color"].get_color()
+                mat_rgb = np.array(
+                    QColor(
+                        self.materials_widget.inputs[i]["color"].get_color()
+                    ).getRgbF()[:3]
                 )
                 # Blend: pixel = sum(rho_i * color_i)
                 rgb += data[i, :, np.newaxis] * (mat_rgb - 1.0)
             rgb = np.clip(rgb, 0.0, 1.0)
         else:
-            mat_rgb = self._color_to_rgb(
-                self.materials_widget.inputs[0]["color"].get_color()
+            mat_rgb = np.array(
+                QColor(self.materials_widget.inputs[0]["color"].get_color()).getRgbF()[
+                    :3
+                ]
             )
             # white -> material color gradient
             rgb = np.clip(1.0 + data[:, np.newaxis] * (mat_rgb - 1.0), 0.0, 1.0)
@@ -439,6 +439,7 @@ class PlottingMixin:
         self._material_actor = None
         self._material_grid = None
         self._overlay_actors = []
+        self._layer_actors = {}
         self._message_actor = None
         self.plotter.set_background("white")
 
@@ -469,6 +470,141 @@ class PlottingMixin:
 
         self._update_camera(is_3d, (nelx, nely, nelz))
         self._render()
+
+    def replot_partial(self, *layers: str) -> None:
+        """Refresh only the requested layers without rebuilding the whole scene.
+
+        Unlike :meth:`replot`, this skips ``plotter.clear()`` and the full
+        VTK-pipeline rebuild, which is the dominant cost on small 2D
+        domains. Each requested layer is removed from the scene and redrawn
+        in isolation, then a single ``render()`` is issued.
+
+        Falls back to a full :meth:`replot` when no layers are given, when
+        ``last_params`` is missing, or when a deformation view is active
+        (the deformation overlay cannot be partially refreshed).
+
+        Parameters
+        ----------
+        *layers : str
+            Layer names to refresh (any of the ``LAYER_*`` constants).
+        """
+        if not self.last_params:
+            return
+        if not layers:
+            self.replot()
+            return
+        # Deformation view reuses the material actor + special overlay logic;
+        # stay on the safe full-replot path there.
+        if self.is_displaying_deformation:
+            self.replot()
+            return
+
+        nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        is_3d: bool = nelz > 0
+
+        # Fast path: only the material layer was requested and the existing
+        # 2D grid can be updated in place (color/percent/init_type change).
+        if layers == (LAYER_MATERIAL,):
+            if self._refresh_material_inplace():
+                self._render(fix_bounds=False)
+                return
+            # No in-place path (3D, no grid yet, deformation view, ...) ->
+            # fall through to the per-layer remove/redraw logic.
+
+        if LAYER_MATERIAL in layers:
+            self._remove_material_actor()
+            if self.sections["Materials"].visibility_button.isChecked():
+                if self.xPhys is None:
+                    self._initialize_xphys(nelx, nely, nelz, is_3d)
+                self._plot_material(is_3d=is_3d)
+            # Show/hide the initial message: it is drawn only when there is
+            # no xPhys yet. Re-evaluate it whenever the material layer is
+            # being refreshed, since a material visibility toggle changes
+            # whether the placeholder should appear.
+            if LAYER_MESSAGE not in layers:
+                self._remove_actor(self._message_actor)
+                self._message_actor = None
+                if not self.is_displaying_deformation:
+                    self._show_initial_message(is_3d)
+
+        if LAYER_FORCES in layers:
+            self._remove_layer_actors(LAYER_FORCES)
+            self._plot_forces(is_3d=is_3d)
+
+        if LAYER_SUPPORTS in layers:
+            self._remove_layer_actors(LAYER_SUPPORTS)
+            self._plot_supports(is_3d=is_3d)
+
+        if LAYER_REGIONS in layers:
+            self._remove_layer_actors(LAYER_REGIONS)
+            self._plot_regions(is_3d=is_3d)
+
+        if LAYER_DIMENSIONS in layers:
+            self._remove_layer_actors(LAYER_DIMENSIONS)
+            try:
+                self.plotter.remove_bounds_axes()
+            except (AttributeError, RuntimeError):
+                pass
+            self._plot_dimensions_frame(is_3d=is_3d)
+
+        if LAYER_DISPLACEMENT_PREVIEW in layers:
+            self._remove_layer_actors(LAYER_DISPLACEMENT_PREVIEW)
+            self._plot_displacement_preview(is_3d=is_3d)
+
+        # Re-apply selection highlight: a refreshed layer may have contained
+        # the selected overlay element, in which case the highlight must be
+        # drawn on top of the freshly added actor.
+        self._apply_selection_highlight()
+        # Only re-pin the axis bounds when the dimensions layer was touched:
+        # reassigning cube_axes bounds/ranges regenerates tick labels, which
+        # is a visible axis redraw. For force/support/region/material-only
+        # changes the design space is unchanged, so skip it to avoid the
+        # axis flicker.
+        self._render(fix_bounds=LAYER_DIMENSIONS in layers)
+
+    def _refresh_material_inplace(self) -> bool:
+        """Try to refresh the 2D material colors without removing the actor.
+
+        Used by :meth:`replot_partial` when only ``LAYER_MATERIAL`` is
+        requested (e.g. material color/percent/init_type change). The
+        existing ``ImageData`` grid is kept and only its ``cell_data`` is
+        replaced, mirroring matplotlib's ``im.set_array`` fast path.
+
+        Returns
+        -------
+        bool
+            ``True`` if the in-place update was applied (or no update was
+            needed because the layer is invisible). ``False`` if the caller
+            must fall back to removing and re-adding the material actor.
+        """
+        if self.is_displaying_deformation:
+            return False
+        if not self.sections["Materials"].visibility_button.isChecked():
+            # Layer hidden: nothing to draw. A separate hide/show toggle
+            # goes through the full replot path, so reaching here means the
+            # layer is genuinely invisible and no actor exists.
+            return True
+        if self.xPhys is None:
+            return False
+        nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        if nelz > 0:
+            return False  # 3D path has no in-place fast path
+        is_multi: bool = self.xPhys.ndim == 2
+        grid = self._material_grid
+        if (
+            grid is None
+            or self._material_actor is None
+            or self._material_actor not in self.plotter.actors.values()
+            or tuple(grid.dimensions) != (nelx + 1, nely + 1, 1)
+        ):
+            return False
+        colors: np.ndarray = self._material_colors(self.xPhys, is_multi)
+        # Element ordering: app uses idx = y + x*nely, VTK uses x-fastest
+        vtk_colors: np.ndarray = (
+            colors.reshape((nelx, nely, 3)).transpose(1, 0, 2).reshape(-1, 3)
+        )
+        grid.cell_data["colors"] = vtk_colors
+        return True
 
     def _update_camera(self, is_3d: bool, dims: tuple) -> None:
         """
@@ -533,6 +669,52 @@ class PlottingMixin:
         self._remove_actor(self._material_actor)
         self._material_actor = None
         self._material_grid = None
+
+    def _add_overlay_actor(self, actor, layer: str) -> None:
+        """Track an overlay actor under both the flat list and per-layer dict.
+
+        Parameters
+        ----------
+        actor : vtkActor or None
+            The actor to track. ``None`` is silently ignored (callers may
+            pass ``None`` when a plot helper decides not to draw anything).
+        layer : str
+            Layer name (one of the ``LAYER_*`` constants). The actor is
+            appended to ``_layer_actors[layer]`` so a later partial replot
+            can remove only that layer's actors.
+        """
+        if actor is None:
+            return
+        self._overlay_actors.append(actor)
+        self._layer_actors.setdefault(layer, []).append(actor)
+
+    def _remove_layer_actors(self, layer: str) -> None:
+        """Remove all actors of a single layer from the scene and bookkeeping.
+
+        Also drops them from the flat ``_overlay_actors`` list and from
+        ``_overlay_actor_map`` (by actor identity), so the structures stay
+        consistent with what is actually on the renderer.
+
+        Parameters
+        ----------
+        layer : str
+            Layer name (one of the ``LAYER_*`` constants).
+        """
+        actors = self._layer_actors.pop(layer, [])
+        if not actors:
+            return
+        live_ids = set()
+        for a in actors:
+            self._remove_actor(a)
+            live_ids.add(id(a))
+        # Drop from the flat overlay list
+        self._overlay_actors = [
+            a for a in self._overlay_actors if id(a) not in live_ids
+        ]
+        # Drop any stale actor-map entries that pointed at removed actors
+        for k in list(self._overlay_actor_map):
+            if k in live_ids:
+                del self._overlay_actor_map[k]
 
     def _plot_material(self, is_3d: bool, xPhys_data: np.ndarray | None = None) -> None:
         """
@@ -680,6 +862,7 @@ class PlottingMixin:
             for a in actors:
                 self._remove_actor(a)
         self._overlay_actors = []
+        self._layer_actors = {}
         self._highlight_actor = None
         self._overlay_actor_map = {}
         try:
@@ -734,7 +917,7 @@ class PlottingMixin:
                 render=False,
             )
             self._set_dotted(actor)
-            self._overlay_actors.append(actor)
+            self._add_overlay_actor(actor, LAYER_DIMENSIONS)
             self.plotter.show_bounds(
                 bounds=(0, nelx, 0, nely, 0, nelz),
                 xtitle="X",
@@ -759,7 +942,7 @@ class PlottingMixin:
                 rect, color="gray", line_width=1.5, reset_camera=False, render=False
             )
             self._set_dotted(actor)
-            self._overlay_actors.append(actor)
+            self._add_overlay_actor(actor, LAYER_DIMENSIONS)
             self.plotter.show_bounds(
                 bounds=(0, nelx, 0, nely, 0, 0),
                 xtitle="X",
@@ -773,12 +956,14 @@ class PlottingMixin:
         """
         Force the bounds-axes box and ticks to span the design space exactly.
 
-        PyVista resets the axis label ranges to the (padded) scene bounds
-        every time an actor is added, so this must be re-applied after the
-        last actor of a render cycle has been added (see _render). The
-        physical extent (bounds) is also pinned to the design space so that
-        overlay actors like force arrows extending beyond the mechanism
-        cannot stretch the axis box.
+        PyVista's :meth:`Renderer.add_actor` unconditionally calls
+        ``update_bounds_axes()``, which feeds the renderer's *scene* bounds
+        (including overlay actors like force arrows that extend beyond the
+        design space) into ``cube_axes_actor.update_bounds``. That would
+        otherwise stretch the axis box to e.g. ``[-5, nelx+3]`` on every
+        ``add_mesh`` call. After pinning the bounds to the design space
+        here, the ``update_bounds`` method is replaced with a no-op so the
+        scene-bounds feed-in is blocked on subsequent actor additions.
         """
         if not self.last_params or "Dimensions" not in self.last_params:
             return
@@ -790,7 +975,7 @@ class PlottingMixin:
             # Pin the physical extent of the axis box to the design space.
             # Use z extent of 0 in 2D so the box stays flat on the xy plane.
             if nelz > 0:
-                cube_axes.bounds = (
+                pinned = (
                     0.0,
                     float(nelx),
                     0.0,
@@ -799,18 +984,43 @@ class PlottingMixin:
                     float(nelz),
                 )
             else:
-                cube_axes.bounds = (0.0, float(nelx), 0.0, float(nely), 0.0, 0.0)
+                pinned = (0.0, float(nelx), 0.0, float(nely), 0.0, 0.0)
             # Use the property setters (they also regenerate the labels)
-            cube_axes.x_axis_range = (0.0, float(nelx))
-            cube_axes.y_axis_range = (0.0, float(nely))
+            cube_axes.bounds = pinned
+            cube_axes.x_axis_range = (pinned[0], pinned[1])
+            cube_axes.y_axis_range = (pinned[2], pinned[3])
             if nelz > 0:
-                cube_axes.z_axis_range = (0.0, float(nelz))
+                cube_axes.z_axis_range = (pinned[4], pinned[5])
+            # Use the raw VTK setter: PyVista wraps CubeAxesActor and
+            # blocks snake_case attribute access (``rebuild_axes`` raises
+            # PyVistaAttributeError), so ``SetRebuildAxes`` must be called
+            # directly.
+            cube_axes.SetRebuildAxes(False)
+            # Block PyVista's per-add_mesh bounds feed-in: ``add_actor``
+            # calls ``renderer.update_bounds_axes()`` which would otherwise
+            # call ``cube_axes.update_bounds(scene_bounds)`` and overwrite
+            # the pinned bounds with the scene bounds (including overlay
+            # actors that extend beyond the design space). Replacing the
+            # method with a no-op keeps the pinned bounds sticky across
+            # partial replots that add/remove overlay actors.
+            cube_axes.update_bounds = lambda _bounds: None
         except (AttributeError, RuntimeError):
             pass
 
-    def _render(self) -> None:
-        """Render the scene after re-applying the exact axis tick ranges."""
-        self._fix_bounds_axes_ranges()
+    def _render(self, fix_bounds: bool = True) -> None:
+        """Render the scene, optionally re-pinning the axis tick ranges.
+
+        Parameters
+        ----------
+        fix_bounds : bool
+            When True, re-apply the bounds-axes ranges so the axis box stays
+            pinned to the design space. The pinned bounds are also made
+            sticky (see :meth:`_fix_bounds_axes_ranges`), so for partial
+            replots that only refresh overlay layers the flag can be False
+            to skip the redundant re-pin.
+        """
+        if fix_bounds:
+            self._fix_bounds_axes_ranges()
         self.plotter.render()
 
     # ------------------------------------------------------------------
@@ -1142,6 +1352,7 @@ class PlottingMixin:
         directions: np.ndarray,
         color: str,
         length: float,
+        layer: str = LAYER_FORCES,
     ):
         """
         Draw arrow glyphs of uniform length.
@@ -1156,6 +1367,8 @@ class PlottingMixin:
             Arrow color.
         length : float
             Arrow length in scene units.
+        layer : str
+            Overlay layer to track the actor under (default: forces).
 
         Returns
         -------
@@ -1171,7 +1384,7 @@ class PlottingMixin:
         actor = self.plotter.add_mesh(
             glyphs, color=color, reset_camera=False, render=False
         )
-        self._overlay_actors.append(actor)
+        self._add_overlay_actor(actor, layer)
         return actor
 
     def _plot_initial_forces(self, is_3d: bool, pf: dict, length: float) -> None:
@@ -1316,7 +1529,7 @@ class PlottingMixin:
             actor = self.plotter.add_mesh(
                 glyphs, color="black", reset_camera=False, render=False
             )
-            self._overlay_actors.append(actor)
+            self._add_overlay_actor(actor, LAYER_SUPPORTS)
             self._overlay_actor_map[id(actor)] = ("support", orig_idx)
 
     def _plot_regions(self, is_3d: bool) -> None:
@@ -1368,7 +1581,7 @@ class PlottingMixin:
                     render=False,
                 )
                 self._set_dotted(actor)
-                self._overlay_actors.append(actor)
+                self._add_overlay_actor(actor, LAYER_REGIONS)
 
             else:
                 if shape == "□":  # Square/Cube
@@ -1400,7 +1613,7 @@ class PlottingMixin:
                     render=False,
                 )
                 self._set_dotted(actor)
-                self._overlay_actors.append(actor)
+                self._add_overlay_actor(actor, LAYER_REGIONS)
 
     def _plot_displacement_preview(self, is_3d: bool) -> None:
         """
@@ -1512,4 +1725,4 @@ class PlottingMixin:
             actor = self.plotter.add_mesh(
                 glyphs, color="red", reset_camera=False, render=False
             )
-            self._overlay_actors.append(actor)
+            self._add_overlay_actor(actor, LAYER_DISPLACEMENT_PREVIEW)
