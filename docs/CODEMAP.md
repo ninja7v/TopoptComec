@@ -6,7 +6,10 @@ Quick map of the repository.
 
 - `main.py`: convenience wrapper, delegates to `topoptcomec/__main__:main`
 - `topoptcomec/__main__.py`: application entry point (console script target)
-- `requirements.txt`: dependencies
+- `pyproject.toml`: package metadata, dependencies, console script
+- `requirements.txt`: runtime dependencies
+- `requirements-dev.txt`: dev/test dependencies
+- `TopoptComec.spec`: PyInstaller spec for the standalone build
 - `README.md`: user-facing overview
 - `CONTRIBUTING.md`: contribution guide
 - `LICENSE.txt`: license
@@ -58,8 +61,10 @@ Quick map of the repository.
 - `tests/test_exporters.py`: exporter behavior
 - `tests/test_parameter_validation.py`: GUI parameter validation
 - `tests/test_main_window.py`: main window behavior
+- `tests/test_graphic_interaction.py`: GUI interaction, preset apply, plotting, and signal-connection behavior
 - `tests/test_widgets.py`: widget behavior
 - `tests/test_workers.py`: worker behavior
+- `tests/test_main.py`: entry-point dispatch (GUI vs CLI)
 - `tests/conftest.py`: shared fixtures
 - `tests/presets_test.json`: preset fixture data
 - `tests/references/`: result references (`regenerate_references.py` rebuilds them after intentional numerical changes)

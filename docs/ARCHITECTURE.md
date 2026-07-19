@@ -43,6 +43,8 @@ used as a library.
 - `initializers.py`: starting density fields
 - `displacements.py`: iterative post-optimization displacement simulation
 - `analyzers.py`: heuristic quality checks on finished results
+- `post_processing.py`: density/displacement field rescaling shared by
+  optimization, displacement, and export
 
 ### GUI Layer
 
