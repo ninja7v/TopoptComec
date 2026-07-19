@@ -187,12 +187,14 @@ def test_forces_widget_initialization(qt_app: QApplication):
     assert len(widget.output_forces) == 0, "Should allow removing all output forces."
 
     # Test max limits
-    for _ in range(15):
+    for _ in range(150):
         widget.add_input_force()
         widget.add_output_force()
-    assert len(widget.input_forces) == 10, "Should not allow more than 10 input forces."
-    assert len(widget.output_forces) == 10, (
-        "Should not allow more than 10 output forces."
+    assert len(widget.input_forces) == 100, (
+        "Should not allow more than 100 input forces."
+    )
+    assert len(widget.output_forces) == 100, (
+        "Should not allow more than 100 output forces."
     )
 
 

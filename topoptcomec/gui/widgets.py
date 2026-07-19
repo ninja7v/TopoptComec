@@ -787,7 +787,7 @@ class ForcesWidget(QWidget):
         emit_signal : bool
             Whether to emit nbForcesChanged signal.
         """
-        if len(self.input_forces) >= 10:
+        if len(self.input_forces) >= 100:
             return
 
         if pos is None:
@@ -867,7 +867,7 @@ class ForcesWidget(QWidget):
         emit_signal : bool
             Whether to emit nbForcesChanged signal.
         """
-        if len(self.output_forces) >= 10:
+        if len(self.output_forces) >= 100:
             return
 
         if pos is None:
@@ -980,7 +980,7 @@ class ForcesWidget(QWidget):
 
         Ensures constraints are met: 1-10 input forces, 0-10 output forces.
         """
-        can_add_input = len(self.input_forces) < 10
+        can_add_input = len(self.input_forces) < 100
         can_remove_input = len(self.input_forces) > 1
         self.add_if_btn.setEnabled(can_add_input)
         for force in self.input_forces:

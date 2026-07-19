@@ -540,6 +540,10 @@ class ParameterManagerMixin:
                     pm["color"] = ["#000000"]  # Default black color
                 if "init_type" not in pm:
                     pm["init_type"] = 0
+            # Normalize hex color case: presets may store uppercase (#30EF54)
+            # while the GUI color picker returns lowercase (#30ef54).
+            if "color" in pm:
+                pm["color"] = [c.lower() for c in pm["color"]]
 
     def _update_position_ranges(self) -> None:
         """
