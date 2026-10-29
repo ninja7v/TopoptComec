@@ -3,9 +3,11 @@
 # Material initializers.
 
 from __future__ import annotations
+
+from enum import IntEnum
+
 import numpy as np
 import numpy.typing as npt
-from enum import IntEnum
 from scipy.spatial.distance import cdist
 
 # Type aliases

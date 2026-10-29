@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from topoptcomec.gui.workers import OptimizerWorker, DisplacementWorker, AnalysisWorker
+from topoptcomec.gui.workers import AnalysisWorker, DisplacementWorker, OptimizerWorker
 
 
 def test_optimizer_worker(monkeypatch):

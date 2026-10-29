@@ -49,19 +49,11 @@ def test_exporters():
         success, error_msg = exporters.save_as_png(*args)
         assert success, f"PNG export failed: {error_msg}"
 
-        args = (
-            (res, dims, str(filepath) + ".vti")
-            if not is_multi
-            else (res, dims, str(filepath) + ".vti")
-        )
+        args = (res, dims, str(filepath) + ".vti")
         success, error_msg = exporters.save_as_vti(*args)
         assert success, f"VTI export failed: {error_msg}"
 
-        args = (
-            (res, dims, str(filepath) + ".stl")
-            if not is_multi
-            else (res, dims, str(filepath) + ".stl")
-        )
+        args = (res, dims, str(filepath) + ".stl")
         success, error_msg = exporters.save_as_stl(*args)
         assert success, f"STL export failed: {error_msg}"
 

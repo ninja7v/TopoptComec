@@ -8,7 +8,6 @@ import os
 
 import numpy as np
 import numpy.typing as npt
-from pyvistaqt import QtInteractor
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
@@ -21,13 +20,13 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressBar,
-    QStatusBar,
     QScrollArea,
     QSplitter,
+    QStatusBar,
     QVBoxLayout,
     QWidget,
 )
-from typing import Tuple
+from pyvistaqt import QtInteractor
 
 # import mcubes
 from topoptcomec import exporters
@@ -36,8 +35,11 @@ from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import resolve_presets_file
 
 from .icons import icons
+from .parameter_manager import ParameterManagerMixin
+from .plotting import PlottingMixin
 from .themes import DARK_THEME_STYLESHEET, LIGHT_THEME_STYLESHEET
 from .widgets import (
+    AnalysisWidget,
     CollapsibleSection,
     DimensionsWidget,
     DisplacementWidget,
@@ -46,14 +48,11 @@ from .widgets import (
     HeaderWidget,
     MaterialsWidget,
     OptimizerWidget,
-    AnalysisWidget,
     PresetWidget,
     RegionsWidget,
     SupportWidget,
 )
 from .workers import AnalysisWorker, DisplacementWorker, OptimizerWorker
-from .plotting import PlottingMixin
-from .parameter_manager import ParameterManagerMixin
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -527,7 +526,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         if not self.last_params:
             return
 
-        nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        _nelx, _nely, nelz = self.last_params["Dimensions"]["nelxyz"]
         is_3d = nelz > 0
 
         # _plot_material updates the existing 2D grid in place when possible
@@ -546,7 +545,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 self._save_screenshot(filename)
 
     def _handle_optimization_results(
-        self, result: Tuple[np.ndarray, np.ndarray]
+        self, result: tuple[np.ndarray, np.ndarray]
     ) -> None:
         """
         Finalize the UI after optimization completes and cache results.
@@ -612,7 +611,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             )
             try:
                 np.savez_compressed(cache_file, xPhys=self.xPhys, u=self.u)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"Failed to save cache: {e}")
 
             if self.loss_history:
@@ -759,7 +758,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         # Safety check to ensure parameters are available
         if not self.last_params:
             return
-        nelx, nely, nelz = self.last_params["Dimensions"]["nelxyz"]
+        _nelx, _nely, nelz = self.last_params["Dimensions"]["nelxyz"]
         is_3d = nelz > 0
         self.last_displayed_frame_data = np.array(frame_data, copy=True)
 
@@ -880,7 +879,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         label.style().unpolish(label)
         label.style().polish(label)
 
-    def _handle_analysis_finished(self, results: Tuple[bool, bool, bool, bool]) -> None:
+    def _handle_analysis_finished(self, results: tuple[bool, bool, bool, bool]) -> None:
         """Handles the results after analysis finishes successfully."""
         aw = self.analysis_widget
         # Checkerboard patterns are a defect: detecting them is a bad outcome.
@@ -967,7 +966,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                     filepath,
                 )
                 if not success:
-                    raise Exception(error_msg)
+                    raise RuntimeError(error_msg)
 
             elif file_type == "stl":
                 success, error_msg = exporters.save_as_stl(
@@ -976,7 +975,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                     filepath,
                 )
                 if not success:
-                    raise Exception(error_msg)
+                    raise RuntimeError(error_msg)
 
             elif file_type == "3mf":
                 success, error_msg = exporters.save_as_3mf(
@@ -986,11 +985,11 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                     colors,
                 )
                 if not success:
-                    raise Exception(error_msg)
+                    raise RuntimeError(error_msg)
 
             self.status_bar.showMessage(f"Result saved to {filepath}", 5000)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             QMessageBox.critical(self, "Save Error", f"Could not save the file:\n{e}")
 
     def _save_as_png(self) -> None:
@@ -1101,7 +1100,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                     self.status_bar.showMessage(
                         f"Loaded cached result for {preset_name}.", 5000
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"Failed to load cache: {e}")
 
         else:
@@ -1526,9 +1525,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         if is_3d:
             factor = (arr_size / nel_new) ** (1 / 3)
-            nx_old = max(1, int(round(nx_new * factor)))
-            ny_old = max(1, int(round(ny_new * factor)))
-            nz_old = max(1, int(round(nz_new * factor)))
+            nx_old = max(1, round(nx_new * factor))
+            ny_old = max(1, round(ny_new * factor))
+            nz_old = max(1, round(nz_new * factor))
             return (nx_old, ny_old, nz_old)
         else:
             target_ny = np.sqrt(arr_size * ny_new / nx_new)

@@ -3,7 +3,9 @@
 # Structured grid: the single source of truth for element/node ordering.
 
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 import numpy as np
 import numpy.typing as npt
 

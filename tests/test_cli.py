@@ -2,12 +2,14 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Tests for the CLI.
 
-import sys
 import json
-from unittest.mock import patch
-import pytest
-import numpy as np
+import sys
 from pathlib import Path
+from unittest.mock import patch
+
+import numpy as np
+import pytest
+
 from topoptcomec.cli.cli import _params_hash, run_cli
 from topoptcomec.cli.cli_preview import (
     _density_to_2d_rgb,
@@ -190,11 +192,13 @@ def test_run_cli_json_decode_error(mock_exists, mock_open):
     mock_open.return_value.__enter__ = lambda s: s
     mock_open.return_value.__exit__ = lambda s, *a: None
 
-    with patch("json.load", side_effect=json.JSONDecodeError("err", "doc", 0)):
-        with patch.object(sys, "argv", ["main.py", "-p", "TestPreset"]):
-            with pytest.raises(SystemExit) as cm:
-                run_cli()
-            assert cm.value.code == 1
+    with (
+        patch("json.load", side_effect=json.JSONDecodeError("err", "doc", 0)),
+        patch.object(sys, "argv", ["main.py", "-p", "TestPreset"]),
+        pytest.raises(SystemExit) as cm,
+    ):
+        run_cli()
+    assert cm.value.code == 1
 
 
 @patch("topoptcomec.cli.cli.optimizers.optimize")

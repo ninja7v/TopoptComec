@@ -3,15 +3,16 @@
 # Tests for the widgets.
 
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDoubleSpinBox,
     QPushButton,
     QSpinBox,
     QWidget,
-    QApplication,
 )
 
 from topoptcomec.gui.widgets import (
+    AnalysisWidget,
     CollapsibleSection,
     ColorPickerButton,
     DimensionsWidget,
@@ -21,7 +22,6 @@ from topoptcomec.gui.widgets import (
     HeaderWidget,
     MaterialsWidget,
     OptimizerWidget,
-    AnalysisWidget,
     PresetWidget,
     RegionsWidget,
     SupportWidget,

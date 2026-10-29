@@ -3,7 +3,9 @@
 # Topology Optimizers.
 
 from __future__ import annotations
+
 from collections.abc import Callable
+
 import numpy as np
 import numpy.typing as npt
 

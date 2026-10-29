@@ -8,6 +8,7 @@
 #     python tests/references/regenerate_references.py
 
 from __future__ import annotations
+
 import copy
 import json
 from pathlib import Path

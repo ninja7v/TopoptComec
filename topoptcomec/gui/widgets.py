@@ -103,7 +103,7 @@ def _make_dspin(
     return s
 
 
-def _make_combo(items: list = [], index: int = 0, tip: str = "") -> QComboBox:
+def _make_combo(items: list | None = None, index: int = 0, tip: str = "") -> QComboBox:
     """
     Create a configured QComboBox.
 
@@ -121,6 +121,8 @@ def _make_combo(items: list = [], index: int = 0, tip: str = "") -> QComboBox:
     QComboBox
         Configured combo box widget.
     """
+    if items is None:
+        items = []
     c = QComboBox()
     c.addItems(items)
     c.setCurrentIndex(index)
@@ -265,11 +267,13 @@ class ColorPickerButton(QPushButton):
 
     colorChanged = Signal(QColor)
 
-    def __init__(self, initial_color: QColor = QColor("black")):
+    def __init__(self, initial_color: QColor | str | None = None):
         """Initialize the ColorPickerButton."""
         super().__init__()
         self.setObjectName("ColorPickerButton")
-        if isinstance(initial_color, str):
+        if initial_color is None:
+            initial_color = QColor("black")
+        elif isinstance(initial_color, str):
             initial_color = QColor(initial_color)
 
         self.color = initial_color
@@ -536,7 +540,7 @@ class RegionsWidget(QWidget):
         rshape: str = "□",
         rstate: str = "Void",
         rradius: int = 5,
-        pos: list = None,
+        pos: list | None = None,
         emit_signal: bool = True,
     ) -> None:
         """
@@ -768,7 +772,7 @@ class ForcesWidget(QWidget):
 
     def add_input_force(
         self,
-        pos: list = None,
+        pos: list | None = None,
         arrow_idx: int = 1,
         norm: float = 0.01,
         emit_signal: bool = True,
@@ -848,7 +852,7 @@ class ForcesWidget(QWidget):
 
     def add_output_force(
         self,
-        pos: list = None,
+        pos: list | None = None,
         arrow_idx: int = 1,
         norm: float = 0.01,
         emit_signal: bool = True,
@@ -1029,7 +1033,7 @@ class SupportWidget(QWidget):
 
     def add_support(
         self,
-        pos: list = None,
+        pos: list | None = None,
         dim: str = "XYZ",
         radius: int = 0,
         emit_signal: bool = True,

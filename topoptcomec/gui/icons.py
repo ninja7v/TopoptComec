@@ -3,9 +3,12 @@
 # Icon management.
 
 from __future__ import annotations
+
 from pathlib import Path
+
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
+
 from .resource_path_finder import resource_path
 
 
