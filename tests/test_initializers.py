@@ -238,6 +238,7 @@ def test_initialize_from_current_result():
 def test_from_current_result_disabling_and_scaling(qt_app):
     """Test the disabling of 'From current result' and scaling behavior."""
     from unittest.mock import patch
+
     from topoptcomec.gui.main_window import MainWindow
 
     window = MainWindow()

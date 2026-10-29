@@ -4,9 +4,9 @@
 
 import copy
 import os
+
 import numpy as np
 from PySide6.QtWidgets import QMessageBox
-
 
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.time_estimation import TimeEstimation
@@ -318,11 +318,11 @@ class ParameterManagerMixin:
               space dimensions changed, or the sender is not recognized).
         """
         from topoptcomec.gui.plotting import (
-            LAYER_MATERIAL,
-            LAYER_FORCES,
-            LAYER_SUPPORTS,
-            LAYER_REGIONS,
             LAYER_DISPLACEMENT_PREVIEW,
+            LAYER_FORCES,
+            LAYER_MATERIAL,
+            LAYER_REGIONS,
+            LAYER_SUPPORTS,
         )
 
         # Dimensions: nelx/nely/nelz change the grid shape -> full replot.
@@ -476,7 +476,7 @@ class ParameterManagerMixin:
                 self.analysis_widget.run_analysis_button.setEnabled(True)
                 self.displacement_widget.run_disp_button.setEnabled(True)
                 self.sections["Displacement"].visibility_button.setEnabled(True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Failed to load cache: {e}")
 
     def _is_display_irrelevant_sender(self, sender) -> bool:

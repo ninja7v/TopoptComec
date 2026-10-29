@@ -2,8 +2,10 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Tests for parameter validation and scaling logic.
 
-import numpy as np
 from unittest.mock import patch
+
+import numpy as np
+
 from topoptcomec.gui.main_window import MainWindow
 from topoptcomec.parameter_check import ParameterCheck
 

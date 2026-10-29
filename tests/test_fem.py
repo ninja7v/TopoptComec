@@ -10,7 +10,6 @@ from topoptcomec.core.fem import FEM
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Region, Support
 
-
 # --- Fixtures ---
 
 

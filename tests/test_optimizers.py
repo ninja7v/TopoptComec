@@ -2,8 +2,8 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Tests for the optimizers.
 
-import json
 import copy
+import json
 import os
 from pathlib import Path
 
@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 
 from topoptcomec.core import initializers, optimizers
-
 
 REFERENCES_DIR = Path(__file__).parent / "references"
 # Loose enough to absorb BLAS/library differences across platforms, tight

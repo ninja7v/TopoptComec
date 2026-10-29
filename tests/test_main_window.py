@@ -2,11 +2,13 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Tests for the main window.
 
-import pytest
-import numpy as np
-from topoptcomec.gui.main_window import MainWindow
-from PySide6.QtWidgets import QCheckBox
 from unittest.mock import patch
+
+import numpy as np
+import pytest
+from PySide6.QtWidgets import QCheckBox
+
+from topoptcomec.gui.main_window import MainWindow
 
 
 @pytest.fixture(autouse=True)
@@ -595,8 +597,9 @@ def test_handle_displacement_error(qt_app):
 
 def test_low_density_validation(qt_app):
     """Test that low density result is detected as invalid and blocks run buttons."""
-    import numpy as np
     from unittest.mock import patch
+
+    import numpy as np
 
     window: MainWindow = MainWindow()
     assert window.xPhys_valid == (window.xPhys is not None)

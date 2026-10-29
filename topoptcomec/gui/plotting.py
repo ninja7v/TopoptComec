@@ -250,9 +250,7 @@ class PlottingMixin:
         pm: dict = self.last_params["Materials"]
         pd: dict = self.last_params["Dimensions"]
         pf: dict = self.last_params["Forces"]
-        ps: dict = (
-            self.last_params["Supports"] if "Supports" in self.last_params else None
-        )
+        ps: dict | None = self.last_params.get("Supports")
 
         active_iforces_indices = [
             i for i in range(len(pf["fidir"])) if np.array(pf["fidir"])[i] != "-"
@@ -353,37 +351,38 @@ class PlottingMixin:
                 idx_z: np.ndarray = np.arange(z_min, z_max)
 
             indices: np.ndarray | None = None
+            shape: str = pr["rshape"][i]
 
-            if pr["rshape"][i] == "□":  # Square/Cube
-                if len(idx_x) > 0 and len(idx_y) > 0:
-                    if is_3d and len(idx_z) > 0:
-                        xx, yy, zz = np.meshgrid(idx_x, idx_y, idx_z, indexing="ij")
-                        indices = zz + yy * nelz + xx * nely * nelz
-                    elif not is_3d:
-                        xx, yy = np.meshgrid(idx_x, idx_y, indexing="ij")
-                        indices = yy + xx * nely
+            # Square/Cube
+            if shape == "□" and len(idx_x) > 0 and len(idx_y) > 0:
+                if is_3d and len(idx_z) > 0:
+                    xx, yy, zz = np.meshgrid(idx_x, idx_y, idx_z, indexing="ij")
+                    indices = zz + yy * nelz + xx * nely * nelz
+                elif not is_3d:
+                    xx, yy = np.meshgrid(idx_x, idx_y, indexing="ij")
+                    indices = yy + xx * nely
 
-            elif pr["rshape"][i] == "◯":  # Circle/Sphere
-                if len(idx_x) > 0 and len(idx_y) > 0:
-                    if is_3d and len(idx_z) > 0:
-                        i_grid, j_grid, k_grid = np.meshgrid(
-                            idx_x, idx_y, idx_z, indexing="ij"
-                        )
-                        mask: np.ndarray = (i_grid - pr["rx"][i]) ** 2 + (
-                            j_grid - pr["ry"][i]
-                        ) ** 2 + (k_grid - pr["rz"][i]) ** 2 <= pr["rradius"][i] ** 2
-                        ii: np.ndarray = i_grid[mask]
-                        jj: np.ndarray = j_grid[mask]
-                        kk: np.ndarray = k_grid[mask]
-                        indices: np.ndarray = kk + jj * nelz + ii * nely * nelz
-                    elif not is_3d:
-                        i_grid, j_grid = np.meshgrid(idx_x, idx_y, indexing="ij")
-                        mask = (i_grid - pr["rx"][i]) ** 2 + (
-                            j_grid - pr["ry"][i]
-                        ) ** 2 <= pr["rradius"][i] ** 2
-                        ii = i_grid[mask]
-                        jj = j_grid[mask]
-                        indices = jj + ii * nely
+            # Circle/Sphere
+            elif shape == "◯" and len(idx_x) > 0 and len(idx_y) > 0:
+                if is_3d and len(idx_z) > 0:
+                    i_grid, j_grid, k_grid = np.meshgrid(
+                        idx_x, idx_y, idx_z, indexing="ij"
+                    )
+                    mask: np.ndarray = (i_grid - pr["rx"][i]) ** 2 + (
+                        j_grid - pr["ry"][i]
+                    ) ** 2 + (k_grid - pr["rz"][i]) ** 2 <= pr["rradius"][i] ** 2
+                    ii: np.ndarray = i_grid[mask]
+                    jj: np.ndarray = j_grid[mask]
+                    kk: np.ndarray = k_grid[mask]
+                    indices: np.ndarray = kk + jj * nelz + ii * nely * nelz
+                elif not is_3d:
+                    i_grid, j_grid = np.meshgrid(idx_x, idx_y, indexing="ij")
+                    mask = (i_grid - pr["rx"][i]) ** 2 + (
+                        j_grid - pr["ry"][i]
+                    ) ** 2 <= pr["rradius"][i] ** 2
+                    ii = i_grid[mask]
+                    jj = j_grid[mask]
+                    indices = jj + ii * nely
 
             if indices is not None:
                 if pr["rstate"][i] == "Material 1":
@@ -423,7 +422,7 @@ class PlottingMixin:
                 text_prop = self._message_actor.GetTextProperty()
                 text_prop.SetJustificationToCentered()
                 text_prop.SetVerticalJustificationToCentered()
-            except Exception:
+            except Exception:  # noqa: BLE001
                 self._message_actor = None
 
     def replot(self) -> None:
@@ -504,12 +503,11 @@ class PlottingMixin:
 
         # Fast path: only the material layer was requested and the existing
         # 2D grid can be updated in place (color/percent/init_type change).
-        if layers == (LAYER_MATERIAL,):
-            if self._refresh_material_inplace():
-                self._render(fix_bounds=False)
-                return
-            # No in-place path (3D, no grid yet, deformation view, ...) ->
-            # fall through to the per-layer remove/redraw logic.
+        # No in-place path (3D, no grid yet, deformation view, ...) ->
+        # fall through to the per-layer remove/redraw logic.
+        if layers == (LAYER_MATERIAL,) and self._refresh_material_inplace():
+            self._render(fix_bounds=False)
+            return
 
         if LAYER_MATERIAL in layers:
             self._remove_material_actor()
@@ -1078,9 +1076,7 @@ class PlottingMixin:
         if not self.last_params or "Dimensions" not in self.last_params:
             return False
         nelx, nely, _ = self.last_params["Dimensions"]["nelxyz"]
-        if nelx <= 0 or nely <= 0:
-            return False
-        return True
+        return not (nelx <= 0 or nely <= 0)
 
     def _can_move_selected(self) -> bool:
         """Movement gate: base gate + 2D only (XY-plane movement)."""

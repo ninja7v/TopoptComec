@@ -2,6 +2,8 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Estimate runtime for optimization, displacement and analysis.
 
+from typing import ClassVar
+
 
 class TimeEstimation:
     """
@@ -19,7 +21,7 @@ class TimeEstimation:
 
     # Thresholds on the estimated cost metric (1.1 * (nbIter+1) * nbSolves *
     # sizeMatrix**1.5) and the associated (color, label) pairs.
-    _OPTIMIZATION_TIERS: list[tuple[float, str, str]] = [
+    _OPTIMIZATION_TIERS: ClassVar[list[tuple[float, str, str]]] = [
         (10_000_000, "#00FF0D", "Very fast (a few seconds)"),
         (100_000_000, "#91FF00", "Fast (less than a minute)"),
         (1_000_000_000, "#FBC02D", "Medium (a few minutes)"),
@@ -103,8 +105,7 @@ class TimeEstimation:
                 fixed_dofs *= coef
 
         size_matrix: int = (nelx + 1) * (nely + 1) * (nelz + 1 if is_3d else 1) * dim
-        if size_matrix < 0:
-            size_matrix = 0
+        size_matrix = max(size_matrix, 0)
         return size_matrix
 
     @staticmethod

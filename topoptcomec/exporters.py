@@ -3,10 +3,12 @@
 # Export result to various file formats.
 
 from __future__ import annotations
+
 import csv
 import ctypes
 import warnings
 from pathlib import Path
+
 import mcubes
 import numpy as np
 import numpy.typing as npt
@@ -160,7 +162,7 @@ def save_as_png(
 
         plotter.screenshot(filename, scale=2)
         return True, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, str(e)
     finally:
         if plotter is not None:
@@ -233,7 +235,7 @@ def save_as_vti(
         writer.SetInputData(image_data)
         writer.Write()
         return True, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, str(e)
 
 
@@ -283,7 +285,7 @@ def save_as_stl(
         stl_mesh.vectors = vertices[triangles]
         stl_mesh.save(filename)
         return True, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, str(e)
 
 
@@ -401,7 +403,7 @@ def save_as_3mf(
         writer.WriteToFile(filename)
 
         return True, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, str(e)
 
 
@@ -440,5 +442,5 @@ def save_loss(
             writer.writerow(["iteration", "objective"])
             writer.writerows(loss)
         return True, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, str(e)

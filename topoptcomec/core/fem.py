@@ -3,11 +3,13 @@
 # Finite Element Method (FEM) class for topology optimization.
 
 from __future__ import annotations
+
 from collections.abc import Sequence
+
 import numpy as np
 import numpy.typing as npt
 from scipy.sparse import coo_matrix, csc_matrix, eye
-from scipy.sparse.linalg import spsolve, cg, LinearOperator
+from scipy.sparse.linalg import LinearOperator, cg, spsolve
 
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Region, Support
@@ -570,7 +572,7 @@ class FEM:
             if info != 0 and self.solver_type == "Auto":
                 try:
                     U_full[self.free_dofs] = spsolve(K_free, F_sum)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"Direct solver failed: {e}. Using partial CG solution.")
                     U_full[self.free_dofs] = u_sol
             else:

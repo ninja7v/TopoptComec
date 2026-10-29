@@ -3,8 +3,10 @@
 # Linear displacement computation.
 
 from __future__ import annotations
+
 import dataclasses
 from collections.abc import Callable
+
 import numpy as np
 import numpy.typing as npt
 from scipy.interpolate import griddata

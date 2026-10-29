@@ -468,6 +468,7 @@ def test_param_change_no_match_shows_uniform_material(qt_app):
     """Changing a parameter so no preset matches shows the uniform-initialized
     density field, not a cached npz result."""
     import os
+
     import numpy as np
 
     window = _make_window_no_result(qt_app)
@@ -500,6 +501,7 @@ def test_param_change_matching_preset_loads_npz(qt_app):
     displays the cached density field, not the uniform initialization."""
     import json
     import os
+
     import numpy as np
 
     window = MainWindow()
@@ -546,6 +548,7 @@ def test_param_change_while_preset_selected_keeps_npz(qt_app):
     """
     import json
     import os
+
     import numpy as np
 
     window = MainWindow()
@@ -682,6 +685,7 @@ def test_preset_npz_displayed_after_param_change(qt_app):
     """
     import json
     import os
+
     import numpy as np
 
     window = MainWindow()

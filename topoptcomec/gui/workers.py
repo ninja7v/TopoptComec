@@ -8,11 +8,14 @@ and mechanism analysis in background threads.
 """
 
 from __future__ import annotations
+
+import copy
+from abc import abstractmethod
+
 import numpy as np
 import numpy.typing as npt
-import copy
 from PySide6.QtCore import QThread, Signal
-from abc import abstractmethod
+
 from topoptcomec.core import analyzers, displacements, optimizers
 
 # Type aliases
@@ -25,12 +28,10 @@ class Worker:
     @abstractmethod
     def request_stop(self) -> None:
         """Request the worker to stop."""
-        pass
 
     @abstractmethod
     def run(self) -> None:
         """Execute the worker's main task."""
-        pass
 
 
 class OptimizerWorker(QThread, Worker):
@@ -94,7 +95,7 @@ class OptimizerWorker(QThread, Worker):
             )
 
             self.resultsReady.emit((result, u))  # Emit the tuple (xPhys, u)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
 
             error_msg: str = f"An error occurred during optimization:\n{e}\n\n{traceback.format_exc()}"
@@ -153,7 +154,7 @@ class DisplacementWorker(QThread, Worker):
                     break
 
             self.simulationFinished.emit("Displacement finished or stopped.", True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
 
             error_msg: str = f"An error occurred during displacement analysis:\n{e}\n\n{traceback.format_exc()}"
@@ -218,7 +219,7 @@ class AnalysisWorker(QThread, Worker):
                 (checkerboard, watertight, thresholded, efficient)
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             import traceback
 
             error_msg: str = (

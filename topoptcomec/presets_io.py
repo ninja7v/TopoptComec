@@ -3,6 +3,7 @@
 # Locating and seeding the presets file for both the CLI and the GUI.
 
 from __future__ import annotations
+
 import shutil
 from pathlib import Path
 

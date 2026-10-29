@@ -3,6 +3,7 @@
 # Typed problem definition: loads, supports and geometric regions.
 
 from __future__ import annotations
+
 from dataclasses import dataclass
 
 #: Axis identifiers used by :class:`Load`.

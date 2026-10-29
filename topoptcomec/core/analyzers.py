@@ -3,8 +3,10 @@
 # Analyze a mechanism.
 
 from __future__ import annotations
+
 from collections.abc import Callable
 from functools import partial
+
 import numpy as np
 import numpy.typing as npt
 
@@ -80,7 +82,7 @@ def _watertight(x: FloatArray) -> bool:
         True when exactly one connected component exists, False otherwise.
     """
     xbin = (x > 0.5).astype(int)
-    from scipy.ndimage import label, generate_binary_structure
+    from scipy.ndimage import generate_binary_structure, label
 
     # Define a structure to consider diagonal connections as touching
     structure = generate_binary_structure(rank=xbin.ndim, connectivity=xbin.ndim)

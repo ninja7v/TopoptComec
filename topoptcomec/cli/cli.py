@@ -3,6 +3,7 @@
 # CLI entry point of TopoptComec.
 
 from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -14,9 +15,9 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
+from topoptcomec import exporters
 from topoptcomec.core import analyzers, optimizers
 from topoptcomec.core.displacements import combine_load_case_displacements
-from topoptcomec import exporters
 from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import resolve_presets_file
 from topoptcomec.time_estimation import TimeEstimation
@@ -104,7 +105,7 @@ def _load_or_run_optimization(
                         combine_load_case_displacements(data["u"]),
                         None,
                     )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             if verbose:
                 print(f"[{preset_name}] Failed to load cache: {e}")
 
@@ -157,7 +158,7 @@ def _load_or_run_optimization(
         exporters.save_loss(loss_history, base_dir, preset_name)
 
         return xPhys, u, None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         import traceback
 
         traceback.print_exc()
@@ -199,7 +200,7 @@ def _run_analysis(
         analysis_results = analyzers.analyze(
             xPhys, u, params["Dimensions"], params["Forces"]
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         import traceback
 
         traceback.print_exc()
@@ -280,7 +281,7 @@ def _run_displacement(
                 exporters.save_as_png(
                     frame_data, params["Dimensions"]["nelxyz"], str(filename), colors
                 )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         import traceback
 
         traceback.print_exc()

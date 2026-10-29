@@ -3,10 +3,12 @@
 # Entry point for TopoptComec when invoked as a module or via console script.
 
 from __future__ import annotations
+
 import os
 import sys
 from collections.abc import MutableMapping
 from pathlib import Path
+
 from topoptcomec.gui.resource_path_finder import resource_path
 
 
