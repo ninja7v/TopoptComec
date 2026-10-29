@@ -17,6 +17,15 @@ import numpy.typing as npt
 from PySide6.QtCore import QThread, Signal
 
 from topoptcomec.core import analyzers, displacements, optimizers
+from topoptcomec.update import (
+    UpdateCheck,
+    UpdateError,
+    UpdatePlan,
+    UpdateResult,
+    build_plan,
+    check_for_update,
+    install_update,
+)
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -159,6 +168,59 @@ class DisplacementWorker(QThread, Worker):
 
             error_msg: str = f"An error occurred during displacement analysis:\n{e}\n\n{traceback.format_exc()}"
             self.error.emit(error_msg)
+
+
+class UpdateCheckWorker(QThread):
+    """Runs the GitHub update check off the GUI thread."""
+
+    checked = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, parent=None) -> None:
+        """Initialize the worker."""
+        super().__init__(parent)
+
+    def run(self) -> None:
+        """Check for updates and emit the check result and installation plan."""
+        try:
+            check: UpdateCheck = check_for_update()
+            self.checked.emit((check, build_plan(check)))
+        except UpdateError as error:
+            self.failed.emit(str(error))
+        except Exception as error:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
+            self.failed.emit(f"Unexpected update error: {error}")
+
+
+class UpdateInstallWorker(QThread):
+    """Downloads and installs an update off the GUI thread."""
+
+    progressChanged = Signal(int, str)
+    installed = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, check: UpdateCheck, plan: UpdatePlan, parent=None) -> None:
+        """Initialize the worker with the checked release and its plan."""
+        super().__init__(parent)
+        self.check = check
+        self.plan = plan
+
+    def run(self) -> None:
+        """Install the update and emit progress, success, or failure."""
+        try:
+            result: UpdateResult = install_update(
+                self.check, self.plan, progress=self.progressChanged.emit
+            )
+            self.installed.emit(result)
+        except UpdateError as error:
+            self.failed.emit(str(error))
+        except Exception as error:  # noqa: BLE001
+            import traceback
+
+            traceback.print_exc()
+            self.failed.emit(f"Unexpected update error: {error}")
 
 
 class AnalysisWorker(QThread, Worker):

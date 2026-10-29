@@ -23,6 +23,7 @@ Quick map of the repository.
 - `time_estimation.py`: `TimeEstimation` class, runtime estimation (shared)
 - `presets_io.py`: presets file resolution (local / per-user / packaged)
 - `presets.json`: packaged default preset definitions
+- `version.py`: single authoritative application version
 
 ### `topoptcomec/core/`
 - `grid.py`: `StructuredGrid`, canonical element/node ordering and reshapes
@@ -35,16 +36,23 @@ Quick map of the repository.
 - `analyzers.py`: result checks
 - `post_processing.py`: density/displacement field rescaling
 
+### `topoptcomec/update/`
+- `service.py`: update check and version comparison
+- `github.py`: GitHub Releases client and release metadata validation
+- `installer.py`: installation detection, verified downloads, git fast-forward updates
+- `models.py`, `errors.py`, `transport.py`: shared data types, typed errors, stdlib HTTP transport
+
 ### `topoptcomec/cli/`
 - `cli.py`: CLI execution, preset loading, parallel runs, export dispatch
 - `cli_preview.py`: terminal rendering of density fields
+- `update.py`: `topoptcomec update` command
 
 ### `topoptcomec/gui/`
 - `main_window.py`: main window and action flow
 - `parameter_manager.py`: parameter gathering, normalization, and scaling
 - `widgets.py`: GUI widgets
 - `plotting.py`: PyVista/PyVistaQt plotting and visualization
-- `workers.py`: background workers
+- `workers.py`: background workers (optimization, analysis, displacement, updates)
 - `themes.py`: stylesheets
 - `icons.py`: icon handling
 - `resource_path_finder.py`: path getter
@@ -65,6 +73,7 @@ Quick map of the repository.
 - `tests/test_widgets.py`: widget behavior
 - `tests/test_workers.py`: worker behavior
 - `tests/test_main.py`: entry-point dispatch (GUI vs CLI)
+- `tests/test_update.py`: version checks, transport, verified downloads, git installation, CLI, and GUI update flow
 - `tests/conftest.py`: shared fixtures
 - `tests/presets_test.json`: preset fixture data
 - `tests/references/`: result references (`regenerate_references.py` rebuilds them after intentional numerical changes)
@@ -75,6 +84,7 @@ Quick map of the repository.
 - `docs/CODEMAP.md`: this file
 - `docs/GLOSSARY.md`: terminology
 - `docs/EXAMPLE.md`: usage examples
+- `docs/UPDATING.md`: update mechanisms, safety, and release checklist
 - `docs/SKILL.md`: agent-oriented repo guide
 
 ## Assets and Output

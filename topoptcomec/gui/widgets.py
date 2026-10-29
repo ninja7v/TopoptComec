@@ -3,7 +3,7 @@
 # Custom PySide6 widgets for the TopoptComec UI.
 
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPixmap
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
@@ -328,11 +328,33 @@ class ColorPickerButton(QPushButton):
             self.colorChanged.emit(color)
 
 
+class ClickableLabel(QLabel):
+    """Label that emits ``clicked`` when pressed with the left mouse button."""
+
+    clicked = Signal()
+
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+        """Initialize the label with a pointing-hand cursor."""
+        super().__init__(text, parent)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def click(self) -> None:
+        """Emit ``clicked``, like a button click."""
+        self.clicked.emit()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """Emit ``clicked`` for left clicks, then use the default handling."""
+        if event.button() == Qt.LeftButton:
+            self.click()
+        super().mousePressEvent(event)
+
+
 class HeaderWidget(QWidget):
     """
     Header widget for the control panel with title and action buttons.
 
-    Includes info, help, issue buttons and theme toggle.
+    Includes update, help, issue buttons and theme toggle. The title links to
+    the project's GitHub page.
     """
 
     def __init__(self) -> None:
@@ -340,14 +362,14 @@ class HeaderWidget(QWidget):
         super().__init__()
         title_layout = QHBoxLayout(self)
         title_layout.setContentsMargins(0, 0, 0, 0)
-        # Info
-        self.info_button = QPushButton()
-        self.info_button.setIcon(icons._get("info"))
-        self.info_button.setFixedSize(24, 24)
-        self.info_button.setIconSize(QSize(25, 25))
-        self.info_button.setToolTip("Open the project's GitHub page")
-        self.info_button.setFlat(True)
-        title_layout.addWidget(self.info_button)
+        # Check for updates (replaces the former info button)
+        self.update_button = QPushButton()
+        self.update_button.setIcon(icons._get("update"))
+        self.update_button.setFixedSize(24, 24)
+        self.update_button.setIconSize(QSize(15, 15))
+        self.update_button.setToolTip("Check for updates")
+        self.update_button.setFlat(True)
+        title_layout.addWidget(self.update_button)
         # Wiki
         self.help_button = QPushButton()
         self.help_button.setIcon(icons._get("help"))
@@ -363,13 +385,16 @@ class HeaderWidget(QWidget):
         self.issue_button.setToolTip("Report an issue")
         self.issue_button.setFlat(True)
         title_layout.addWidget(self.issue_button)
-        # Title
-        title = QLabel("TopoptComec")
+        # Title (clickable: opens the project's GitHub page)
+        self.title_label = ClickableLabel("TopoptComec")
         title_font = QFont("Segoe UI", 20, QFont.Bold)
-        title.setFont(title_font)
-        title.setToolTip("Topology Optimization for Compliant Mechanisms")
-        title.setAlignment(Qt.AlignCenter)
-        title_layout.addWidget(title)
+        self.title_label.setFont(title_font)
+        self.title_label.setToolTip(
+            "Topology Optimization for Compliant Mechanisms\n"
+            "Click to open the project's GitHub page"
+        )
+        self.title_label.setAlignment(Qt.AlignCenter)
+        title_layout.addWidget(self.title_label)
         title_layout.addStretch()
         # Theme Toggle
         self.theme_button = QPushButton()

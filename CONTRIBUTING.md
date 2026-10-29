@@ -4,10 +4,9 @@ Thank you for helping improve TopoptComec!
 
 Everything happens on GitHub: https://github.com/ninja7v/topoptcomec
 
-## Maintainers
+## Maintainer
 
 - Developer: Luc Prevost — GitHub: @ninja7v
-- Tester: Claire Prevost — GitHub: @clairette22
 
 ## How to Contribute
 
