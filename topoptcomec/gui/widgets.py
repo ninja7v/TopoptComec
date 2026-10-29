@@ -684,8 +684,8 @@ class RegionsWidget(QWidget):
         # Remove widgets
         region = self.inputs.pop(row)
         # We just need to delete the container
-        region["container"].deleteLater()
         region["container"].setParent(None)
+        region["container"].deleteLater()
 
         # No need to rebuild grid!
         if emit_signal:
@@ -971,8 +971,8 @@ class ForcesWidget(QWidget):
             return
 
         force = target_list.pop(row)
-        force["container"].deleteLater()
         force["container"].setParent(None)
+        force["container"].deleteLater()
 
         if emit_signal:
             self.nbForcesChanged.emit()
@@ -1149,8 +1149,8 @@ class SupportWidget(QWidget):
 
         # Remove widgets
         support = self.inputs.pop(row)
-        support["container"].deleteLater()
         support["container"].setParent(None)
+        support["container"].deleteLater()
 
         if emit_signal:
             self.nbSupportsChanged.emit()
@@ -1337,8 +1337,8 @@ class MaterialsWidget(QWidget):
             return
 
         mat = self.inputs.pop(row)
-        mat["container"].deleteLater()
         mat["container"].setParent(None)
+        mat["container"].deleteLater()
 
         self.inputs[0]["percent"].blockSignals(True)
         self.inputs[0]["percent"].setValue(100)
