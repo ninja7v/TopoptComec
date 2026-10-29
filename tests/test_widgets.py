@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from topoptcomec.gui.widgets import (
     AnalysisWidget,
+    ClickableLabel,
     CollapsibleSection,
     ColorPickerButton,
     DimensionsWidget,
@@ -343,8 +344,8 @@ def test_header_widget_structure(qt_app: QApplication):
     widget = HeaderWidget()
 
     # Check instances
-    assert hasattr(widget, "info_button") and isinstance(
-        widget.info_button, QPushButton
+    assert hasattr(widget, "update_button") and isinstance(
+        widget.update_button, QPushButton
     )
     assert hasattr(widget, "help_button") and isinstance(
         widget.help_button, QPushButton
@@ -352,17 +353,26 @@ def test_header_widget_structure(qt_app: QApplication):
     assert hasattr(widget, "issue_button") and isinstance(
         widget.issue_button, QPushButton
     )
+    assert hasattr(widget, "title_label") and isinstance(
+        widget.title_label, ClickableLabel
+    )
     assert hasattr(widget, "theme_button") and isinstance(
         widget.theme_button, QPushButton
     )
 
-    # Test github buttons
-    widget.info_button.click()
+    # Test header buttons
+    widget.update_button.click()
     qt_app.processEvents()
     widget.help_button.click()
     qt_app.processEvents()
     widget.issue_button.click()
     qt_app.processEvents()
+
+    # Test the clickable title
+    title_clicks: list[bool] = []
+    widget.title_label.clicked.connect(lambda: title_clicks.append(True))
+    widget.title_label.click()
+    assert title_clicks == [True]
 
     # Test change theme
     icon_before = widget.theme_button.icon()

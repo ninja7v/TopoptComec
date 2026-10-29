@@ -94,7 +94,6 @@ class IconProvider:
             "window": QStyle.StandardPixmap.SP_ComputerIcon,
             "sun": QStyle.StandardPixmap.SP_TitleBarMaxButton,
             "moon": QStyle.StandardPixmap.SP_TitleBarMaxButton,
-            "info": QStyle.StandardPixmap.SP_MessageBoxInformation,
             "help": QStyle.StandardPixmap.SP_MessageBoxQuestion,
             "binarize": QStyle.StandardPixmap.SP_DialogApplyButton,
             "stop": QStyle.StandardPixmap.SP_MediaStop,
@@ -103,6 +102,7 @@ class IconProvider:
             "scale": QStyle.StandardPixmap.SP_ArrowRight,
             "bug": QStyle.StandardPixmap.SP_MessageBoxWarning,
             "search": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "update": QStyle.StandardPixmap.SP_BrowserReload,
         }
         pixmap: QStyle.StandardPixmap | None = icon_map.get(icon_name)
         if pixmap:

@@ -8,7 +8,7 @@ import os
 
 import numpy as np
 import numpy.typing as npt
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QThread, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
@@ -33,6 +33,7 @@ from topoptcomec import exporters
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import resolve_presets_file
+from topoptcomec.update import UpdateCheck, UpdatePlan, UpdateResult
 
 from .icons import icons
 from .parameter_manager import ParameterManagerMixin
@@ -52,7 +53,13 @@ from .widgets import (
     RegionsWidget,
     SupportWidget,
 )
-from .workers import AnalysisWorker, DisplacementWorker, OptimizerWorker
+from .workers import (
+    AnalysisWorker,
+    DisplacementWorker,
+    OptimizerWorker,
+    UpdateCheckWorker,
+    UpdateInstallWorker,
+)
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -77,6 +84,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.current_theme: str = "dark"
         self.loss_history: list[tuple[int, float]] = []
         self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
+        self.update_check_worker: UpdateCheckWorker | None = None
+        self.update_install_worker: UpdateInstallWorker | None = None
+        self._last_update_check: UpdateCheck | None = None
 
         self._set_theme(self.current_theme)
 
@@ -189,9 +199,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         header_widget = HeaderWidget()
 
         # Connect the signals from the widget's public buttons to MainWindow's handlers
-        header_widget.info_button.clicked.connect(self._open_github_link)
+        header_widget.title_label.clicked.connect(self._open_github_link)
         header_widget.help_button.clicked.connect(self._open_wiki_link)
         header_widget.issue_button.clicked.connect(self._open_issue_link)
+        header_widget.update_button.clicked.connect(self._check_for_updates)
         header_widget.theme_button.clicked.connect(self._toggle_theme)
 
         return header_widget
@@ -1453,9 +1464,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.header.theme_button.setToolTip("Switch to dark theme")
 
         # Update header icons
-        self.header.info_button.setIcon(icons._get("info"))
         self.header.help_button.setIcon(icons._get("help"))
         self.header.issue_button.setIcon(icons._get("bug"))
+        self.header.update_button.setIcon(icons._get("update"))
         # Update analysis icons
         self.analysis_widget.run_analysis_button.setIcon(icons._get("search"))
         self.analysis_widget.stop_analysis_button.setIcon(icons._get("stop"))
@@ -1495,6 +1506,144 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         """Opens the specified URL in the user's default web browser."""
         url = QUrl("https://github.com/ninja7v/TopoptComec/issues")
         QDesktopServices.openUrl(url)
+
+    ##########
+    # UPDATE #
+    ##########
+
+    def _check_for_updates(self) -> None:
+        """Checks GitHub in the background and reports the result simply."""
+        if (
+            self.update_check_worker is not None
+            or self.update_install_worker is not None
+        ):
+            return
+
+        self.header.update_button.setEnabled(False)
+        self.status_bar.showMessage("Checking for updates...")
+        worker = UpdateCheckWorker(self)
+        worker.checked.connect(self._on_update_checked)
+        worker.failed.connect(self._on_update_check_failed)
+        worker.finished.connect(self._on_update_check_finished)
+        self.update_check_worker = worker
+        worker.start()
+
+    def _on_update_checked(self, outcome: tuple[UpdateCheck, UpdatePlan]) -> None:
+        """Announce whether an update exists and ask before installing it."""
+        check, plan = outcome
+        self._last_update_check = check
+
+        if not check.update_available:
+            self.status_bar.showMessage("TopoptComec is up to date.", 5000)
+            QMessageBox.information(
+                self,
+                "TopoptComec Updates",
+                f"You already run the latest version (v{check.latest_version}).",
+            )
+            return
+
+        if not plan.supported:
+            self.status_bar.showMessage(
+                f"Version v{check.latest_version} is available.", 5000
+            )
+            QMessageBox.information(
+                self,
+                "TopoptComec Updates",
+                f"Version v{check.latest_version} is available, but it must be "
+                f"installed manually.\n\n{plan.instructions}",
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "TopoptComec Updates",
+            f"Would you like to update from your (v{check.installed_version}) "
+            f"version to the latest version (v{check.latest_version})?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            self.status_bar.showMessage("Update cancelled.", 5000)
+            return
+        self._install_update(check, plan)
+
+    def _install_update(self, check: UpdateCheck, plan: UpdatePlan) -> None:
+        """Installs the confirmed update in a background thread."""
+        if self.update_install_worker is not None:
+            return
+
+        self.header.update_button.setEnabled(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        self.status_bar.showMessage("Updating TopoptComec...")
+        worker = UpdateInstallWorker(check, plan, self)
+        worker.progressChanged.connect(self._on_update_progress)
+        worker.installed.connect(self._on_update_installed)
+        worker.failed.connect(self._on_update_install_failed)
+        worker.finished.connect(self._on_update_install_finished)
+        self.update_install_worker = worker
+        worker.start()
+
+    def _on_update_progress(self, percent: int, message: str) -> None:
+        """Shows update progress in the status bar and progress bar."""
+        self.progress_bar.setValue(max(0, min(100, percent)))
+        self.status_bar.showMessage(message)
+
+    def _on_update_installed(self, result: UpdateResult) -> None:
+        """Reports a successful update and the required restart."""
+        self.progress_bar.setVisible(False)
+        message = result.message
+        if result.restart_required and "restart" not in message.lower():
+            message += " Restart TopoptComec to use the new version."
+        self.status_bar.showMessage(message, 10000)
+        QMessageBox.information(self, "TopoptComec Updates", message)
+
+    def _on_update_install_failed(self, message: str) -> None:
+        """Reports a failed update with recovery instructions."""
+        self.progress_bar.setVisible(False)
+        self.status_bar.showMessage("Update failed.", 5000)
+        page = (
+            self._last_update_check.release.page_url
+            if self._last_update_check is not None
+            else "https://github.com/ninja7v/TopoptComec/releases"
+        )
+        QMessageBox.critical(
+            self,
+            "TopoptComec Updates",
+            f"{message}\n\nYour existing installation was left unchanged. "
+            f"You can retry, or install the new version manually from:\n{page}",
+        )
+
+    def _on_update_check_failed(self, message: str) -> None:
+        """Reports a failed update check without blocking the application."""
+        self.status_bar.showMessage("Could not check for updates.", 5000)
+        QMessageBox.warning(
+            self,
+            "TopoptComec Updates",
+            f"Could not check for updates: {message}",
+        )
+
+    def _on_update_check_finished(self) -> None:
+        """Releases the check worker and re-enables the update button."""
+        worker = self.sender()
+        if isinstance(worker, QThread):
+            worker.wait()
+            worker.deleteLater()
+        if self.update_check_worker is worker:
+            self.update_check_worker = None
+        if self.update_install_worker is None:
+            self.header.update_button.setEnabled(True)
+
+    def _on_update_install_finished(self) -> None:
+        """Releases the install worker and re-enables the update button."""
+        worker = self.sender()
+        if isinstance(worker, QThread):
+            worker.wait()
+            worker.deleteLater()
+        if self.update_install_worker is worker:
+            self.update_install_worker = None
+        self.header.update_button.setEnabled(True)
 
     def update_mat_init_type_state(self) -> None:
         """Enable or disable the 'From current result' option in the materials initialization combobox."""
@@ -1548,6 +1697,18 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Close the PyVista plotter when the app is closed"""
+        if any(
+            worker is not None and worker.isRunning()
+            for worker in (self.update_check_worker, self.update_install_worker)
+        ):
+            QMessageBox.warning(
+                self,
+                "TopoptComec Updates",
+                "An update operation is in progress. "
+                "Please wait for it to finish before closing.",
+            )
+            event.ignore()
+            return
         # Needed for the tests
         if self.plotter is not None:
             self.plotter.close()

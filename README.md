@@ -40,6 +40,17 @@ uv run topoptcomec -p ForceInverter_2Sup_2D --preview
 ### 3. Create
 Tweak the parameters or choose a preset and hit "Create"!
 
+### Update
+Check for a new release from the terminal:
+```bash
+uv run topoptcomec update --check
+uv run topoptcomec update
+```
+or click the update button in the GUI header. Git checkouts update
+automatically when they have no uncommitted changes. See
+[docs/UPDATING.md](docs/UPDATING.md) for supported installation methods,
+exit codes, and manual update steps.
+
 > **Units:** TopoptComec is unit-agnostic — one grid element = one length unit, and `E`/forces are whatever consistent unit system you choose. See `docs/GLOSSARY.md` (Units and Conventions) for details, including the artificial-spring convention at load points.
 
 > **Presets:** the CLI and GUI look for `presets.json` in the current directory first, then `~/.topoptcomec/presets.json`, then fall back to the packaged examples (CLI: override with `--presets`).

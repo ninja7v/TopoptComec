@@ -31,7 +31,12 @@ def _configure_qt_platform(
 
 def main() -> None:
     """Initializes and runs the Qt application."""
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 1 and sys.argv[1] == "update":
+        # Update command (does not start Qt)
+        from topoptcomec.cli.update import run_update_command
+
+        sys.exit(run_update_command(sys.argv[2:]))
+    elif len(sys.argv) > 1:
         # CLI mode
         from topoptcomec.cli.cli import run_cli
 

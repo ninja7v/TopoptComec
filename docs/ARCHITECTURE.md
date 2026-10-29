@@ -12,13 +12,15 @@ TopoptComec has two front doors built on the same core engine:
 - `topoptcomec/__main__.py`: chooses GUI when no arguments are passed, otherwise runs the CLI
 - `main.py`: convenience wrapper, delegates to `topoptcomec/__main__:main`
 - `topoptcomec/cli/cli.py`: loads presets, runs optimization, exports results
-- `topoptcomec/gui/main_window.py`: owns the main GUI workflow
+- `topoptcomec/cli/update.py`: `topoptcomec update` command (uses `topoptcomec.update`)
+- `topoptcomec/gui/main_window.py`: owns the main GUI workflow, including the update button flow
 
 ### Shared Logic
 - `topoptcomec/parameter_check.py`: `ParameterCheck` class, validates parameter dictionaries (used by GUI and CLI)
 - `topoptcomec/time_estimation.py`: `TimeEstimation` class, estimates runtime for optimization (extensible to displacement and analysis)
 - `topoptcomec/exporters.py`: shared export logic used by GUI and CLI
 - `topoptcomec/presets_io.py`: locates the presets file (local, per-user, or packaged default)
+- `topoptcomec/update/`: Qt-free update service (GitHub releases, version checks, verified downloads, safe git updates)
 
 ### Core Engine
 

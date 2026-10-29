@@ -21,6 +21,7 @@ from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import resolve_presets_file
 from topoptcomec.time_estimation import TimeEstimation
+from topoptcomec.version import __version__
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -479,7 +480,17 @@ def _export(
 def _build_arg_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="TopoptComec CLI - Topology Optimization for Compliant Mechanisms"
+        description="TopoptComec CLI - Topology Optimization for Compliant Mechanisms",
+        epilog=(
+            "Run 'topoptcomec' without arguments to start the GUI, and "
+            "'topoptcomec update' to check for a new release."
+        ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"TopoptComec {__version__}",
+        help="Show the installed TopoptComec version and exit",
     )
     parser.add_argument(
         "-p",

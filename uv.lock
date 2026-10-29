@@ -1113,12 +1113,12 @@ wheels = [
 
 [[package]]
 name = "topoptcomec"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "lib3mf" },
     { name = "numpy" },
     { name = "numpy-stl" },
+    { name = "packaging" },
     { name = "pymcubes" },
     { name = "pyside6" },
     { name = "pyvista" },
@@ -1132,6 +1132,7 @@ requires-dist = [
     { name = "lib3mf", specifier = ">=2.5.0" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "numpy-stl", specifier = ">=4.1.3" },
+    { name = "packaging", specifier = ">=23.0" },
     { name = "pymcubes", specifier = ">=0.1.6" },
     { name = "pyside6", specifier = ">=6.12.0" },
     { name = "pyvista", specifier = ">=0.49.1" },
