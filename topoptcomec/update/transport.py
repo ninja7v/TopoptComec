@@ -47,7 +47,9 @@ class UrllibTransport:
                 body: bytes = response.read(MAX_JSON_BYTES)
                 return int(response.status), dict(response.headers), body
         except urllib.error.HTTPError as error:
-            raise _http_error(error) from error
+            typed = _http_error(error)
+            error.close()
+            raise typed from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise NetworkError(f"Could not reach {url}: {error}") from error
         except http.client.HTTPException as error:
@@ -61,7 +63,9 @@ class UrllibTransport:
         try:
             return urllib.request.urlopen(request, timeout=timeout)
         except urllib.error.HTTPError as error:
-            raise _http_error(error) from error
+            typed = _http_error(error)
+            error.close()
+            raise typed from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise NetworkError(f"Could not download {url}: {error}") from error
 
