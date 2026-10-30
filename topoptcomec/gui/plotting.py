@@ -8,6 +8,7 @@ import numpy as np
 import pyvista as pv
 from PySide6.QtGui import QColor
 
+from topoptcomec.core import preset_format
 from topoptcomec.core.grid import StructuredGrid
 
 # pv.ImageData replaced pv.UniformGrid in PyVista 0.44
@@ -333,6 +334,7 @@ class PlottingMixin:
             Whether this is a 3D problem.
         """
         pr: dict = self.last_params["Regions"]
+        grid = StructuredGrid(nelx, nely, max(0, nelz))
         for i, shape in enumerate(pr["rshape"]):
             if shape == "-":
                 continue
@@ -341,57 +343,38 @@ class PlottingMixin:
             x_max: int = min(nelx, int(pr["rx"][i] + pr["rradius"][i]))
             y_min: int = max(0, int(pr["ry"][i] - pr["rradius"][i]))
             y_max: int = min(nely, int(pr["ry"][i] + pr["rradius"][i]))
+            z_min: int = 0
+            z_max: int = 1
             if is_3d:
-                z_min: int = max(0, int(pr["rz"][i] - pr["rradius"][i]))
-                z_max: int = min(nelz, int(pr["rz"][i] + pr["rradius"][i]))
-
-            idx_x: np.ndarray = np.arange(x_min, x_max)
-            idx_y: np.ndarray = np.arange(y_min, y_max)
-            if is_3d:
-                idx_z: np.ndarray = np.arange(z_min, z_max)
+                z_min = max(0, int(pr["rz"][i] - pr["rradius"][i]))
+                z_max = min(nelz, int(pr["rz"][i] + pr["rradius"][i]))
 
             indices: np.ndarray | None = None
-            shape: str = pr["rshape"][i]
-
-            # Square/Cube
-            if shape == "□" and len(idx_x) > 0 and len(idx_y) > 0:
-                if is_3d and len(idx_z) > 0:
-                    xx, yy, zz = np.meshgrid(idx_x, idx_y, idx_z, indexing="ij")
-                    indices = zz + yy * nelz + xx * nely * nelz
-                elif not is_3d:
-                    xx, yy = np.meshgrid(idx_x, idx_y, indexing="ij")
-                    indices = yy + xx * nely
-
-            # Circle/Sphere
-            elif shape == "◯" and len(idx_x) > 0 and len(idx_y) > 0:
-                if is_3d and len(idx_z) > 0:
-                    i_grid, j_grid, k_grid = np.meshgrid(
-                        idx_x, idx_y, idx_z, indexing="ij"
+            if shape in ("□", "◯") and x_max > x_min and y_max > y_min:
+                if is_3d and z_max <= z_min:
+                    continue
+                zz, xx, yy = np.meshgrid(
+                    np.arange(z_min, z_max),
+                    np.arange(x_min, x_max),
+                    np.arange(y_min, y_max),
+                    indexing="ij",
+                )
+                # Element ordering must come from StructuredGrid only.
+                if shape == "◯":
+                    dist_sq = (
+                        (xx - pr["rx"][i]) ** 2
+                        + (yy - pr["ry"][i]) ** 2
+                        + ((zz - pr["rz"][i]) ** 2 if is_3d else 0)
                     )
-                    mask: np.ndarray = (i_grid - pr["rx"][i]) ** 2 + (
-                        j_grid - pr["ry"][i]
-                    ) ** 2 + (k_grid - pr["rz"][i]) ** 2 <= pr["rradius"][i] ** 2
-                    ii: np.ndarray = i_grid[mask]
-                    jj: np.ndarray = j_grid[mask]
-                    kk: np.ndarray = k_grid[mask]
-                    indices: np.ndarray = kk + jj * nelz + ii * nely * nelz
-                elif not is_3d:
-                    i_grid, j_grid = np.meshgrid(idx_x, idx_y, indexing="ij")
-                    mask = (i_grid - pr["rx"][i]) ** 2 + (
-                        j_grid - pr["ry"][i]
-                    ) ** 2 <= pr["rradius"][i] ** 2
-                    ii = i_grid[mask]
-                    jj = j_grid[mask]
-                    indices = jj + ii * nely
+                    inside = dist_sq <= pr["rradius"][i] ** 2
+                    indices = grid.element_index(xx[inside], yy[inside], zz[inside])
+                else:
+                    indices = grid.element_index(xx, yy, zz)
 
             if indices is not None:
-                if pr["rstate"][i] == "Material 1":
-                    mat = 0
-                elif pr["rstate"][i] == "Material 2":
-                    mat = 1
-                else:  # "Void"
-                    mat = -1
-                flat_idx: np.ndarray = indices.flatten()
+                material = preset_format.region_material_index(pr["rstate"][i])
+                mat = -1 if material is None else material
+                flat_idx: np.ndarray = np.asarray(indices).flatten()
                 if self.xPhys.ndim == 1:
                     self.xPhys[flat_idx] = 1.0 if mat == 0 else 1e-6
                 else:

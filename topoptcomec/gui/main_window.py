@@ -1233,9 +1233,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             rw["rshape"].blockSignals(True)
             rw["rstate"].blockSignals(True)
             rw["rshape"].setCurrentText(pr["rshape"][i])
-            rstate = rw["rstate"]
-            if rstate == "Material 2" and len(self._materials) < 2:
-                rstate = "Material 1"
+            rstate = pr["rstate"][i] if i < len(pr.get("rstate", [])) else "Void"
+            if rstate != "Void":
+                # Drop a material entry that no longer exists in the preset.
+                try:
+                    index = int(str(rstate).removeprefix("Material ")) - 1
+                except ValueError:
+                    index = -1
+                if index < 0 or index >= len(self.materials_widget.inputs):
+                    rstate = "Void"
             idx = rw["rstate"].findData(rstate)
             if idx == -1:
                 idx = rw["rstate"].findData("Void")
@@ -1243,7 +1249,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             rw["rradius"].setValue(pr["rradius"][i])
             rw["rx"].setValue(pr["rx"][i])
             rw["ry"].setValue(pr["ry"][i])
-            rw["rz"].setValue(pr["rz"][i])
+            rz = pr.get("rz", [0] * num_regions_in_preset)
+            rw["rz"].setValue(rz[i] if i < len(rz) else 0)
         self._connect_region_signals()
 
     def _apply_forces_param(self, params: dict) -> None:
@@ -1265,11 +1272,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.forces_widget.add_input_force(emit_signal=False)
             current_input_num += 1
 
+        fiz = pf.get("fiz", [0] * nb_input_forces)
         for i in range(nb_input_forces):
             fw = self.forces_widget.input_forces[i]
             fw["fix"].setValue(pf["fix"][i])
             fw["fiy"].setValue(pf["fiy"][i])
-            fw["fiz"].setValue(pf["fiz"][i])
+            fw["fiz"].setValue(fiz[i] if i < len(fiz) else 0)
             fw["fidir"].setCurrentText(pf["fidir"][i])
             fw["finorm"].setValue(pf["finorm"][i])
 
@@ -1288,11 +1296,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.forces_widget.add_output_force(emit_signal=False)
             current_output_num += 1
 
+        foz = pf.get("foz", [0] * nb_output_forces)
         for i in range(nb_output_forces):
             fw = self.forces_widget.output_forces[i]
             fw["fox"].setValue(pf["fox"][i])
             fw["foy"].setValue(pf["foy"][i])
-            fw["foz"].setValue(pf["foz"][i])
+            fw["foz"].setValue(foz[i] if i < len(foz) else 0)
             fw["fodir"].setCurrentText(pf["fodir"][i])
             fw["fonorm"].setValue(pf["fonorm"][i])
 
@@ -1314,13 +1323,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         while current_num < num_supports_in_preset:
             self.supports_widget.add_support(None, "XYZ", 0, False)
             current_num += 1
+        sz = ps.get("sz", [0] * num_supports_in_preset)
+        sr = ps.get("sr", [0] * num_supports_in_preset)
         for i in range(num_supports_in_preset):
             sw = self.supports_widget.inputs[i]
             sw["sx"].setValue(ps["sx"][i])
             sw["sy"].setValue(ps["sy"][i])
-            sw["sz"].setValue(ps["sz"][i])
+            sw["sz"].setValue(sz[i] if i < len(sz) else 0)
             sw["sdim"].setCurrentText(ps["sdim"][i])
-            sw["sr"].setValue(ps["sr"][i])
+            sw["sr"].setValue(sr[i] if i < len(sr) else 0)
         self._connect_support_signals()
 
     def _apply_materials_param(self, params: dict) -> None:

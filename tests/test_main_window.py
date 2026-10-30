@@ -742,3 +742,71 @@ def test_optimizer_change_deselects_preset(qt_app):
             f"Optimizer change #{i} did not deselect the preset"
         )
     window.close()
+
+
+def test_region_material_state_survives_a_preset_round_trip(qt_app):
+    """Loading a preset must keep the material assigned to each region.
+
+    Regression: the state used to be read from the combo widget instead of the
+    preset, so every "Material N" region silently became "Void".
+    """
+    import copy
+
+    window = MainWindow()
+    params = copy.deepcopy(p_base_2d)
+    params["Regions"] = {
+        "rshape": ["\u25a1", "\u25ef"],
+        "rstate": ["Material 1", "Void"],
+        "rradius": [5, 4],
+        "rx": [30, 40],
+        "ry": [20, 20],
+        "rz": [0, 0],
+    }
+    window._apply_parameters(params)
+    gathered = window._gather_parameters()
+    assert gathered["Regions"]["rstate"] == ["Material 1", "Void"]
+    window.close()
+
+
+def test_3d_region_preview_matches_the_solver(qt_app):
+    """The GUI region preview must mark the same elements as the FEM core."""
+    import copy
+
+    from topoptcomec.core import preset_format
+    from topoptcomec.core.fem import FEM
+    from topoptcomec.core.grid import StructuredGrid
+
+    window = MainWindow()
+    params = copy.deepcopy(p_base_2d)
+    params["Dimensions"] = {"nelxyz": [12, 10, 8], "volfrac": 0.3}
+    params["Forces"]["fix"] = [6, 6]
+    params["Forces"]["fiy"] = [5, 5]
+    params["Forces"]["fox"] = [6]
+    params["Forces"]["foy"] = [9]
+    params["Supports"]["sx"] = [0, 12]
+    params["Supports"]["sy"] = [5, 5]
+    params["Supports"]["sz"] = [0, 0]
+    for state, shape in (("Material 1", "\u25a1"), ("Void", "\u25ef")):
+        params["Regions"] = {
+            "rshape": [shape],
+            "rstate": [state],
+            "rradius": [3],
+            "rx": [4],
+            "ry": [7],
+            "rz": [5],
+        }
+        window._apply_parameters(params)
+        window.last_params = window._gather_parameters()
+        nelx, nely, nelz = window.last_params["Dimensions"]["nelxyz"]
+        window.xPhys = np.full(nelx * nely * nelz, 0.5)
+        window._apply_regions(nelx, nely, nelz, True)
+
+        fem = FEM(StructuredGrid(nelx, nely, nelz))
+        expected = fem.apply_regions(
+            np.full(fem.nel, 0.5),
+            preset_format.parse_regions(window.last_params["Regions"]),
+        )
+        np.testing.assert_array_equal(window.xPhys, expected)
+    window.close()
+
+
