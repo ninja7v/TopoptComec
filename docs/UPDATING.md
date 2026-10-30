@@ -90,7 +90,7 @@ For a source installation:
 
 ```bash
 git fetch --tags origin
-git checkout v3.0
+git checkout v4.0
 uv sync
 ```
 
