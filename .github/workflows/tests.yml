@@ -30,6 +30,41 @@ jobs:
       - name: Lizard (complexity & length)
         run: lizard -L 150 -C 30 -w topoptcomec tests
 
+  platforms:
+    runs-on: ${{ matrix.os }}
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install pytest
+
+      - name: Run core and exporter tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pytest -W error -q tests/test_numerics.py tests/test_fem.py tests/test_optimizers.py tests/test_exporters.py tests/test_parameter_validation.py
+
+      - name: CLI smoke test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          topoptcomec -p Bridge_2D -f png -o results
+
   tests:
     runs-on: ubuntu-latest
     needs: quality
