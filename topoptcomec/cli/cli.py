@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+import copy
 import json
 import os
 import sys
@@ -15,34 +15,115 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from topoptcomec import exporters
+from topoptcomec import exporters, result_cache
 from topoptcomec.core import analyzers, optimizers
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
-from topoptcomec.presets_io import resolve_presets_file
+from topoptcomec.presets_io import load_presets
 from topoptcomec.time_estimation import TimeEstimation
 from topoptcomec.version import __version__
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
 
+#: Convergence threshold on the design-variable change (mirrors the optimizer).
+CONVERGENCE_TOLERANCE = 0.01
 
-def _params_hash(params: dict) -> str:
+# Backwards-compatible alias (the hash lives in :mod:`topoptcomec.result_cache`).
+_params_hash = result_cache.params_hash
+
+
+def _resolve_starting_field(
+    preset_name: str,
+    params: dict,
+    base_dir: str,
+    verbose: bool,
+    restart_from: str | None,
+) -> tuple[
+    FloatArray | None,
+    tuple[FloatArray, FloatArray] | None,
+    str | None,
+]:
     """
-    Stable hash of a preset dictionary, used to invalidate cached results.
+    Decide whether to reuse a cached result or restart from a density field.
 
     Parameters
     ----------
+    preset_name : str
+        Preset identifier used to name cache files.
     params : dict
         Full preset configuration dictionary.
+    base_dir : str
+        Base output directory holding the cache.
+    verbose : bool
+        Whether to print why a cache was ignored.
+    restart_from : str | None
+        Optional npz file used when the preset initializes from a result.
 
     Returns
     -------
-    str
-        Hex digest identifying this exact parameter set.
+    tuple
+        ``(last_xPhys, cached_result, error)``. ``cached_result`` is
+        ``(xPhys, u)`` when the cache can be reused as-is; ``last_xPhys`` is
+        the restart field for ``init_type == 3``.
     """
-    payload = json.dumps(params, sort_keys=True, default=str).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+    cache_file: Path = result_cache.cache_path(base_dir, preset_name)
+    nelxyz: list[int] = params["Dimensions"]["nelxyz"]
+    init_type: int = int(params.get("Materials", {}).get("init_type", 0))
+    cached = result_cache.load_density_cache(cache_file)
+
+    if init_type == 3:
+        # Restart: use an explicit file when given, otherwise continue from
+        # the previous result of this preset (whatever its hash).
+        source = Path(restart_from) if restart_from else cache_file
+        data = result_cache.load_density_cache(source)
+        if data is None:
+            if restart_from:
+                return None, None, f"Restart file not found or invalid: {source}"
+            return (
+                None,
+                None,
+                (
+                    f"No previous result for {preset_name!r} to restart from. "
+                    "Run the preset once, or pass --restart-from."
+                ),
+            )
+        if not result_cache.cache_matches_grid(data, nelxyz):
+            return (
+                None,
+                None,
+                f"The restart field in {source} does not match the grid {nelxyz}.",
+            )
+        return np.asarray(data["xPhys"], dtype=np.float64), None, None
+
+    if cached is None:
+        return None, None, None
+
+    cached_hash = str(cached["params_hash"]) if "params_hash" in cached else None
+    if cached_hash != _params_hash(params):
+        if verbose:
+            print(
+                f"[{preset_name}] Cached result was produced with different "
+                "parameters; re-running optimization."
+            )
+    elif not result_cache.cache_matches_grid(cached, nelxyz):
+        if verbose:
+            print(
+                f"[{preset_name}] Cached result does not match the grid; "
+                "re-running optimization."
+            )
+    else:
+        if verbose:
+            print(f"[{preset_name}] Loading cached density field...")
+        return (
+            None,
+            (
+                np.asarray(cached["xPhys"], dtype=np.float64),
+                combine_load_case_displacements(cached["u"]),
+            ),
+            None,
+        )
+    return None, None, None
 
 
 def _load_or_run_optimization(
@@ -52,13 +133,14 @@ def _load_or_run_optimization(
     base_dir: str,
     save_frames: bool,
     verbose: bool,
+    restart_from: str | None = None,
 ) -> tuple[FloatArray | None, FloatArray | None, str | None]:
     """
     Load a cached density field or run the optimizer to generate a new one.
 
-    The cache stores a hash of the preset parameters; if the preset changed
-    since the cache was written, the cache is ignored and the optimization
-    reruns (C8: no stale results).
+    The cache stores a hash of the preset parameters and the grid it was
+    produced for; if either does not match, the cache is ignored and the
+    optimization reruns (C8: no stale results).
 
     Parameters
     ----------
@@ -74,53 +156,43 @@ def _load_or_run_optimization(
         Whether to save intermediate optimization frames.
     verbose : bool
         Whether to print progress messages.
+    restart_from : str | None
+        Optional npz file used as the starting density field when the preset
+        initializes from the current result (``init_type == 3``).
 
     Returns
     -------
     tuple[FloatArray | None, FloatArray | None, str | None]
         xPhys, displacement field u, and an error message if one occurred.
     """
-    cache_file: Path = Path(base_dir) / preset_name / f"{preset_name}_density_field.npz"
-    current_hash: str = _params_hash(params)
-
-    last_xPhys: FloatArray | None = None
-    if cache_file.exists():
-        try:
-            data: np.lib.npyio.NpzFile = np.load(cache_file)
-            cached_hash = str(data["params_hash"]) if "params_hash" in data else None
-            if cached_hash != current_hash:
-                if verbose:
-                    print(
-                        f"[{preset_name}] Cached result was produced with different "
-                        "parameters; re-running optimization."
-                    )
-            else:
-                last_xPhys = data["xPhys"]
-                # Reuse cached result directly unless the user explicitly
-                # requested initialization from the last result (init_type == 3).
-                if params.get("Materials", {}).get("init_type") != 3:
-                    if verbose:
-                        print(f"[{preset_name}] Loading cached density field...")
-                    return (
-                        data["xPhys"],
-                        combine_load_case_displacements(data["u"]),
-                        None,
-                    )
-        except Exception as e:  # noqa: BLE001
-            if verbose:
-                print(f"[{preset_name}] Failed to load cache: {e}")
+    last_xPhys, cached_result, error = _resolve_starting_field(
+        preset_name, params, base_dir, verbose, restart_from
+    )
+    if error:
+        return None, None, error
+    if cached_result is not None:
+        return cached_result[0], cached_result[1], None
 
     error: str | None = ParameterCheck(last_xPhys).validate(params)
     if error:
         return None, None, error
 
+    cache_file: Path = result_cache.cache_path(base_dir, preset_name)
+    nelxyz: list[int] = params["Dimensions"]["nelxyz"]
     loss_history: list[tuple[int, float]] = []
+    last_change: list[float] = [1.0]
 
     def progress_callback(
         iteration: int, objective: float, change: float, xPhys_frame: FloatArray
     ) -> bool:
+        last_change[0] = change
         if iteration > 0:
-            loss_history.append((iteration, objective))
+            # The final frame reuses the last iteration index to report the
+            # objective of the final design; replace, do not duplicate.
+            if loss_history and loss_history[-1][0] == iteration:
+                loss_history[-1] = (iteration, objective)
+            else:
+                loss_history.append((iteration, objective))
         if save_frames:
             folder: Path = Path(base_dir) / preset_name / f"{preset_name}_creation"
             folder.mkdir(parents=True, exist_ok=True)
@@ -132,6 +204,7 @@ def _load_or_run_optimization(
         return False
 
     optimizer_params["progress_callback"] = progress_callback
+    optimizer_params["current_xPhys"] = last_xPhys
 
     is_multimaterial: bool = (
         len(optimizer_params.get("Materials", {}).get("E", [1.0])) > 1
@@ -151,8 +224,14 @@ def _load_or_run_optimization(
                 "No valid structure was found. Please adjust your parameters and try again.",
             )
 
-        cache_file.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(cache_file, xPhys=xPhys, u=u, params_hash=current_hash)
+        result_cache.save_density_cache(
+            cache_file,
+            xPhys,
+            u,
+            params,
+            nelxyz,
+            converged=last_change[0] <= CONVERGENCE_TOLERANCE,
+        )
         if verbose:
             print(f"[{preset_name}] Cached density field.")
 
@@ -298,6 +377,7 @@ def _export_results(
     format: str,
     verbose: bool,
     output_dir: str = "results",
+    colors: list[str] | None = None,
 ) -> None:
     """
     Export the optimized density field to the requested output formats.
@@ -316,6 +396,8 @@ def _export_results(
         Whether to print export progress messages.
     output_dir : str
         Directory where exported files are written.
+    colors : list[str] | None
+        Per-material colors used by the PNG and 3MF exporters.
     """
     results_dir: Path = Path(output_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -327,7 +409,7 @@ def _export_results(
         if verbose:
             print(f"[{preset_name}] Saving {f.upper()} to {filename}...")
 
-        success, error_msg = _export(xPhys, nelxyz, filename, f)
+        success, error_msg = _export(xPhys, nelxyz, filename, f, colors)
 
         if not success:
             print(f"[{preset_name}] Error saving {f}: {error_msg}")
@@ -346,6 +428,7 @@ def _run_single_preset(
     preview: bool = False,
     verbose: bool = False,
     output_dir: str = "results",
+    restart_from: str | None = None,
 ) -> tuple[str, str | None]:
     """
     Execute a single preset from the CLI workflow.
@@ -373,6 +456,9 @@ def _run_single_preset(
         Whether to save intermediate frames during optimization and displacement.
     output_dir : str, optional
         Directory for caches, frames and exported files.
+    restart_from : str, optional
+        Density-field npz used as the starting point (implies initialization
+        from a result, ``init_type == 3``).
 
     Returns
     -------
@@ -380,6 +466,11 @@ def _run_single_preset(
         The preset name and an error message if execution failed.
     """
     base_dir = output_dir
+
+    if restart_from is not None:
+        # An explicit restart file implies initialization from a result.
+        params = copy.deepcopy(params)
+        params.setdefault("Materials", {})["init_type"] = 3
 
     optimizer_params: dict = {k: v for k, v in params.items() if k != "Displacement"}
 
@@ -400,7 +491,13 @@ def _run_single_preset(
         _, label = TimeEstimation(params).optimization_indicators()
         print(f"[{preset_name}] Estimated optimization time: {label}")
     xPhys, u, error = _load_or_run_optimization(
-        preset_name, params, optimizer_params, base_dir, save_frames, verbose
+        preset_name,
+        params,
+        optimizer_params,
+        base_dir,
+        save_frames,
+        verbose,
+        restart_from=restart_from,
     )
     if error:
         return preset_name, error
@@ -437,6 +534,7 @@ def _run_single_preset(
         format,
         verbose,
         output_dir=output_dir,
+        colors=params.get("Materials", {}).get("color", None),
     )
 
     if not verbose:
@@ -445,7 +543,11 @@ def _run_single_preset(
 
 
 def _export(
-    xPhys: FloatArray, nelxyz: list[int], filename: str, format: str
+    xPhys: FloatArray,
+    nelxyz: list[int],
+    filename: str,
+    format: str,
+    colors: list[str] | None = None,
 ) -> tuple[bool, str | None]:
     """
     Dispatch export to the correct exporter function.
@@ -460,6 +562,8 @@ def _export(
         Output file path.
     format : str
         Export format ("png", "vti", "stl", or "3mf").
+    colors : list[str] | None
+        Per-material colors for the PNG and 3MF exporters.
 
     Returns
     -------
@@ -467,13 +571,13 @@ def _export(
         True and None when export succeeds, otherwise False and an error message.
     """
     if format == "png":
-        return exporters.save_as_png(xPhys, nelxyz, filename)
+        return exporters.save_as_png(xPhys, nelxyz, filename, colors)
     elif format == "vti":
         return exporters.save_as_vti(xPhys, nelxyz, filename)
     elif format == "stl":
         return exporters.save_as_stl(xPhys, nelxyz, filename)
     elif format == "3mf":
-        return exporters.save_as_3mf(xPhys, nelxyz, filename)
+        return exporters.save_as_3mf(xPhys, nelxyz, filename, colors)
     return False, f"Unknown format: {format}"
 
 
@@ -547,8 +651,18 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Path to the presets JSON file. Defaults to ./presets.json, then "
-            "~/.topoptcomec/presets.json, then the packaged example presets."
+            "Presets JSON file to use exclusively. By default the built-in "
+            "presets, ~/.topoptcomec/presets.json and ./presets.json are merged."
+        ),
+    )
+    parser.add_argument(
+        "--restart-from",
+        type=str,
+        default=None,
+        help=(
+            "Density-field .npz to restart from (implies initialization from "
+            "the current result). Defaults to the previous result of the same "
+            "preset."
         ),
     )
     parser.add_argument(
@@ -571,27 +685,24 @@ def run_cli() -> None:
     """
     args: argparse.Namespace = _build_arg_parser().parse_args()
 
-    # Load presets
-    presets_path: Path = resolve_presets_file(args.presets)
-    if not presets_path.exists():
+    # Load presets (explicit file, or the merged built-in/user/local layers)
+    try:
+        presets: dict[str, dict] = load_presets(args.presets)
+    except FileNotFoundError as e:
         print(
-            f"Error: presets file not found at {presets_path.absolute()}\n"
+            f"Error: presets file not found at {Path(str(e)).absolute()}\n"
             "Use --presets to point to a presets JSON file."
         )
         sys.exit(1)
-
-    try:
-        with open(presets_path, "r") as f:
-            presets: dict[str, dict] = json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"Error reading {presets_path}: {e}")
+    except (json.JSONDecodeError, TypeError) as e:
+        print(f"Error reading presets: {e}")
         sys.exit(1)
 
     # Parse and validate preset names
     preset_names: list[str] = [name.strip() for name in args.preset.split(",")]
     for name in preset_names:
         if name not in presets:
-            print(f"Error: Preset '{name}' not found in presets.json")
+            print(f"Error: Preset '{name}' not found in the presets")
             print("Available presets:", ", ".join(presets.keys()))
             sys.exit(1)
 
@@ -608,11 +719,15 @@ def run_cli() -> None:
             preview=args.preview,
             verbose=args.verbose,
             output_dir=args.output,
+            restart_from=args.restart_from,
         )
         if error:
             print(error)
             sys.exit(1)
     else:
+        if args.restart_from:
+            print("Error: --restart-from only supports a single preset.")
+            sys.exit(1)
         max_workers: int = min(len(preset_names), os.cpu_count() or 1)
         print(
             f"Running {len(preset_names)} presets in parallel ({max_workers} workers)"

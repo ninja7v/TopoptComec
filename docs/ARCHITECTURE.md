@@ -70,14 +70,17 @@ The GUI layer lives in `topoptcomec/gui/`.
 
 ### CLI Flow
 
-1. The CLI resolves the presets file (`--presets`, else `./presets.json`,
-   else `~/.topoptcomec/presets.json`, else the packaged defaults).
+1. The CLI loads the presets: `--presets FILE` only, otherwise the built-in
+   presets merged with `~/.topoptcomec/presets.json` and `./presets.json`
+   (later wins, see `presets_io.py`).
 2. `parameter_check.py` validates the parameters.
 3. It runs the optimizer directly, caching results per preset. The cache
-   stores a hash of the parameters and is invalidated automatically when the
-   preset changes.
-4. It optionally thresholds the result.
-5. It exports files into the output directory (`-o`, default `results/`).
+   stores a hash of the parameters plus the grid dimensions and is invalidated
+   automatically when either changes (`result_cache.py`, shared with the GUI).
+4. `--restart-from` (or the previous result of the same preset) is used when
+   the preset initializes from the current result.
+5. It optionally thresholds the result.
+6. It exports files into the output directory (`-o`, default `results/`).
 
 ## Key Design Constraints
 
