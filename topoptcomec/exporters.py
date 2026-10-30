@@ -9,7 +9,6 @@ import ctypes
 import warnings
 from pathlib import Path
 
-import mcubes
 import numpy as np
 import numpy.typing as npt
 import pyvista as pv
@@ -19,9 +18,12 @@ from vtk.util.numpy_support import get_vtk_array_type, numpy_to_vtk
 
 from topoptcomec.core.grid import StructuredGrid
 
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=DeprecationWarning, module="lib3mf")
-    import lib3mf
+try:  # lib3mf is optional: PNG/STL/VTI export must work without it.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning, module="lib3mf")
+        import lib3mf
+except ImportError:  # pragma: no cover - platform without a lib3mf wheel
+    lib3mf = None  # type: ignore[assignment]
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -89,6 +91,128 @@ def _compute_element_colors(
         rgb = np.clip(1.0 + data[:, np.newaxis] * (mat_rgb - 1.0), 0.0, 1.0)
 
     return (rgb * 255).astype(np.uint8)
+
+
+def _volume_field(
+    xPhys: FloatArray, nelxyz: list[int]
+) -> tuple[FloatArray, int, int, int, bool]:
+    """
+    Build the 3-D density volume used by the mesh exporters.
+
+    The returned array is indexed ``[ix, iy, iz]`` so that design x maps to
+    world x, design y to world y, and a 2D design is extruded along z (the
+    thickness). This keeps STL and 3MF files oriented like the GUI plot.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Element densities, shape (nel,) or (n_mat, nel).
+    nelxyz : list[int]
+        Number of elements in [x, y, z] directions.
+
+    Returns
+    -------
+    tuple
+        (field, nx, ny, nz, is_2d) where ``field`` has shape (nx, ny, nz).
+    """
+    nx, ny, nz = nelxyz
+    is_multi = xPhys.ndim == 2
+    field = xPhys.sum(axis=0) if is_multi else xPhys
+    if nz > 0:
+        volume = field.reshape((nz, nx, ny)).transpose(1, 2, 0)
+        return volume, nx, ny, nz, False
+    return field.reshape((nx, ny, 1)), nx, ny, 1, True
+
+
+def _marching_cubes_surface(
+    field: FloatArray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Extract the 0.5 iso-surface of a density volume.
+
+    One voxel of zero density is padded around the volume so that material
+    touching the border still produces a closed surface. The returned
+    coordinates are expressed in element units: element ``i`` spans
+    ``[i, i + 1]``.
+
+    Parameters
+    ----------
+    field : FloatArray
+        Density volume indexed ``[ix, iy, iz]``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Vertex coordinates (n, 3) and triangle vertex indices (m, 3).
+    """
+    padded = np.pad(field, pad_width=1, mode="constant", constant_values=0.0)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message=".*has been deprecated.*", category=DeprecationWarning
+        )
+        # Padded point i sits at element coordinate i - 0.5, so the outer zero
+        # layers lie at -0.5 and n - 0.5 and the surface of a solid block
+        # spans exactly [0, n] in element units.
+        grid = pv.ImageData(dimensions=padded.shape)
+        grid.origin = (-0.5, -0.5, -0.5)
+        # The complement (void) field is contoured: VTK's case table resolves
+        # ambiguous cells by separating the field that is above the level, so
+        # contouring the void keeps diagonally touching solid voxels connected
+        # (otherwise a design that is one piece is exported as many shells).
+        # This matches the classic marching cubes of PyMCubes exactly.
+        grid.point_data["void"] = 1.0 - padded.ravel(order="F")
+        surface = grid.contour(isosurfaces=[0.5], scalars="void")
+    if surface.n_points == 0:
+        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.int64)
+    surface = surface.triangulate()
+    vertices = np.asarray(surface.points, dtype=np.float64)
+    faces = np.asarray(surface.faces).reshape(-1, 4)
+    # Reverse the winding: normals of the void surface point into the solid.
+    triangles = faces[:, [3, 2, 1]].astype(np.int64)
+    return vertices, triangles
+
+
+def _triangle_material_indices(
+    xPhys: FloatArray,
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+    nx: int,
+    ny: int,
+    nz: int,
+    is_2d: bool,
+) -> np.ndarray:
+    """
+    Assign each triangle to the material with the highest density at its centre.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Multi-material densities, shape (n_mat, nel).
+    vertices : np.ndarray
+        Surface vertices (n, 3) in element coordinates.
+    triangles : np.ndarray
+        Triangle vertex indices (m, 3).
+    nx, ny, nz : int
+        Element counts.
+    is_2d : bool
+        Whether the design is two-dimensional (z is the thickness axis).
+
+    Returns
+    -------
+    np.ndarray
+        Material index per triangle, shape (m,).
+    """
+    centres = vertices[triangles].mean(axis=1)
+    # Element coordinates are in [0, n]: floor gives the element containing the
+    # centroid, which is more accurate at material interfaces than rounding.
+    ix = np.clip(np.floor(centres[:, 0]).astype(np.int64), 0, nx - 1)
+    iy = np.clip(np.floor(centres[:, 1]).astype(np.int64), 0, ny - 1)
+    if is_2d:
+        idx = ix * ny + iy
+    else:
+        iz = np.clip(np.floor(centres[:, 2]).astype(np.int64), 0, nz - 1)
+        idx = iz * (nx * ny) + ix * ny + iy
+    return np.argmax(xPhys[:, idx], axis=0)
 
 
 def save_as_png(
@@ -260,26 +384,10 @@ def save_as_stl(
         (success, error_message) - True if successful, error string otherwise.
     """
     try:
-        nx, ny, nz = nelxyz
-        is_multi = xPhys.ndim == 2
-        field = xPhys.sum(axis=0) if is_multi else xPhys
-        if nz > 0:
-            field = field.reshape((nz, nx, ny)).transpose(1, 2, 0)
-        else:
-            nz = 1  # Extrude to a single layer
-            # Reshape 2D data and add a new axis for the Z dimension
-            field = field.reshape((nx, ny)).T[np.newaxis, :, :]
-
-        # Add 1-voxel padding to avoid border loss in marching cubes
-        field = np.pad(field, pad_width=1, mode="constant", constant_values=0)
-        # Run marching cubes; mcubes can emit a NumPy 2.5 deprecation warning
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                category=DeprecationWarning,
-                message="Setting the shape on a NumPy array has been deprecated in NumPy 2.5.*",
-            )
-            vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
+        field, _nx, _ny, _nz, _is_2d = _volume_field(xPhys, nelxyz)
+        vertices, triangles = _marching_cubes_surface(field)
+        if triangles.shape[0] == 0:
+            return False, "The density field has no surface at the 0.5 level."
         # Build STL mesh
         stl_mesh = mesh.Mesh(np.zeros(triangles.shape[0], dtype=mesh.Mesh.dtype))
         stl_mesh.vectors = vertices[triangles]
@@ -311,26 +419,17 @@ def save_as_3mf(
     tuple[bool, str | None]
         (success, error_message) - True if successful, error string otherwise.
     """
+    if lib3mf is None:
+        return False, (
+            "3MF export requires the optional 'lib3mf' package; install it "
+            "with 'pip install lib3mf'."
+        )
     try:
-        nx, ny, nz = nelxyz
+        field, nx, ny, nz, is_2d = _volume_field(xPhys, nelxyz)
+        vertices, triangles = _marching_cubes_surface(field)
+        if triangles.shape[0] == 0:
+            return False, "The density field has no surface at the 0.5 level."
         is_multi = xPhys.ndim == 2
-        field = xPhys.sum(axis=0) if is_multi else xPhys
-        if nz > 0:
-            field = field.reshape((nz, nx, ny)).transpose(1, 2, 0)
-        else:
-            nz = 1  # Extrude to a single layer
-            # Reshape 2D data and add a new axis for the Z dimension
-            field = field.reshape((nx, ny)).T[np.newaxis, :, :]
-
-        # Add 1-voxel padding to avoid border loss in marching cubes
-        field = np.pad(field, pad_width=1, mode="constant", constant_values=0)
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                category=DeprecationWarning,
-                message="Setting the shape on a NumPy array has been deprecated in NumPy 2.5.*",
-            )
-            vertices, triangles = mcubes.marching_cubes(volume=field, isovalue=0.5)
 
         wrapper = lib3mf.get_wrapper()
         model = wrapper.CreateModel()
@@ -380,21 +479,16 @@ def save_as_3mf(
                 # Pre-compute ctypes arrays for each material's color PropertyIDs
                 prop_arrays = [c_uint_3(cid, cid, cid) for cid in color_ids]
                 res_id = colorgroup.GetResourceID()
+                materials = _triangle_material_indices(
+                    xPhys, vertices, triangles, nx, ny, nz, is_2d
+                )
 
-                for tri_index, tri in enumerate(triangles):
-                    v = vertices[tri].mean(axis=0)
-
-                    ix = int(np.clip(round(v[0] - 1), 0, nx - 1))
-                    iy = int(np.clip(round(v[1] - 1), 0, ny - 1))
-                    iz = int(np.clip(round(v[2] - 1), 0, nz - 1))
-
-                    idx = iz * (nx * ny) + ix * ny + iy
-                    mat = np.argmax(xPhys[:, idx])
-
-                    # Build the strict TriangleProperties object required by the C++ backend
+                for tri_index, mat in enumerate(materials):
+                    # Build the strict TriangleProperties object required by
+                    # the C++ backend
                     prop = lib3mf.TriangleProperties()
                     prop.ResourceID = res_id
-                    prop.PropertyIDs = prop_arrays[mat]
+                    prop.PropertyIDs = prop_arrays[int(mat)]
 
                     mesh.SetTriangleProperties(tri_index, prop)
 
