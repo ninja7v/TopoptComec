@@ -19,7 +19,7 @@ TopoptComec has two front doors built on the same core engine:
 - `topoptcomec/parameter_check.py`: `ParameterCheck` class, validates parameter dictionaries (used by GUI and CLI)
 - `topoptcomec/time_estimation.py`: `TimeEstimation` class, estimates runtime for optimization (extensible to displacement and analysis)
 - `topoptcomec/exporters.py`: shared export logic used by GUI and CLI
-- `topoptcomec/presets_io.py`: locates the presets file (local, per-user, or packaged default)
+- `topoptcomec/presets_io.py`: loads and merges the preset layers (built-in, per-user, local) and saves the user layer
 - `topoptcomec/update/`: Qt-free update service (GitHub releases, version checks, verified downloads, safe git updates)
 
 ### Core Engine

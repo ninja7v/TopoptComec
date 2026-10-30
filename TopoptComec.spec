@@ -13,8 +13,11 @@ a = Analysis(
     pathex=[],
     binaries=lib3mf_binaries,
     datas=[
+        # resource_path() resolves icons from _MEIPASS/icons, while
+        # packaged_presets_path() looks next to the frozen package module, so
+        # presets.json must keep the package layout.
         ('topoptcomec/icons/*', 'icons'),
-        ('topoptcomec/presets.json', '.'),
+        ('topoptcomec/presets.json', 'topoptcomec'),
     ],
     hiddenimports=['lib3mf'],
 )
