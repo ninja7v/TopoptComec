@@ -1430,6 +1430,7 @@ class PlottingMixin:
             Arrow length scaling factor.
         """
         nely: int = pd["nelxyz"][1]
+        nelx: int = pd["nelxyz"][0]
         disp_factor: float = self.displacement_widget.mov_disp.value()
 
         for xk, yk, zk, dk, color in [
@@ -1451,8 +1452,9 @@ class PlottingMixin:
             )
             dirs: list = [g[dk].currentText() for g in active]
 
+            # Node ordering matches StructuredGrid.node_index.
             idx: np.ndarray = (
-                (fz * (fx + 1) * (nely + 1) + fx * (nely + 1) + fy)
+                (fz * (nelx + 1) * (nely + 1) + fx * (nely + 1) + fy)
                 if is_3d
                 else (fx * (nely + 1) + fy)
             )
@@ -1464,10 +1466,12 @@ class PlottingMixin:
                 self.u[dof * idx + 2] * disp_factor if is_3d else None
             )
 
-            fx: np.ndarray = fx + ux  # using += will give an error
-            fy: np.ndarray = fy + uy if is_3d else fy - uy
+            fx = fx + ux  # using += will give an error
+            # The +Y degree of freedom points towards decreasing ey, which the
+            # plot shows downwards: flip it in 2D and 3D alike.
+            fy = fy - uy
             if is_3d:
-                fz: np.ndarray = fz + uz
+                fz = fz + uz
 
             dx: np.ndarray
             dy: np.ndarray
