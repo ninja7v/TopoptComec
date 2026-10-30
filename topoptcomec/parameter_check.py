@@ -5,6 +5,8 @@
 import numpy as np
 import numpy.typing as npt
 
+from topoptcomec.core import preset_format
+
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
 
@@ -149,7 +151,7 @@ class ParameterCheck:
 
     def _check_forces(self, params: dict) -> str | None:
         """
-        Validate that at least one input force is active.
+        Validate the force entries.
 
         Parameters
         ----------
@@ -164,6 +166,8 @@ class ParameterCheck:
         pf: dict = params["Forces"]
         ps: dict = params.get("Supports", {})
         output_directions = pf.get("fodir", [])
+        nelx, nely, nelz = params["Dimensions"]["nelxyz"]
+        is_3d: bool = nelz > 0
 
         if not any(d != "-" for d in pf["fidir"]):
             return "At least one input force must be active"
@@ -173,9 +177,42 @@ class ParameterCheck:
         ):
             return "At least one output force (for compliant mechanisms) or support (for rigid mechanisms) must be active"
 
+        for prefix, label, norm_key in (
+            ("fi", "Input", "finorm"),
+            ("fo", "Output", "fonorm"),
+        ):
+            dirs: list = pf.get(f"{prefix}dir", [])
+            # z coordinates are only required for 3D problems.
+            keys = [f"{prefix}x", f"{prefix}y", norm_key]
+            if is_3d:
+                keys.append(f"{prefix}z")
+            if any(len(pf.get(k, [])) != len(dirs) for k in keys):
+                return f"The {label.lower()} force arrays have inconsistent lengths."
+            for i, direction in enumerate(dirs):
+                if direction == "-":
+                    continue
+                x = pf[f"{prefix}x"][i]
+                y = pf[f"{prefix}y"][i]
+                z = pf[f"{prefix}z"][i] if is_3d else 0
+                if not (0 <= x <= nelx and 0 <= y <= nely):
+                    return (
+                        f"{label} force {i + 1} at ({x}, {y}) is outside the "
+                        f"design domain [0, {nelx}] x [0, {nely}]."
+                    )
+                if is_3d and not 0 <= z <= nelz:
+                    return (
+                        f"{label} force {i + 1} is outside the design domain "
+                        f"along z (0..{nelz})."
+                    )
+                if not np.isfinite(pf[norm_key][i]) or pf[norm_key][i] <= 0:
+                    return f"{label} force {i + 1} must have a positive magnitude."
+
+        def z_of(key: str, i: int) -> int:
+            return pf[key][i] if is_3d else 0
+
         err: str | None = self._check_duplicates(
             [i for i, d in enumerate(pf["fidir"]) if d != "-"],
-            lambda i: (pf["fix"][i], pf["fiy"][i], pf["fiz"][i], pf["fidir"][i]),
+            lambda i: (pf["fix"][i], pf["fiy"][i], z_of("fiz", i), pf["fidir"][i]),
             lambda a, b: f"Input forces {a + 1} and {b + 1} are identical.",
         )
         if err:
@@ -183,7 +220,7 @@ class ParameterCheck:
 
         return self._check_duplicates(
             [i for i, d in enumerate(output_directions) if d != "-"],
-            lambda i: (pf["fox"][i], pf["foy"][i], pf["foz"][i], pf["fodir"][i]),
+            lambda i: (pf["fox"][i], pf["foy"][i], z_of("foz", i), pf["fodir"][i]),
             lambda a, b: f"Output forces {a + 1} and {b + 1} are identical.",
         )
 
@@ -205,8 +242,37 @@ class ParameterCheck:
         if not pr:
             return
 
+        nelx, nely, nelz = params["Dimensions"]["nelxyz"]
+        for i, shape in enumerate(pr.get("rshape", [])):
+            if shape == "-":
+                continue
+            x = pr["rx"][i]
+            y = pr["ry"][i]
+            if not (0 <= x <= nelx and 0 <= y <= nely):
+                return (
+                    f"Region {i + 1} at ({x}, {y}) is outside the design "
+                    f"domain [0, {nelx}] x [0, {nely}]."
+                )
+            if nelz > 0 and not 0 <= pr["rz"][i] <= nelz:
+                return (
+                    f"Region {i + 1} is outside the design domain along z (0..{nelz})."
+                )
+            if pr["rradius"][i] <= 0:
+                return f"Region {i + 1} must have a positive radius."
+            states = pr.get("rstate", [])
+            state = states[i] if i < len(states) else "Void"
+            if state != "Void":
+                material = preset_format.region_material_index(state)
+                n_materials = len(params.get("Materials", {}).get("E", [1.0]))
+                if material is None or not 0 <= material < n_materials:
+                    return (
+                        f"Region {i + 1} references {state!r}, but only "
+                        f"{n_materials} material(s) are defined."
+                    )
+
         idx = [i for i, s in enumerate(pr["rshape"]) if s != "-"]
 
+        rz = pr.get("rz", [0] * len(pr["rshape"]))
         return self._check_duplicates(
             idx,
             lambda i: (
@@ -214,7 +280,7 @@ class ParameterCheck:
                 pr["rradius"][i],
                 pr["rx"][i],
                 pr["ry"][i],
-                pr["rz"][i],
+                rz[i] if nelz > 0 else 0,
             ),
             lambda a, b: f"Regions {a + 1} and {b + 1} are identical.",
         )
@@ -237,11 +303,35 @@ class ParameterCheck:
         if not ps:
             return
 
+        nelx, nely, nelz = params["Dimensions"]["nelxyz"]
+        for i, dim in enumerate(ps.get("sdim", [])):
+            if dim == "-":
+                continue
+            x = ps["sx"][i]
+            y = ps["sy"][i]
+            if not (0 <= x <= nelx and 0 <= y <= nely):
+                return (
+                    f"Support {i + 1} at ({x}, {y}) is outside the design "
+                    f"domain [0, {nelx}] x [0, {nely}]."
+                )
+            if nelz > 0 and not 0 <= ps["sz"][i] <= nelz:
+                return (
+                    f"Support {i + 1} is outside the design domain along z (0..{nelz})."
+                )
+            if not any(axis in dim for axis in ("X", "Y", "Z")):
+                return f"Support {i + 1} must fix at least one direction."
+
         idx: list = [i for i, s in enumerate(ps["sdim"]) if s != "-"]
 
+        sz = ps.get("sz", [0] * len(ps["sdim"]))
         return self._check_duplicates(
             idx,
-            lambda i: (ps["sx"][i], ps["sy"][i], ps["sz"][i], ps["sdim"][i]),
+            lambda i: (
+                ps["sx"][i],
+                ps["sy"][i],
+                sz[i] if nelz > 0 else 0,
+                ps["sdim"][i],
+            ),
             lambda a, b: f"Supports {a + 1} and {b + 1} are identical.",
         )
 
@@ -261,13 +351,24 @@ class ParameterCheck:
         """
         pm: dict = params["Materials"]
 
+        for i, (E, nu) in enumerate(zip(pm["E"], pm["nu"])):
+            if not np.isfinite(E) or E <= 0:
+                return f"Material {i + 1}: Young's modulus must be positive."
+            if not np.isfinite(nu) or nu < 0.0 or nu >= 0.5:
+                return f"Material {i + 1}: Poisson's ratio must satisfy 0 <= nu < 0.5."
+        percent = pm.get("percent", [100] * len(pm["E"]))
+        if len(percent) != len(pm["E"]):
+            return "Each material must have a volume percentage."
+        if any(p < 0 or p > 100 for p in percent):
+            return "Material percentages must be between 0 and 100."
+
         err = self._check_duplicates(
             range(len(pm["E"])),
-            lambda i: (pm["E"][i], pm["nu"][i], pm.get("percent", [100])[i]),
+            lambda i: (pm["E"][i], pm["nu"][i], percent[i]),
             lambda a, b: f"Materials {a + 1} and {b + 1} are identical.",
         )
         if err:
             return err
 
-        if len(pm["E"]) > 1 and sum(pm["percent"]) != 100:
+        if len(pm["E"]) > 1 and sum(percent) != 100:
             return "Material percentages don't sum up to 100%."
