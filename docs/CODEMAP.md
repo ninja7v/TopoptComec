@@ -21,7 +21,7 @@ Quick map of the repository.
 - `exporters.py`: PNG, STL, VTI, 3MF export (shared by GUI and CLI)
 - `parameter_check.py`: `ParameterCheck` class, parameter validation (shared)
 - `time_estimation.py`: `TimeEstimation` class, runtime estimation (shared)
-- `presets_io.py`: presets file resolution (local / per-user / packaged)
+- `presets_io.py`: preset layers (built-in / per-user / local), merge and user save
 - `presets.json`: packaged default preset definitions
 - `version.py`: single authoritative application version
 
@@ -67,6 +67,7 @@ Quick map of the repository.
 - `tests/test_displacements.py`: displacement behavior
 - `tests/test_analyzers.py`: analyzer behavior
 - `tests/test_exporters.py`: exporter behavior
+- `tests/test_presets_io.py`: presets file resolution (local / per-user / packaged)
 - `tests/test_parameter_validation.py`: GUI parameter validation
 - `tests/test_main_window.py`: main window behavior
 - `tests/test_graphic_interaction.py`: GUI interaction, preset apply, plotting, and signal-connection behavior

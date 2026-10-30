@@ -53,7 +53,7 @@ exit codes, and manual update steps.
 
 > **Units:** TopoptComec is unit-agnostic — one grid element = one length unit, and `E`/forces are whatever consistent unit system you choose. See `docs/GLOSSARY.md` (Units and Conventions) for details, including the artificial-spring convention at load points.
 
-> **Presets:** the CLI and GUI look for `presets.json` in the current directory first, then `~/.topoptcomec/presets.json`, then fall back to the packaged examples (CLI: override with `--presets`).
+> **Presets:** the CLI and GUI combine the built-in presets, your saved presets (`~/.topoptcomec/presets.json`) and a `presets.json` in the current directory; on a name clash the later one wins. The GUI saves only your own presets, to `~/.topoptcomec/presets.json`, so the checkout stays clean for the updater (CLI: `--presets FILE` uses that file only).
 
 ### Export
 Once you’re happy with your mechanism, export it for visualization in ParaView or for refinement in your favorite CAD software.

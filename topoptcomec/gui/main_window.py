@@ -2,7 +2,6 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Main window for the TopoptComec application using PySide6.
 
-import json
 import math
 import os
 
@@ -28,11 +27,14 @@ from PySide6.QtWidgets import (
 )
 from pyvistaqt import QtInteractor
 
-# import mcubes
 from topoptcomec import exporters
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
-from topoptcomec.presets_io import resolve_presets_file
+from topoptcomec.presets_io import (
+    load_preset_layers,
+    resolve_presets_file,
+    save_user_presets,
+)
 from topoptcomec.update import UpdateCheck, UpdatePlan, UpdateResult
 
 from .icons import icons
@@ -91,8 +93,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self._set_theme(self.current_theme)
 
         self.presets: dict = {}
-        # Local presets.json (developer workflow) or a per-user writable copy
-        # seeded from the packaged defaults.
+        #: Presets that are not owned by the user (built-in and ./presets.json).
+        self._builtin_presets: dict = {}
+        # Presets saved in the GUI go to the per-user file only, so the source
+        # checkout and the installed package are never modified.
         self.presets_file: str = str(resolve_presets_file(writable=True))
 
         self.main_widget: QWidget = QWidget()
@@ -1024,13 +1028,19 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
     ###########
 
     def _load_presets(self) -> None:
-        """Loads presets from the JSON file and populates the combo box."""
+        """Load the merged presets and populate the combo box.
+
+        Built-in presets (and ``./presets.json``) are layered with the presets
+        saved by the user, so new built-in presets of a release always show up.
+        """
         try:
-            with open(self.presets_file, "r") as f:
-                self.presets = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+            layers = load_preset_layers()
+            self.presets = layers.merged
+            self._builtin_presets = layers.builtin
+        except (OSError, ValueError, TypeError) as error:
             self.presets = {}
-            print("Presets file not found or invalid. Starting fresh.")
+            self._builtin_presets = {}
+            print(f"Presets could not be read ({error}). Starting fresh.")
 
         self.preset.presets_combo.blockSignals(True)
         self.preset.presets_combo.clear()
@@ -1040,9 +1050,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.preset.delete_preset_button.setEnabled(False)
 
     def _save_presets(self) -> None:
-        """Saves the current presets dictionary to the JSON file."""
-        with open(self.presets_file, "w") as f:
-            json.dump(self.presets, f, indent=4)
+        """Save the presets owned by the user to the per-user file."""
+        save_user_presets(self.presets, self._builtin_presets)
         self.status_bar.showMessage("Presets saved.", 3000)
 
     def _save_new_preset(self) -> None:
@@ -1075,6 +1084,17 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         if preset_name not in self.presets:
             return
 
+        if (
+            preset_name in self._builtin_presets
+            and self.presets[preset_name] == self._builtin_presets[preset_name]
+        ):
+            QMessageBox.information(
+                self,
+                "Delete Preset",
+                f"'{preset_name}' is a built-in preset and cannot be deleted.",
+            )
+            return
+
         reply = QMessageBox.warning(
             self,
             "Delete Preset",
@@ -1087,7 +1107,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             del self.presets[preset_name]
             self._save_presets()
             self._load_presets()  # Reloads the list and disables the delete button
-            self.status_bar.showMessage(f"Preset '{preset_name}' deleted.", 3000)
+            if preset_name in self.presets:
+                # Only a user copy of a built-in preset can be removed; the
+                # built-in version is shown again.
+                self.status_bar.showMessage(
+                    f"Preset '{preset_name}' restored to its built-in version.",
+                    3000,
+                )
+            else:
+                self.status_bar.showMessage(f"Preset '{preset_name}' deleted.", 3000)
 
     def _on_preset_selected(self) -> None:
         """
