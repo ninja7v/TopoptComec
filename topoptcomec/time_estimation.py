@@ -41,10 +41,10 @@ class TimeEstimation:
 
     def _compute_size_matrix(self) -> int:
         """
-        Compute the number of degrees of freedom of the FE problem.
+        Compute the number of free degrees of freedom of the FE problem.
 
-        This is ``(nelx+1)(nely+1)(nelz+1)*dim`` minus the fixed dofs
-        induced by supports (with their optional radius).
+        This is ``(nelx+1)(nely+1)(nelz+1)*dim`` minus the DOFs removed by
+        supports (with their optional radius). The result is never below one.
         """
         nelx: int
         nely: int
@@ -64,37 +64,6 @@ class TimeEstimation:
             active_sup: list = [i for i, val in enumerate(sdim) if val != "-"]
 
             for i in active_sup:
-                fixed_dofs += 1
-
-                if i < len(sr) and sr[i] > 0:
-                    radius = sr[i]
-                    x_range = range(
-                        max(0, int(sx[i] - radius)),
-                        min(nelx + 1, int(sx[i] + radius + 1)),
-                    )
-                    y_range = range(
-                        max(0, int(sy[i] - radius)),
-                        min(nely + 1, int(sy[i] + radius + 1)),
-                    )
-                    z_range = (
-                        range(
-                            max(0, int(sz[i] - radius)),
-                            min(nelz + 1, int(sz[i] + radius + 1)),
-                        )
-                        if is_3d
-                        else range(1)
-                    )
-
-                    for z in z_range:
-                        for x in x_range:
-                            for y in y_range:
-                                dist_sq = (
-                                    (x - sx[i]) ** 2
-                                    + (y - sy[i]) ** 2
-                                    + ((z - sz[i]) ** 2 if is_3d else 0)
-                                )
-                                if dist_sq <= radius**2:
-                                    fixed_dofs += 1
                 coef = 0
                 if "X" in sdim[i]:
                     coef += 1
@@ -102,11 +71,36 @@ class TimeEstimation:
                     coef += 1
                 if is_3d and "Z" in sdim[i]:
                     coef += 1
-                fixed_dofs *= coef
+                if coef == 0:
+                    continue
+                nodes: set[tuple[int, int, int]] = set()
+                radius = sr[i] if i < len(sr) else 0
+                z0 = sz[i] if i < len(sz) else 0
+                if radius > 0:
+                    for z in range(
+                        max(0, int(z0 - radius)),
+                        min((nelz if is_3d else 0) + 1, int(z0 + radius + 1)),
+                    ):
+                        for x in range(
+                            max(0, int(sx[i] - radius)),
+                            min(nelx + 1, int(sx[i] + radius + 1)),
+                        ):
+                            for y in range(
+                                max(0, int(sy[i] - radius)),
+                                min(nely + 1, int(sy[i] + radius + 1)),
+                            ):
+                                if (
+                                    (x - sx[i]) ** 2
+                                    + (y - sy[i]) ** 2
+                                    + ((z - z0) ** 2 if is_3d else 0)
+                                ) <= radius**2:
+                                    nodes.add((x, y, z))
+                else:
+                    nodes.add((int(sx[i]), int(sy[i]), int(z0)))
+                fixed_dofs += len(nodes) * coef
 
         size_matrix: int = (nelx + 1) * (nely + 1) * (nelz + 1 if is_3d else 1) * dim
-        size_matrix = max(size_matrix, 0)
-        return size_matrix
+        return max(1, size_matrix - fixed_dofs)
 
     @staticmethod
     def _estimated_solving_cost(
