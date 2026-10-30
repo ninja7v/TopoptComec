@@ -810,3 +810,43 @@ def test_3d_region_preview_matches_the_solver(qt_app):
     window.close()
 
 
+def test_deformed_force_arrows_follow_the_node_displacement_in_3d():
+    """Arrow start = node + u (x, z) and node - u (y, displayed downwards)."""
+    from types import SimpleNamespace
+
+    from topoptcomec.core.grid import StructuredGrid
+    from topoptcomec.gui.plotting import PlottingMixin
+
+    nelx, nely, nelz = 4, 3, 2
+    grid = StructuredGrid(nelx, nely, nelz)
+    u = np.arange(grid.ndof, dtype=float) * 1e-3
+
+    def spin(value):
+        return SimpleNamespace(value=lambda: value)
+
+    def combo(text):
+        return SimpleNamespace(currentText=lambda: text)
+
+    force = {
+        "fix": spin(3),
+        "fiy": spin(2),
+        "fiz": spin(1),
+        "fidir": combo("X:\u2192"),
+    }
+    captured = {}
+    host = SimpleNamespace(
+        forces_widget=SimpleNamespace(inputs=[force]),
+        displacement_widget=SimpleNamespace(mov_disp=spin(1.0)),
+        u=u,
+        _arrow_vectors=lambda dirs, length, is_3d: PlottingMixin._arrow_vectors(
+            None, dirs, length, is_3d
+        ),
+        _add_arrows=lambda starts, vectors, color, length: captured.setdefault(
+            color, starts
+        ),
+    )
+    PlottingMixin._plot_deformed_forces(host, True, {"nelxyz": [nelx, nely, nelz]}, 1.0)
+
+    node = grid.node_index(3, 2, 1)
+    expected = [3 + u[3 * node], 2 - u[3 * node + 1], 1 + u[3 * node + 2]]
+    np.testing.assert_allclose(captured["red"][0], expected)

@@ -22,8 +22,10 @@ class Load:
     DOF. When ``spring`` is None, the force magnitude is reused as the
     spring stiffness (the historic TopoptComec convention).
 
-    Axis convention: the grid is unit-element based; ``sign=+1`` points
-    toward increasing coordinates (x right, y down on screen, z away).
+    Axis convention: the grid is unit-element based. ``sign=+1`` points
+    towards increasing x (screen right) and, along y, towards the
+    screen-down direction (the display flips the grid row axis); ``sign=+1``
+    along z points away from the viewer.
     """
 
     x: int
