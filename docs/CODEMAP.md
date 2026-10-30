@@ -22,6 +22,7 @@ Quick map of the repository.
 - `parameter_check.py`: `ParameterCheck` class, parameter validation (shared)
 - `time_estimation.py`: `TimeEstimation` class, runtime estimation (shared)
 - `presets_io.py`: preset layers (built-in / per-user / local), merge and user save
+- `result_cache.py`: parameter hash and validated density-field cache (shared by GUI and CLI)
 - `presets.json`: packaged default preset definitions
 - `version.py`: single authoritative application version
 

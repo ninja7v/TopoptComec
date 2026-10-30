@@ -3,11 +3,11 @@
 # Manage parameters (json file to UI, comparison, ...).
 
 import copy
-import os
 
 import numpy as np
 from PySide6.QtWidgets import QMessageBox
 
+from topoptcomec import result_cache
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.time_estimation import TimeEstimation
 
@@ -428,8 +428,7 @@ class ParameterManagerMixin:
                 return False
             # Preset still matches: reload the cached result (xPhys may
             # have been cleared by on_parameter_changed).
-            self._load_preset_cache(current_preset_name)
-            return self.xPhys is not None
+            return self._load_preset_cache(current_preset_name)
         # Check if the current state matches any preset
         for preset_name, preset_params in self.presets.items():
             if self._are_parameters_equivalent(preset_params, self.last_params):
@@ -441,43 +440,77 @@ class ParameterManagerMixin:
                     self.preset.delete_preset_button.setEnabled(True)
                 self.preset.presets_combo.blockSignals(False)
                 # Apply the existing result if available
-                self._load_preset_cache(preset_name)
-                return self.xPhys is not None
+                return self._load_preset_cache(preset_name)
         return False
 
-    def _load_preset_cache(self, preset_name: str) -> None:
+    def _normalized_params(self, params: dict) -> dict:
+        """Copy of ``params`` reduced to what defines the optimization result."""
+        normalized = copy.deepcopy(params)
+        self._normalize_params(normalized)
+        # Colors only affect the display, never the optimized field.
+        normalized.get("Materials", {}).pop("color", None)
+        return normalized
+
+    def _cache_matches_current(self, data: dict) -> bool:
+        """Whether a cached result belongs to the current parameters.
+
+        The cache must have been produced for the same grid and with the same
+        (normalized) parameters; any other cache is stale.
+        """
+        nelxyz = self.last_params["Dimensions"]["nelxyz"]
+        if not result_cache.cache_matches_grid(data, nelxyz):
+            return False
+        if "params_hash" not in data:
+            return False
+        expected = result_cache.params_hash(self._normalized_params(self.last_params))
+        return str(data["params_hash"]) == expected
+
+    def _load_preset_cache(self, preset_name: str) -> bool:
         """Load the cached density field and displacement for a preset.
+
+        The cache is ignored when it was produced for a different grid, so a
+        stale or foreign file can never be displayed as the current result.
 
         Parameters
         ----------
         preset_name : str
             Name of the preset whose cached result should be loaded.
+
+        Returns
+        -------
+        bool
+            ``True`` if the cache was loaded, ``False`` if it was missing or
+            rejected.
         """
-        cache_file = os.path.join(
-            "results", preset_name, f"{preset_name}_density_field.npz"
-        )
-        if not os.path.exists(cache_file):
-            return
-        try:
-            data = np.load(cache_file)
-            self.xPhys = data["xPhys"]
-            self.u = combine_load_case_displacements(data["u"])
-            mean_density: float = (
-                np.mean(self.xPhys.sum(axis=0))
-                if self.xPhys.ndim == 2
-                else np.mean(self.xPhys)
+        cache_file = result_cache.cache_path("results", preset_name)
+        data = result_cache.load_density_cache(cache_file)
+        if data is None:
+            return False
+        if not self._cache_matches_current(data):
+            print(
+                f"Ignoring cached result for {preset_name}: it was produced "
+                "with different parameters."
             )
-            if mean_density < 0.01:
-                self.xPhys_valid = False
-            else:
-                self.xPhys_valid = True
-                self.footer.binarize_button.setEnabled(True)
-                self.footer.save_button.setEnabled(True)
-                self.analysis_widget.run_analysis_button.setEnabled(True)
-                self.displacement_widget.run_disp_button.setEnabled(True)
-                self.sections["Displacement"].visibility_button.setEnabled(True)
-        except Exception as e:  # noqa: BLE001
-            print(f"Failed to load cache: {e}")
+            return False
+        self.xPhys = np.asarray(data["xPhys"], dtype=np.float64)
+        self.u = combine_load_case_displacements(data["u"])
+        self.last_successful_xPhys = self.xPhys.copy()
+        self.update_mat_init_type_state()
+        mean_density: float = (
+            np.mean(self.xPhys.sum(axis=0))
+            if self.xPhys.ndim == 2
+            else np.mean(self.xPhys)
+        )
+        if mean_density < 0.01:
+            self.xPhys_valid = False
+        else:
+            self.xPhys_valid = True
+            self.footer.binarize_button.setEnabled(True)
+            self.footer.save_button.setEnabled(True)
+            self.analysis_widget.run_analysis_button.setEnabled(True)
+            self.displacement_widget.run_disp_button.setEnabled(True)
+            self.sections["Displacement"].visibility_button.setEnabled(True)
+        return True
 
     def _is_display_irrelevant_sender(self, sender) -> bool:
         """

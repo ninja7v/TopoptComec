@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 from pyvistaqt import QtInteractor
 
-from topoptcomec import exporters
+from topoptcomec import exporters, result_cache
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
 from topoptcomec.presets_io import (
@@ -85,6 +85,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.last_params: dict = {}
         self.current_theme: str = "dark"
         self.loss_history: list[tuple[int, float]] = []
+        #: Last density change reported by the optimizer (for the convergence
+        #: warning when the iteration limit is reached).
+        self._last_change: float = 1.0
         self.worker: AnalysisWorker | DisplacementWorker | OptimizerWorker | None = None
         self.update_check_worker: UpdateCheckWorker | None = None
         self.update_install_worker: UpdateInstallWorker | None = None
@@ -522,11 +525,15 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             Current change in design variables (smaller than max density change).
         """
         self.progress_bar.setValue(iteration)
+        self._last_change = change
         self.status_bar.showMessage(
             f"It: {iteration}, Obj: {objective:.4f}, Change: {change:.4f}"
         )
         if iteration > 0:
-            self.loss_history.append((iteration, objective))
+            if self.loss_history and self.loss_history[-1][0] == iteration:
+                self.loss_history[-1] = (iteration, objective)
+            else:
+                self.loss_history.append((iteration, objective))
 
     def _update_optimization_plot(self, xPhys_frame: np.ndarray) -> None:
         """
@@ -579,8 +586,12 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
         self.update_mat_init_type_state()
         self.last_displayed_frame_data = None
+        ran_now = self.worker is not None
+        stopped = ran_now and bool(getattr(self.worker, "stop_requested", False))
         self._finalize_worker()
-        self.status_bar.showMessage("Optimization finished successfully.", 5000)
+        self.status_bar.showMessage(
+            "Optimization stopped." if stopped else "Optimization finished.", 5000
+        )
         self.preset.setEnabled(True)
         self.footer.stop_button.hide()
         self.footer.create_button.show()
@@ -615,17 +626,22 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.sections["Displacement"].visibility_button.setEnabled(True)
 
         preset_name = self.preset.presets_combo.currentText()
-        if self.xPhys_valid and preset_name in self.presets:
+        # Cache only complete runs of a known preset: a stopped run is a
+        # partial design and must not be reloaded later as the preset result.
+        if ran_now and not stopped and self.xPhys_valid and preset_name in self.presets:
             # Detect if running from pytest and use tests/ instead of results/
             is_pytest = os.environ.get("PYTEST_CURRENT_TEST") is not None
             base_dir = "tests" if is_pytest else "results"
-
-            os.makedirs(os.path.join(base_dir, preset_name), exist_ok=True)
-            cache_file = os.path.join(
-                base_dir, preset_name, f"{preset_name}_density_field.npz"
-            )
+            cache_file = result_cache.cache_path(base_dir, preset_name)
             try:
-                np.savez_compressed(cache_file, xPhys=self.xPhys, u=self.u)
+                result_cache.save_density_cache(
+                    cache_file,
+                    self.xPhys,
+                    self.u,
+                    self._normalized_params(self.last_params),
+                    self.last_params["Dimensions"]["nelxyz"],
+                    converged=self._last_change <= 0.01,
+                )
             except Exception as e:  # noqa: BLE001
                 print(f"Failed to save cache: {e}")
 
@@ -635,6 +651,17 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 )
                 if not success:
                     print(f"Failed to save loss function CSV: {error}")
+
+        if ran_now and not stopped and self._last_change > 0.01:
+            # Non-blocking: the shipped presets intentionally use a short
+            # iteration budget, so a modal dialog would appear on every run.
+            self.status_bar.showMessage(
+                f"Iteration limit ({self.last_params['Optimizer']['n_it']}) "
+                f"reached before convergence (last change "
+                f"{self._last_change:.3f} > 0.010): increase the iteration "
+                "count for a converged design.",
+                15000,
+            )
 
         self.replot()
 
@@ -1129,18 +1156,26 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self.footer.start_create_button_effect()
             self._apply_parameters(self.presets[preset_name])
             self.preset.delete_preset_button.setEnabled(True)
-            cache_file = os.path.join(
-                "results", preset_name, f"{preset_name}_density_field.npz"
-            )
-            if os.path.exists(cache_file):
+            cache_file = result_cache.cache_path("results", preset_name)
+            data = result_cache.load_density_cache(cache_file)
+            if data is not None and self._cache_matches_current(data):
                 try:
-                    data = np.load(cache_file)
-                    self._handle_optimization_results((data["xPhys"], data["u"]))
+                    self._handle_optimization_results(
+                        (
+                            np.asarray(data["xPhys"], dtype=np.float64),
+                            np.asarray(data["u"], dtype=np.float64),
+                        )
+                    )
                     self.status_bar.showMessage(
                         f"Loaded cached result for {preset_name}.", 5000
                     )
                 except Exception as e:  # noqa: BLE001
                     print(f"Failed to load cache: {e}")
+            elif data is not None:
+                print(
+                    f"Ignoring cached result for {preset_name}: it was produced "
+                    "with different parameters."
+                )
 
         else:
             self.preset.delete_preset_button.setEnabled(False)

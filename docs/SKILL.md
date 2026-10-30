@@ -13,6 +13,7 @@ TopoptComec is a Python topology optimization app with a GUI (`topoptcomec`) and
 - `topoptcomec/gui/widgets.py`: GUI inputs
 - `topoptcomec/exporters.py`: file export (shared by GUI and CLI)
 - `topoptcomec/parameter_check.py`: parameter validation (shared)
+- `topoptcomec/result_cache.py`: parameter hash + validated density cache (shared)
 - `topoptcomec/time_estimation.py`: runtime estimation (shared)
 - `topoptcomec/cli/cli.py`: CLI runs
 - `presets.json`: preset definitions

@@ -20,6 +20,7 @@ TopoptComec has two front doors built on the same core engine:
 - `topoptcomec/time_estimation.py`: `TimeEstimation` class, estimates runtime for optimization (extensible to displacement and analysis)
 - `topoptcomec/exporters.py`: shared export logic used by GUI and CLI
 - `topoptcomec/presets_io.py`: loads and merges the preset layers (built-in, per-user, local) and saves the user layer
+- `topoptcomec/result_cache.py`: parameter hash and validated density-field cache (shared by GUI and CLI)
 - `topoptcomec/update/`: Qt-free update service (GitHub releases, version checks, verified downloads, safe git updates)
 
 ### Core Engine
