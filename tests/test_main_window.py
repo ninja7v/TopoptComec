@@ -652,6 +652,60 @@ def test_low_density_validation(qt_app):
     window.close()
 
 
+def test_preset_switch_reinitializes_the_density_field(qt_app, tmp_path, monkeypatch):
+    """Regression: switching to a preset with another grid crashed the plot.
+
+    ``_apply_parameters`` runs inside the preset combo's ``activated`` slot,
+    so ``sender()`` is the combo and the density-reset branch was skipped.
+    The previous preset's density field was then reshaped with the new
+    dimensions: "cannot reshape array of size 16200 into shape (100,60,3)".
+    """
+    from topoptcomec import result_cache
+
+    # Keep the test independent from cached results already on disk.
+    monkeypatch.setattr(
+        result_cache,
+        "cache_path",
+        lambda base_dir, name: tmp_path / name / f"{name}_density_field.npz",
+    )
+    window = MainWindow()
+    combo = window.preset.presets_combo
+    start = combo.findText("ForceInverter_2Sup_2D")
+    target = combo.findText("Gripper_2D")
+    if start == -1 or target == -1:
+        window.close()
+        pytest.skip("Required presets are not available")
+
+    # First preset: no optimization result, only the initialized preview.
+    combo.setCurrentIndex(start)
+    combo.activated.emit(start)
+    assert window.u is None
+    assert window.xPhys.shape[-1] == 90 * 60
+
+    # Switch to a preset with another grid: must not keep the stale field.
+    combo.setCurrentIndex(target)
+    combo.activated.emit(target)
+
+    nelx, nely, nelz = window.last_params["Dimensions"]["nelxyz"]
+    assert [nelx, nely, nelz] == [100, 60, 0]
+    assert window.xPhys is not None
+    assert window.xPhys.shape[-1] == nelx * nely * (nelz if nelz > 0 else 1)
+
+    # Same-size presets must refresh the preview too: a matching shape is not
+    # proof that the density field belongs to the newly selected preset.
+    bridge = combo.findText("Bridge_2D")
+    shelf = combo.findText("Shelf_2D")
+    if bridge != -1 and shelf != -1:
+        combo.setCurrentIndex(bridge)
+        combo.activated.emit(bridge)
+        window.xPhys = np.full_like(window.xPhys, 0.123)
+        combo.setCurrentIndex(shelf)
+        combo.activated.emit(shelf)
+        assert not np.allclose(window.xPhys, 0.123)
+        np.testing.assert_allclose(window.xPhys, 0.3)
+    window.close()
+
+
 def test_optimizer_change_deselects_preset(qt_app):
     """Regression: editing any Optimizer widget must deselect the active
     preset (comparison must include the Optimizer section AND every

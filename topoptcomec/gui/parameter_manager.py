@@ -140,8 +140,18 @@ class ParameterManagerMixin:
 
         return params
 
-    def on_parameter_changed(self) -> None:
-        """React when a parameter is changed."""
+    def on_parameter_changed(self, force_reinit: bool = False) -> None:
+        """
+        React when a parameter is changed.
+
+        Parameters
+        ----------
+        force_reinit : bool
+            Clear the density field even when the sender cannot be identified.
+            Preset application uses this because it is invoked from the preset
+            combo's signal, so ``sender()`` is the combo and does not reveal
+            that the whole parameter set (including the grid) was replaced.
+        """
         had_result = self.u is not None
         # Scale last_successful_xPhys if option is "From current result" and size mismatches
         if hasattr(self, "materials_widget") and self.materials_widget is not None:
@@ -187,7 +197,10 @@ class ParameterManagerMixin:
         sender = self.sender()
 
         needs_reinit = (
-            had_result or sender is None or self._sender_needs_density_reinit(sender)
+            force_reinit
+            or had_result
+            or sender is None
+            or self._sender_needs_density_reinit(sender)
         )
         if needs_reinit:
             self.xPhys = None

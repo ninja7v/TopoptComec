@@ -1195,9 +1195,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         # Unblock signals
         self._block_all_parameter_signals(False)
 
-        # Manually trigger a single update
+        # Manually trigger a single update. A preset replaces the whole
+        # parameter set, so the previous density field is always stale.
         self._update_position_ranges()
-        self.on_parameter_changed()
+        self.on_parameter_changed(force_reinit=True)
         self.status_bar.showMessage(
             f"Loaded preset: {self.preset.presets_combo.currentText()}", 3000
         )

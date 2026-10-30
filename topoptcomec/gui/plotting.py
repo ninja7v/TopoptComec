@@ -735,6 +735,19 @@ class PlottingMixin:
         if not self.sections["Materials"].visibility_button.isChecked():
             return
 
+        # Never index a density field that does not fit the current grid:
+        # a stale preview (e.g. left over from another preset) would crash
+        # the reshape in the 2D/3D plotters.
+        nel: int = nelx * nely * (nelz if nelz > 0 else 1)
+        if data_to_plot.shape[-1] != nel:
+            if xPhys_data is not None:
+                return
+            self.xPhys = None
+            self._initialize_xphys(nelx, nely, nelz, nelz > 0)
+            data_to_plot = self.xPhys
+            if data_to_plot is None or data_to_plot.shape[-1] != nel:
+                return
+
         # Detect multi-material: shape (n_mat, nel)
         is_multi: bool = data_to_plot.ndim == 2
 
