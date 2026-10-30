@@ -3,18 +3,17 @@ __pycache__/
 *.py[cod]
 
 # Saved results
-/results/*/*.png
-/results/*/*.stl
-/results/*/*.vti
-/results/*/*.3mf
-/results/*/*_creation/
-/results/*/*_displacement/
+# The whole directory is generated output: keeping it out of git means running
+# the CLI or the GUI never makes the checkout dirty (which would block the
+# updater, see docs/UPDATING.md).
+/results/
 
 # Test outputs
 /tests/test_output*
 /tests/*/*.npz
 !/tests/references/
 !/tests/references/*.npz
+/tests/*/*_loss_function.csv
 .coverage
 
 # Build (when an executable is created)

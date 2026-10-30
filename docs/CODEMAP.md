@@ -91,4 +91,4 @@ Quick map of the repository.
 ## Assets and Output
 
 - `topoptcomec/icons/`: GUI SVG assets (packaged)
-- `results/`: generated output files (default CLI output directory)
+- `results/`: generated output files (default CLI output directory, not tracked by git)

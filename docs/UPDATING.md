@@ -71,6 +71,10 @@ update again. Because the previous revision remains in the git history, you
 can return to it with `git reset --hard ORIG_HEAD` if needed (this discards any
 changes made after the update).
 
+Running TopoptComec does not make the checkout dirty: `results/` is ignored by
+git and the GUI saves your presets to `~/.topoptcomec/presets.json` instead of
+the repository. Presets of a new release show up alongside your own ones.
+
 ### Standalone executable or installed package
 
 No platform binaries are published yet, so the updater does not replace a
