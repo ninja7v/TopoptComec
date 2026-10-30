@@ -203,3 +203,42 @@ def test_analyze_no_callback():
     result = analyzers.analyze(xPhys, u, Dimensions, Forces)
     assert len(result) == 4
     assert all(isinstance(v, bool) for v in result)
+
+
+def test_efficiency_heuristic_is_unit_free():
+    """Scaling forces and stiffnesses together must not change the verdict."""
+    from topoptcomec.core import analyzers, optimizers
+
+    dimensions = {"nelxyz": [20, 10, 0], "volfrac": 0.3}
+    forces = {
+        "fix": [20],
+        "fiy": [5],
+        "fiz": [0],
+        "fidir": ["Y:\u2193"],
+        "finorm": [0.01],
+        "fox": [20],
+        "foy": [0],
+        "foz": [0],
+        "fodir": ["Y:\u2191"],
+        "fonorm": [0.01],
+    }
+    materials = {"E": [1.0], "nu": [0.3], "init_type": 0}
+    optimizer = {
+        "filter_type": "Sensitivity",
+        "filter_radius_min": 1.3,
+        "penal": 3.0,
+        "eta": 0.3,
+        "max_change": 0.05,
+        "n_it": 3,
+        "solver": "Auto",
+    }
+    supports = {"sx": [0], "sy": [0], "sz": [0], "sdim": ["XYZ"], "sr": [0]}
+    _x, u = optimizers.optimize(
+        dimensions, forces, materials, optimizer, supports, verbose=False
+    )
+    baseline = analyzers._efficient(u, dimensions, forces)
+
+    scaled = {key: list(value) for key, value in forces.items()}
+    scaled["finorm"] = [10.0]
+    scaled["fonorm"] = [10.0]
+    assert analyzers._efficient(u * 0.01, dimensions, scaled) == baseline
