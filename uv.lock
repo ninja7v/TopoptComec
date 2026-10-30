@@ -743,22 +743,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pymcubes"
-version = "0.1.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "scipy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/df/fb/8660bc09b05e5b7209377a476e937f36c2e4353a5300e6c71283fd6f8c2b/pymcubes-0.1.6.tar.gz", hash = "sha256:1a72476a22a4c98907acec0c5ef8d46f4451fa987c7efeaf970990775826ed8b", size = 109395, upload-time = "2024-07-03T23:14:43.434Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/27/17/71df57cadc0f34d31f0348f6067dea19de3c100e9aed069b792e8c4ca8fe/PyMCubes-0.1.6-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:6dea0bfb68778d7f9becd87c86a396c9ffbb8f322c184967fa2a48d430974513", size = 53794, upload-time = "2024-07-03T23:17:16.767Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/50/78eeda22066c42c6a5c77b7b762e670880b8ec970b1f38ba11d575c3ba31/PyMCubes-0.1.6-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:138eaa87d2b8daf7488102070191e8e99254d48b6f08577a618db6e95fd53f90", size = 51547, upload-time = "2024-07-03T23:15:28.124Z" },
-    { url = "https://files.pythonhosted.org/packages/b5/13/63d018ea286c95b758f8b5cbe97d88a16b38f5672411138287bd2123d877/PyMCubes-0.1.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ea366a2064af0846093e0ad3f9035e375f4b14b62bb565c95dcc8dcaf78308a5", size = 339385, upload-time = "2024-07-03T23:15:56.087Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/3e/a9a9f624a364166b1b4513f5ae8627fb59eea64eccf3e5a91c82c2b7b44e/PyMCubes-0.1.6-cp312-cp312-win_amd64.whl", hash = "sha256:8926475690ce1e0be2460c941a51cdda6eed6f10986073d23fc67535bc70aa78", size = 49968, upload-time = "2024-07-03T23:18:53.376Z" },
-]
-
-[[package]]
 name = "pyobjc-core"
 version = "12.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1115,11 +1099,10 @@ wheels = [
 name = "topoptcomec"
 source = { editable = "." }
 dependencies = [
-    { name = "lib3mf" },
+    { name = "lib3mf", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') or sys_platform == 'darwin'" },
     { name = "numpy" },
     { name = "numpy-stl" },
     { name = "packaging" },
-    { name = "pymcubes" },
     { name = "pyside6" },
     { name = "pyvista" },
     { name = "pyvistaqt" },
@@ -1129,11 +1112,10 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "lib3mf", specifier = ">=2.5.0" },
+    { name = "lib3mf", marker = "(platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32') or sys_platform == 'darwin'", specifier = ">=2.5.0" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "numpy-stl", specifier = ">=4.1.3" },
     { name = "packaging", specifier = ">=23.0" },
-    { name = "pymcubes", specifier = ">=0.1.6" },
     { name = "pyside6", specifier = ">=6.12.0" },
     { name = "pyvista", specifier = ">=0.49.1" },
     { name = "pyvistaqt", specifier = ">=0.13.1" },
