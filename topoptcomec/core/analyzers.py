@@ -119,26 +119,17 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     """
     Heuristic check whether the mechanism achieves useful movement.
 
-    For compliant mechanisms (with output forces) the routine compares the
-    total input travel to the achieved output travel and expects a favourable
-    ratio. For rigid mechanisms (no output forces) it checks that input
-    displacements remain acceptably small. The thresholds are heuristic and
-    chosen to provide a quick indicator.
+    Both indicators are unit-free so that the result does not depend on the
+    chosen force or stiffness units:
 
-    For compliant mechanisms, this compares total input travel to useful output
-    travel:
+    - Compliant mechanisms (with output forces): the *gain* is the sum of the
+      positive output travel divided by the sum of the input travel. A gain of
+      at least 10% means the outputs actually move in the requested direction.
+    - Rigid structures (no output force): the largest nodal displacement must
+      stay below 1% of the largest domain dimension, i.e. the structure is
+      stiff compared with its size.
 
-    .. math::
-
-        \\eta_u = \\frac{\\sum_i |u_{in,i}|}
-        {\\max(\\sum_o u_{out,o}^{+}, \\epsilon)}
-
-    For rigid structures, input compliance is approximated by normalized input
-    displacement:
-
-    .. math::
-
-        \\eta_r = \\sum_i \\frac{|u_{in,i}|}{\\max(|f_i|, \\epsilon)}
+    These are quick quality indicators, not engineering certification.
 
     Parameters
     ----------
@@ -167,8 +158,7 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
     loads_out = preset_format.parse_loads(
         Forces, "fox", "foy", "foz", "fodir", "fonorm", grid.is_3d
     )
-    nbInputForces: int = len(loads_in)
-    if nbInputForces == 0:
+    if not loads_in:
         return False
 
     def get_disp(load) -> float:
@@ -176,33 +166,15 @@ def _efficient(u: FloatArray, Dimensions: dict, Forces: dict) -> bool:
         dof = grid.dofs_per_node * grid.node_index(load.x, load.y, load.z) + load.axis
         return float(u[dof]) * load.sign
 
-    effectiveness: float = 0.0
-
     if loads_out:
-        # Compliant mechanism: compare total input travel to total output geometric travel
-        total_u_in: float = 0.0
-        total_u_out: float = 0.0
+        total_u_in: float = sum(abs(get_disp(load)) for load in loads_in)
+        total_u_out: float = sum(max(0.0, get_disp(load)) for load in loads_out)
+        return bool(total_u_out > 0.0 and total_u_out / max(total_u_in, 1e-12) >= 0.1)
 
-        nbOutputForces: int = len(loads_out)
-
-        for load in loads_in:
-            total_u_in += abs(get_disp(load))
-
-        for load in loads_out:
-            u_out_val: float = get_disp(load)
-            # Only reward positive movement in the intended direction
-            if u_out_val > 0:
-                total_u_out += u_out_val
-
-        effectiveness = total_u_in / max(total_u_out, 1e-9)
-        return bool(effectiveness < 1 * nbOutputForces)
-    else:
-        # Rigid mechanism: displacement at input location must remain small
-        for load in loads_in:
-            u_in: float = get_disp(load)
-            effectiveness += abs(u_in) / max(load.magnitude, 1e-9)
-
-        return bool(effectiveness < 500 * nbInputForces)
+    # Rigid mechanism: displacement must remain small compared with the size.
+    max_dim: int = max(nelx, nely, max(0, nelz))
+    max_u: float = max(abs(get_disp(load)) for load in loads_in)
+    return bool(max_u <= 0.01 * max_dim)
 
 
 def analyze(
