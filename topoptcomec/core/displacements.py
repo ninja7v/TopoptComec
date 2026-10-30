@@ -336,10 +336,22 @@ def _warp_density(
         Sigmoid filter parameters.
     """
     for i in range(n_mat):
-        # Interpolate density from old points to new (warped) points
-        xPhys[i] = np.nan_to_num(
-            griddata(points, xPhys[i], points_interp, method="linear"), nan=0.0
+        # Interpolate density from old points to new (warped) points. Points
+        # that fall outside the convex hull of the displaced centres are
+        # filled with the nearest neighbour value instead of zero, so the
+        # simulation does not lose material at every step.
+        linear = np.asarray(
+            griddata(points, xPhys[i], points_interp, method="linear"),
+            dtype=np.float64,
         )
+        invalid = ~np.isfinite(linear)
+        if np.any(invalid):
+            nearest = np.asarray(
+                griddata(points, xPhys[i], points_interp, method="nearest"),
+                dtype=np.float64,
+            )
+            linear[invalid] = nearest[invalid]
+        xPhys[i] = linear
 
         # Threshold & Normalize to prevent material spread (Sigmoid filter)
         xPhys[i] = nominator / (1 + np.exp(-k * (xPhys[i] - 0.5))) + c_val
@@ -453,6 +465,16 @@ def run_iterative_displacement(
     pd: dict = params["Displacement"]
     delta_disp: float = pd["disp_factor"] / max(1, pd["disp_iterations"])
 
+    def _density_for_fem(xp: FloatArray) -> FloatArray:
+        """Density in the shape expected by the FEM.
+
+        A single-material field may be used with a multi-material preset; in
+        that case the same field is applied to every material slice.
+        """
+        if xp.ndim > 1 or fem.nb_mat == 1:
+            return xp
+        return np.tile(xp, (fem.nb_mat, 1))
+
     # Points for interpolation (Eulerian grid: element centers)
     points_interp: FloatArray = large.element_centers()
 
@@ -473,7 +495,7 @@ def run_iterative_displacement(
     # Iterative Loop
     for it in range(pd["disp_iterations"]):
         # Solve FEM to get the deformation
-        ui, _ = fem.solve(xPhys if is_multi else xPhys[0])
+        ui, _ = fem.solve(_density_for_fem(xPhys if is_multi else xPhys[0]))
 
         # Single combined-load solve -> ui is already 1D (ndof,).
         u_curr: FloatArray = ui
