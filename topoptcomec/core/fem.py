@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 
 import numpy as np
 import numpy.typing as npt
 from scipy.sparse import coo_matrix, csc_matrix, eye
-from scipy.sparse.linalg import LinearOperator, cg, spsolve
+from scipy.sparse.linalg import LinearOperator, cg, splu
 
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Region, Support
@@ -24,6 +25,15 @@ SOLVERS = ("Direct", "Iterative", "Auto")
 FILTERS = ("Sensitivity", "Density", "None")
 #: Relative minimum stiffness (E_min = MIN_STIFFNESS_RATIO * E_max).
 MIN_STIFFNESS_RATIO = 1e-9
+#: Auto solver: estimated fill-in budget of the direct factorisation
+#: (``n_free * bandwidth``). Above it the iterative solver is used, which keeps
+#: memory bounded for large meshes.
+AUTO_DIRECT_WORK_2D = 2e7
+AUTO_DIRECT_WORK_3D = 2e6
+#: Diagonal regularisation applied when the model has no supports at all.
+#: It pins the rigid-body modes without changing the strain of a
+#: self-equilibrated load case (the load vector is orthogonal to them).
+RIGID_BODY_REGULARISATION = 1e-12
 
 
 class FEM:
@@ -100,14 +110,23 @@ class FEM:
         # physical unit of E (C4: E_min proportional to E_max).
         self.E_min: FloatArray = MIN_STIFFNESS_RATIO * self.E_max
         self.nu: FloatArray = np.atleast_1d(np.asarray(nu, dtype=np.float64))
+        self._validate_materials()
         self.penal: float = float(penal)
         self.solver_type: str = solver
         self.filter_type: str = filter_type
         self.filter_radius: float = float(filter_radius)
 
-        # Pre-compute Constant Matrices (KE, DOF Maps, Filter)
-        self.KE: FloatArray = self._get_lk_stiffness()
-        self._KE_flat: FloatArray = self.KE.ravel(order="F")  # reused at every assembly
+        # Pre-compute Constant Matrices (KE, DOF Maps, Filter).
+        # One element matrix per material: the Poisson ratio may differ
+        # between materials, so a single shared matrix is not physical.
+        self.KE_mats: FloatArray = np.stack(
+            [self._get_lk_stiffness(float(nu_m)) for nu_m in self.nu]
+        )
+        #: Element stiffness of the first material (historic attribute).
+        self.KE: FloatArray = self.KE_mats[0]
+        self._KE_flat_mats: FloatArray = self.KE_mats.reshape(
+            self.nb_mat, -1
+        )  # reused at every assembly
         self.edofMat, self.iK, self.jK = self._build_dof_map()
         self.H, self.Hs = self._build_filter()
 
@@ -122,6 +141,38 @@ class FEM:
         self.forces_o: FloatArray | None = None
         self._spring_dofs: IntArray = np.array([], dtype=np.int64)
         self._spring_vals: FloatArray = np.array([], dtype=np.float64)
+        self._no_support_warned: bool = False
+
+    def _validate_materials(self) -> None:
+        """Reject material constants that would produce an invalid system."""
+        if self.nu.size != self.nb_mat:
+            raise ValueError(
+                f"E and nu must have the same length (got {self.nb_mat} and "
+                f"{self.nu.size})."
+            )
+        if not np.all(np.isfinite(self.E_max)) or np.any(self.E_max <= 0.0):
+            raise ValueError("Young's modulus must be finite and strictly positive.")
+        if (
+            not np.all(np.isfinite(self.nu))
+            or np.any(self.nu < 0.0)
+            or np.any(self.nu >= 0.5)
+        ):
+            raise ValueError(
+                "Poisson's ratio must satisfy 0 <= nu < 0.5 for every material."
+            )
+
+    def _validate_node(self, x: int, y: int, z: int, what: str) -> None:
+        """Reject coordinates that do not address a node of the grid."""
+        if not (0 <= x <= self.nelx and 0 <= y <= self.nely):
+            raise ValueError(
+                f"{what} at ({x}, {y}, {z}) is outside the grid "
+                f"[0, {self.nelx}] x [0, {self.nely}]."
+            )
+        if self.is_3d and not 0 <= z <= self.nelz:
+            raise ValueError(
+                f"{what} at ({x}, {y}, {z}) is outside the grid "
+                f"[0, {self.nelx}] x [0, {self.nely}] x [0, {self.nelz}]."
+            )
 
     def setup_boundary_conditions(
         self,
@@ -145,6 +196,13 @@ class FEM:
         """
         self.loads_in = list(loads_in)
         self.loads_out = list(loads_out)
+        for load in self.loads_in + self.loads_out:
+            self._validate_node(load.x, load.y, load.z, "Force")
+            if not 0 <= load.axis < self.dim_mul:
+                raise ValueError(
+                    f"Force axis {load.axis} is invalid for a "
+                    f"{'3D' if self.is_3d else '2D'} problem."
+                )
         self.forces_i, self.in_dofs = self._assemble_loads(self.loads_in)
         self.forces_o, self.out_dofs = self._assemble_loads(self.loads_out)
         if self.loads_out:
@@ -172,6 +230,7 @@ class FEM:
 
         fixed: list[int] = []
         for sup in supports:
+            self._validate_node(sup.x, sup.y, sup.z, "Support")
             nodes_to_fix = [self.grid.node_index(sup.x, sup.y, sup.z)]
             if sup.radius > 0:
                 nodes_to_fix.extend(self._nodes_within_radius(sup))
@@ -188,6 +247,95 @@ class FEM:
         self.free_dofs = np.setdiff1d(
             np.arange(self.ndof, dtype=np.int64), self.fixed_dofs
         )
+        if (
+            self.fixed_dofs.size == 0
+            and (self.loads_in or self.loads_out)
+            and not self._no_support_warned
+        ):
+            self._no_support_warned = True
+            warnings.warn(
+                "No support is defined: the model has rigid-body modes. The "
+                "drift is pinned by a tiny diagonal regularisation, but the "
+                "load case is only meaningful when the applied forces are "
+                "self-equilibrated.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+    def region_element_mask(self, region: Region) -> npt.NDArray[np.bool_]:
+        """
+        Boolean element mask covered by a region.
+
+        Uses the same coverage convention as :meth:`apply_regions`: element
+        indices ``[int(c - r), int(c + r))`` per axis, and spheres require the
+        element coordinate to lie within ``r`` of the centre.
+
+        Parameters
+        ----------
+        region : Region
+            Geometric region.
+
+        Returns
+        -------
+        npt.NDArray[np.bool_]
+            Mask of shape ``(nel,)`` in flat element ordering.
+        """
+        r = float(region.radius)
+        z_lo = max(0, int(region.z - r)) if self.is_3d else 0
+        z_hi = min(self.nelz, int(region.z + r)) if self.is_3d else 1
+        x_lo, x_hi = max(0, int(region.x - r)), min(self.nelx, int(region.x + r))
+        y_lo, y_hi = max(0, int(region.y - r)), min(self.nely, int(region.y + r))
+        mask = np.zeros(self.nel, dtype=bool)
+        if x_hi <= x_lo or y_hi <= y_lo or z_hi <= z_lo:
+            return mask
+        ez, ex, ey = np.meshgrid(
+            np.arange(z_lo, z_hi),
+            np.arange(x_lo, x_hi),
+            np.arange(y_lo, y_hi),
+            indexing="ij",
+        )
+        if region.shape == "sphere":
+            dist_sq = (
+                (ex - region.x) ** 2
+                + (ey - region.y) ** 2
+                + ((ez - region.z) ** 2 if self.is_3d else 0)
+            )
+            inside = dist_sq <= r**2
+            ez, ex, ey = ez[inside], ex[inside], ey[inside]
+        idx = ez.ravel() * (self.nelx * self.nely) + ex.ravel() * self.nely + ey.ravel()
+        mask[idx] = True
+        return mask
+
+    def region_masks(
+        self, regions: Sequence[Region], mat_idx: int = 0
+    ) -> tuple[npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+        """
+        Passive-solid and passive-void masks for one material slice.
+
+        Parameters
+        ----------
+        regions : Sequence[Region]
+            Geometric constraints.
+        mat_idx : int
+            Material slice being processed (0-based).
+
+        Returns
+        -------
+        tuple of masks
+            ``(solid, void)`` boolean arrays of shape ``(nel,)``. Both are
+            ``False`` where the material is designable. A void region always
+            wins over a solid one when the two overlap.
+        """
+        solid = np.zeros(self.nel, dtype=bool)
+        void = np.zeros(self.nel, dtype=bool)
+        for region in regions:
+            mask = self.region_element_mask(region)
+            if region.material == mat_idx:
+                solid |= mask
+            else:
+                void |= mask
+        solid &= ~void
+        return solid, void
 
     def _nodes_within_radius(self, sup: Support) -> list[int]:
         """All node indices within ``sup.radius`` of the support center."""
@@ -270,37 +418,9 @@ class FEM:
             Modified density field with regions applied.
         """
         xPhys = x.copy()
-        for region in regions:
-            val = 1.0 if region.material == mat_idx else 1e-6
-            r = float(region.radius)
-            z_range = (
-                range(
-                    max(0, int(region.z - r)),
-                    min(self.nelz, int(region.z + r)),
-                )
-                if self.is_3d
-                else range(1)
-            )
-            x_range = range(
-                max(0, int(region.x - r)),
-                min(self.nelx, int(region.x + r)),
-            )
-            y_range = range(
-                max(0, int(region.y - r)),
-                min(self.nely, int(region.y + r)),
-            )
-            for ez in z_range:
-                for ex in x_range:
-                    for ey in y_range:
-                        if region.shape == "sphere":
-                            dist_sq = (
-                                (ex - region.x) ** 2
-                                + (ey - region.y) ** 2
-                                + ((ez - region.z) ** 2 if self.is_3d else 0)
-                            )
-                            if dist_sq > r**2:
-                                continue
-                        xPhys[self.grid.element_index(ex, ey, ez)] = val
+        solid, void = self.region_masks(regions, mat_idx)
+        xPhys[solid] = 1.0
+        xPhys[void] = 1e-6
         return xPhys
 
     def solve(self, xPhys: FloatArray) -> tuple[FloatArray, FloatArray]:
@@ -332,8 +452,10 @@ class FEM:
         Tuple[FloatArray, FloatArray]
             (ui, uo) - Displacement arrays for input and output loads.
         """
-        E_eff = self._effective_stiffness(xPhys)
-        sK = self._KE_flat[:, None] * E_eff
+        E_eff = self._material_stiffness(xPhys)  # (nb_mat, nel)
+        sK = np.zeros((self.KE.size, self.nel), dtype=np.float64)
+        for m in range(self.nb_mat):
+            sK += self._KE_flat_mats[m][:, None] * E_eff[m]
 
         # Element triplets + artificial spring triplets in a single assembly.
         K = coo_matrix(
@@ -347,23 +469,65 @@ class FEM:
             shape=(self.ndof, self.ndof),
         ).tocsc()
 
-        # Solving
+        # Solving: one factorisation / Krylov solve for all load cases.
         K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
+        if self.fixed_dofs.size == 0 and K_free.shape[0] > 0:
+            # No support at all: pin the rigid-body modes so the factorisation
+            # is non-singular. The load vector is orthogonal to them for a
+            # self-equilibrated case, so the strain is unchanged.
+            eps = RIGID_BODY_REGULARISATION * float(
+                np.max(np.abs(K_free.diagonal())) or 1.0
+            )
+            K_free = K_free + eps * eye(K_free.shape[0], format="csc")
+
         ui = np.zeros(self.ndof, dtype=np.float64)
         uo = np.zeros(self.ndof, dtype=np.float64)
-        self._solve_linear_system(K_free, self.forces_i, ui)
-        self._solve_linear_system(K_free, self.forces_o, uo)
+        rhs = self._load_case_matrix()
+        if rhs.shape[1] > 0:
+            solutions = self._solve_all(K_free, rhs)
+            ui[self.free_dofs] = solutions[:, 0]
+            if solutions.shape[1] > 1:
+                uo[self.free_dofs] = solutions[:, 1]
 
         return ui, uo
 
-    def _effective_stiffness(self, xPhys: FloatArray) -> FloatArray:
-        """SIMP effective stiffness per element, shape (nel,)."""
-        xP = np.atleast_2d(np.asarray(xPhys, dtype=np.float64))
-        return (
-            self.E_min[:, None] + xP**self.penal * (self.E_max - self.E_min)[:, None]
-        ).sum(axis=0)
+    def _load_case_matrix(self) -> FloatArray:
+        """Simultaneous input load and (optional) adjoint output load.
 
-    def compute_ce(self, ui: FloatArray, uo: FloatArray) -> FloatArray:
+        Returns
+        -------
+        FloatArray
+            Matrix of shape ``(n_free, k)`` with the free-DOF forces. The first
+            column is the physical input load; the second column, when present,
+            is the normalized adjoint (output) load.
+        """
+        columns: list[FloatArray] = []
+        for forces in (self.forces_i, self.forces_o):
+            if forces is None or forces.shape[1] == 0:
+                continue
+            columns.append(forces[self.free_dofs].sum(axis=1))
+        if not columns:
+            return np.zeros((self.free_dofs.size, 0), dtype=np.float64)
+        return np.column_stack(columns)
+
+    def _material_stiffness(self, xPhys: FloatArray) -> FloatArray:
+        """
+        SIMP effective stiffness per element and material, shape (nb_mat, nel).
+        """
+        xP = np.atleast_2d(np.asarray(xPhys, dtype=np.float64))
+        if xP.shape[0] != self.nb_mat:
+            raise ValueError(
+                f"Expected {self.nb_mat} density slice(s), got {xP.shape[0]}."
+            )
+        return self.E_min[:, None] + xP**self.penal * (self.E_max - self.E_min)[:, None]
+
+    def _effective_stiffness(self, xPhys: FloatArray) -> FloatArray:
+        """Summed SIMP effective stiffness per element, shape (nel,)."""
+        return self._material_stiffness(xPhys).sum(axis=0)
+
+    def compute_ce(
+        self, ui: FloatArray, uo: FloatArray, mat_idx: int = 0
+    ) -> FloatArray:
         """
         Compute element-wise energy terms used by the objective sensitivities.
 
@@ -373,7 +537,7 @@ class FEM:
 
             c_e =
             (\\mathbf{u}_{e}^{in})^T
-            \\mathbf{K}_e^0
+            \\mathbf{K}_{e,m}^0
             \\mathbf{u}_{e}^{in}
 
         For compliant mechanisms:
@@ -382,12 +546,13 @@ class FEM:
 
             c_e =
             (\\mathbf{u}_{e}^{in})^T
-            \\mathbf{K}_e^0
+            \\mathbf{K}_{e,m}^0
             \\mathbf{u}_{e}^{out}
 
-        In both expressions :math:`\\mathbf{K}_e^0` is the normalized element
-        stiffness matrix. The SIMP stiffness factor is applied later when the
-        objective or sensitivity is assembled.
+        In both expressions :math:`\\mathbf{K}_{e,m}^0` is the normalized
+        element stiffness matrix of material ``mat_idx`` (it depends on that
+        material's Poisson ratio). The SIMP stiffness factor is applied later
+        when the objective or sensitivity is assembled.
 
         Parameters
         ----------
@@ -395,23 +560,22 @@ class FEM:
             Displacements due to the simultaneous input loads, shape (ndof,).
         uo : FloatArray
             Displacements due to the normalized output adjoint, shape (ndof,).
+        mat_idx : int
+            Material whose element stiffness is used.
 
         Returns
         -------
         FloatArray
             Element energy values, shape (nel,).
         """
-        ce_total = np.zeros(self.nel, dtype=np.float64)
-
+        KE = self.KE_mats[mat_idx]
         if not self.loads_out:  # Rigid structure (minimize compliance)
             Ue = ui[self.edofMat]
-            ce_total += np.sum((Ue @ self.KE) * Ue, axis=1)
-        else:  # Compliant mechanism
-            Ue_in = ui[self.edofMat]
-            Ue_out = uo[self.edofMat]
-            ce_total += np.sum((Ue_in @ self.KE) * Ue_out, axis=1)
-
-        return ce_total
+            return np.sum((Ue @ KE) * Ue, axis=1)
+        # Compliant mechanism
+        Ue_in = ui[self.edofMat]
+        Ue_out = uo[self.edofMat]
+        return np.sum((Ue_in @ KE) * Ue_out, axis=1)
 
     def compute_sensitivities(
         self,
@@ -457,7 +621,7 @@ class FEM:
         Tuple[FloatArray, FloatArray]
             (dc, dv) - Objective sensitivity and volume sensitivity.
         """
-        ce_total = self.compute_ce(ui, uo)
+        ce_total = self.compute_ce(ui, uo, mat_idx)
         dE = self.E_max[mat_idx] - self.E_min[mat_idx]
         scale = self.penal * (xPhys ** (self.penal - 1)) * dE
 
@@ -520,6 +684,112 @@ class FEM:
 
     # --- Internal Helper Methods ---
 
+    def _use_direct_solver(self, size: int) -> bool:
+        """Whether the direct factorisation should be used for this system.
+
+        Sparse direct factorisation wins as soon as two load cases share one
+        factorisation, and Q4 (2D) meshes have a small bandwidth. The decision
+        is based on the estimated fill-in ``size * bandwidth`` so that large
+        meshes do not exhaust memory; 3D factors fill in much faster than 2D
+        ones, hence the smaller budget.
+
+        Parameters
+        ----------
+        size : int
+            Number of free degrees of freedom.
+
+        Returns
+        -------
+        bool
+            ``True`` to use the direct solver.
+        """
+        if self.solver_type == "Direct":
+            return True
+        if self.solver_type == "Iterative":
+            return False
+        bandwidth = 2 * (self.nely + 1)
+        limit = AUTO_DIRECT_WORK_2D
+        if self.is_3d:
+            bandwidth *= self.nelx + 1
+            limit = AUTO_DIRECT_WORK_3D
+        return float(size) * float(bandwidth) <= limit
+
+    def _solve_all(self, K_free: csc_matrix, F: FloatArray) -> FloatArray:
+        """Solve ``K_free x = F`` for every column of ``F``.
+
+        Parameters
+        ----------
+        K_free : csc_matrix
+            Reduced stiffness matrix (free DOFs only).
+        F : FloatArray
+            Right-hand sides, shape ``(n_free, n_cases)``.
+
+        Returns
+        -------
+        FloatArray
+            Solutions, shape ``(n_free, n_cases)``.
+
+        Raises
+        ------
+        RuntimeError
+            If the iterative solver does not converge in ``Iterative`` mode.
+        """
+        size, n_cases = F.shape
+        if n_cases == 0:
+            return np.zeros((size, 0), dtype=np.float64)
+
+        if self._use_direct_solver(size):
+            try:
+                factors = splu(K_free.tocsc())
+                return np.asarray(factors.solve(F), dtype=np.float64).reshape(
+                    size, n_cases
+                )
+            except RuntimeError as error:  # singular factorisation
+                if self.solver_type == "Direct":
+                    raise RuntimeError(
+                        f"Direct solver failed (singular system): {error}"
+                    ) from error
+                warnings.warn(
+                    f"Direct solver failed ({error}); falling back to the "
+                    "iterative solver.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+
+        # Iterative solver (CG with a Jacobi preconditioner).
+        diagonal = K_free.diagonal()
+        if np.any(diagonal == 0):
+            diagonal = np.where(diagonal == 0, 1.0, diagonal)
+        D_inv = 1.0 / diagonal
+        M = LinearOperator(K_free.shape, lambda x: D_inv * x)
+        solutions = np.zeros((size, n_cases), dtype=np.float64)
+        for column in range(n_cases):
+            u_sol, info = cg(
+                K_free,
+                F[:, column],
+                M=M,
+                rtol=1e-10,
+                maxiter=max(1000, size),
+            )
+            if info != 0:
+                message = (
+                    f"Iterative solver did not converge (info={info}) after "
+                    f"{size} iterations."
+                )
+                if self.solver_type == "Iterative":
+                    raise RuntimeError(message)
+                warnings.warn(
+                    f"{message} Falling back to the direct solver.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                factors = splu(K_free.tocsc())
+                return np.asarray(factors.solve(F), dtype=np.float64).reshape(
+                    size, n_cases
+                )
+            solutions[:, column] = u_sol
+        return solutions
+
     def _solve_linear_system(
         self,
         K_free: csc_matrix,
@@ -527,14 +797,7 @@ class FEM:
         U_full: FloatArray,
     ) -> None:
         """
-        Solve the linear system Ku = F using direct or iterative methods.
-
-        Boundary conditions reduce the full system to free DOFs:
-
-        .. math::
-
-            \\mathbf{K}_{ff}\\mathbf{U}_f = \\mathbf{F}_f,
-            \\qquad \\mathbf{U}_c = \\mathbf{0}
+        Solve the reduced system and write the result into ``U_full``.
 
         Parameters
         ----------
@@ -548,35 +811,8 @@ class FEM:
         """
         if F is None or F.shape[1] == 0:
             return
-
-        use_direct = self.solver_type == "Direct" or (
-            self.solver_type == "Auto" and K_free.shape[0] < 10000
-        )
-
-        # Assemble simultaneous force components into one physical load case.
-        F_sum = F[self.free_dofs].sum(axis=1)
-        if use_direct:
-            sol = spsolve(K_free, F_sum)
-            U_full[self.free_dofs] = sol
-        else:
-            # Iterative Solver (CG with Jacobi Preconditioner)
-            D_inv = 1.0 / K_free.diagonal()
-            M = LinearOperator(K_free.shape, lambda x: D_inv * x)
-            u_sol, info = cg(
-                K_free,
-                F_sum,
-                M=M,
-                rtol=1e-8,
-                maxiter=K_free.shape[0],
-            )
-            if info != 0 and self.solver_type == "Auto":
-                try:
-                    U_full[self.free_dofs] = spsolve(K_free, F_sum)
-                except Exception as e:  # noqa: BLE001
-                    print(f"Direct solver failed: {e}. Using partial CG solution.")
-                    U_full[self.free_dofs] = u_sol
-            else:
-                U_full[self.free_dofs] = u_sol
+        F_sum = F[self.free_dofs].sum(axis=1)[:, np.newaxis]
+        U_full[self.free_dofs] = self._solve_all(K_free, F_sum)[:, 0]
 
     def _apply_filter(
         self, x: FloatArray, dc: FloatArray, dv: FloatArray
@@ -645,7 +881,7 @@ class FEM:
             return (self.H @ x).ravel() / np.asarray(self.Hs).ravel()
         return x
 
-    def _get_lk_stiffness(self) -> FloatArray:
+    def _get_lk_stiffness(self, nu: float | None = None) -> FloatArray:
         """
         Compute the element stiffness matrix for Q4 (2D) or H8 (3D) elements.
 
@@ -654,12 +890,17 @@ class FEM:
             \\mathbf{K}_e^0 =
             \\int_{\\Omega_e} \\mathbf{B}^T\\mathbf{D}\\mathbf{B}\\,d\\Omega
 
+        Parameters
+        ----------
+        nu : float, optional
+            Poisson's ratio of the material. Defaults to the first material.
+
         Returns
         -------
         FloatArray
             Element stiffness matrix, shape (8, 8) for 2D or (24, 24) for 3D.
         """
-        E, nu = 1.0, float(self.nu[0])  # Normalized E for KE
+        E, nu = 1.0, float(self.nu[0] if nu is None else nu)  # Normalized E
         if self.is_3d:
             A = np.array(
                 [

@@ -255,3 +255,72 @@ def test_structured_grid_vtk_cell_order():
     np.testing.assert_array_equal(grid.to_vtk_cell_order(values), expected)
     rgb = np.column_stack((values, values + grid.nel, values + 2 * grid.nel))
     np.testing.assert_array_equal(grid.to_vtk_cell_order(rgb), rgb[expected])
+
+
+# --- Regressions for material handling and input validation -----------------
+
+
+def test_per_material_poisson_ratio_affects_response():
+    """A material's own Poisson ratio must be used in the element matrix."""
+    grid = StructuredGrid(4, 3, 0)
+    loads = [Load(x=4, y=1, axis=1, sign=1, magnitude=1.0)]
+    supports = [Support(x=0, y=j, fix_x=True, fix_y=True) for j in range(4)]
+    rho = np.full((2, grid.nel), 0.5)
+
+    objectives = []
+    for nu_pair in ((0.2, 0.45), (0.45, 0.2)):
+        fem = FEM(grid, E=[1.0, 1.0], nu=list(nu_pair), filter_type="None")
+        fem.setup_boundary_conditions(loads, [], supports)
+        ui, uo = fem.solve(rho)
+        objectives.append(fem.compute_objective(rho, ui, uo))
+
+    # Swapping the ratios along with the density slices is the same physical
+    # problem: the response must not change.
+    fem = FEM(grid, E=[1.0, 1.0], nu=[0.2, 0.45], filter_type="None")
+    fem.setup_boundary_conditions(loads, [], supports)
+    ui_a, _ = fem.solve(rho)
+    fem_b = FEM(grid, E=[1.0, 1.0], nu=[0.45, 0.2], filter_type="None")
+    fem_b.setup_boundary_conditions(loads, [], supports)
+    ui_b, _ = fem_b.solve(rho[::-1])
+    np.testing.assert_allclose(ui_a, ui_b, rtol=0, atol=1e-12)
+
+    # Different ratios must actually change the solution.
+    fem_c = FEM(grid, E=[1.0, 1.0], nu=[0.3, 0.3], filter_type="None")
+    fem_c.setup_boundary_conditions(loads, [], supports)
+    ui_c, _ = fem_c.solve(rho)
+    assert not np.allclose(ui_a, ui_c)
+
+
+def test_out_of_range_load_is_rejected(fem_2d: FEM):
+    """A force outside the grid must raise instead of wrapping to another node."""
+    with pytest.raises(ValueError, match="outside the grid"):
+        fem_2d.setup_boundary_conditions([Load(x=0, y=fem_2d.nely + 1)], [], [])
+
+
+def test_out_of_range_support_is_rejected(fem_2d: FEM):
+    """A support outside the grid must raise."""
+    with pytest.raises(ValueError, match="outside the grid"):
+        fem_2d.setup_boundary_conditions([], [], [Support(x=fem_2d.nelx + 1, y=0)])
+
+
+def test_invalid_materials_are_rejected():
+    """Non-physical material constants must raise at construction."""
+    grid = StructuredGrid(2, 2, 0)
+    with pytest.raises(ValueError, match="Young's modulus"):
+        FEM(grid, E=[-1.0], nu=[0.3])
+    with pytest.raises(ValueError, match="Poisson"):
+        FEM(grid, E=[1.0], nu=[0.5])
+    with pytest.raises(ValueError, match="same length"):
+        FEM(grid, E=[1.0, 2.0], nu=[0.3])
+
+
+def test_region_masks_match_apply_regions(fem_2d: FEM):
+    """The vectorised region mask must cover exactly the forced elements."""
+    regions = [
+        Region(shape="box", x=1, y=1, radius=1, material=0),
+        Region(shape="sphere", x=2, y=0, radius=1, material=-1),
+    ]
+    filled = fem_2d.apply_regions(np.zeros(fem_2d.nel), regions, mat_idx=0)
+    solid, void = fem_2d.region_masks(regions, mat_idx=0)
+    np.testing.assert_array_equal(np.flatnonzero(filled == 1.0), np.flatnonzero(solid))
+    np.testing.assert_array_equal(np.flatnonzero(filled == 1e-6), np.flatnonzero(void))
