@@ -305,3 +305,13 @@ def test_from_current_result_disabling_and_scaling(qt_app):
     assert window.last_successful_xPhys is None
     assert not combo.model().item(3).isEnabled()
     window.close()
+
+
+def test_rescale_densities_binary_field_reaches_target():
+    """A thresholded field must be able to change its volume fraction."""
+    binary = np.zeros(100)
+    binary[:28] = 1.0
+    result = initializers._rescale_densities(binary, 0.2)
+    assert result.mean() == pytest.approx(0.2, abs=1e-3)
+    assert result.min() >= 0.0 and result.max() <= 1.0
+    assert result.sum() < binary.sum()

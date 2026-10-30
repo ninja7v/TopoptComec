@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from topoptcomec.core.model import AXIS_X, AXIS_Y, AXIS_Z, Load, Region, Support
 
 #: Direction glyphs meaning "negative direction" per axis.
@@ -47,6 +49,10 @@ def parse_loads(
     fdir = forces.get(kdir, [])
     fnorm = forces.get(knorm, [])
 
+    def _at(values: Sequence, index: int, default: float = 0.0) -> float:
+        """Entry ``index`` of ``values``, or ``default`` when absent."""
+        return values[index] if index < len(values) else default
+
     loads: list[Load] = []
     for i, direction in enumerate(fdir):
         if direction == INACTIVE:
@@ -62,12 +68,12 @@ def parse_loads(
         sign = -1 if any(g in direction for g in _NEGATIVE_GLYPHS) else 1
         loads.append(
             Load(
-                x=int(fx[i]),
-                y=int(fy[i]),
-                z=int(fz[i]) if is_3d else 0,
+                x=int(_at(fx, i)),
+                y=int(_at(fy, i)),
+                z=int(_at(fz, i)) if is_3d else 0,
                 axis=axis,
                 sign=sign,
-                magnitude=float(fnorm[i]),
+                magnitude=float(_at(fnorm, i, 1.0)),
             )
         )
     return loads
@@ -101,6 +107,30 @@ def parse_supports(supports: dict | None, is_3d: bool) -> list[Support]:
     return result
 
 
+def region_material_index(state: str) -> int | None:
+    """
+    0-based material index of a region state, or None when not a material.
+
+    ``"Material N"`` maps to ``N - 1`` for any ``N >= 1``; ``"Void"`` and
+    unknown strings map to None.
+    """
+    prefix = "Material "
+    if not isinstance(state, str) or not state.startswith(prefix):
+        return None
+    try:
+        number = int(state[len(prefix) :])
+    except ValueError:
+        return None
+    return number - 1 if number >= 1 else None
+
+
+def _region_material(states: Sequence, index: int) -> int:
+    """Material index of region ``index`` (``-1`` for void or missing state)."""
+    state = states[index] if index < len(states) else "Void"
+    material = region_material_index(state)
+    return -1 if material is None else material
+
+
 def parse_regions(regions: dict | None) -> list[Region]:
     """Convert the Regions dictionary to a list of Regions."""
     if not regions:
@@ -123,11 +153,7 @@ def parse_regions(regions: dict | None) -> list[Region]:
                 y=float(ry[i]),
                 z=float(rz[i]) if i < len(rz) else 0.0,
                 radius=float(rradius[i]),
-                material=0
-                if rstate[i] == "Material 1"
-                else 1
-                if rstate[i] == "Material 2"
-                else -1,
+                material=_region_material(rstate, i),
             )
         )
     return result

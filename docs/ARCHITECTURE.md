@@ -90,7 +90,11 @@ The GUI layer lives in `topoptcomec/gui/`.
 - The numerical core only consumes typed `Load`/`Support`/`Region` objects;
   preset dictionaries (and their UI glyphs) are translated once, in
   `preset_format.py`.
-- GUI and CLI share the solver, exporters, parameter validation, and time
-  estimation, so changes in shared logic affect both.
+- GUI and CLI share the solver, exporters, parameter validation, time
+  estimation, and the result cache, so changes in shared logic affect both.
+- Regions are passive: their elements are excluded from the design variables
+  and from the volume budget.
+- Generated output (`results/`, user presets under `~/.topoptcomec/`) never
+  touches the source checkout, so the git updater stays usable.
 - Multi-material support exists in the core, but not every surrounding
   workflow is equally mature.

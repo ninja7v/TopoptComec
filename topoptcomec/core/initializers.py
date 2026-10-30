@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import IntEnum
 
 import numpy as np
@@ -21,11 +22,29 @@ class InitType(IntEnum):
     CURRENT = 3
 
 
+def _bisect_alpha(
+    mean_fn: Callable[[float], float],
+    lo: float,
+    hi: float,
+    target: float,
+    iterations: int = 80,
+) -> float:
+    """Bisect a monotone non-decreasing ``mean_fn`` towards ``target``."""
+    for _ in range(iterations):
+        mid = 0.5 * (lo + hi)
+        if mean_fn(mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
 def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     """
     Rescale densities so their mean equals volfrac while keeping values in [0,1].
 
-    The routine searches for a scalar :math:`\\alpha` in a smooth perturbation:
+    The routine first searches for a scalar :math:`\\alpha` in a smooth
+    perturbation:
 
     .. math::
 
@@ -37,6 +56,17 @@ def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     .. math::
 
         \\frac{1}{n_e}\\sum_e \\rho_e(\\alpha) = V^*
+
+    This map is flat for binary inputs (where :math:`4d(1-d) = 0`), so when it
+    cannot reach the target - typically when restarting from a thresholded
+    result - a monotone shift is used instead:
+
+    .. math::
+
+        \\rho_e(\\alpha) = \\operatorname{clip}(d_e - \\alpha, 0, 1)
+
+    The shift removes the lowest-density elements first, which is the natural
+    way to lower the volume fraction of a binary design.
 
     Parameters
     ----------
@@ -50,28 +80,25 @@ def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     FloatArray
         Rescaled density field with mean approximately equal to volfrac.
     """
+    d = np.clip(np.asarray(d, dtype=np.float64), 0.0, 1.0)
+    target = float(np.clip(volfrac, 0.0, 1.0))
     tol: float = 1e-4
-    current: float = np.mean(d)
-    if abs(current - volfrac) < tol:
-        return np.clip(d, 0, 1)
+    if abs(float(np.mean(d)) - target) < tol:
+        return d
 
-    # Binary search for scaling parameter alpha
-    lo: float = -2.0
-    hi: float = 2.0
-    for _ in range(50):
-        alpha: float = 0.5 * (lo + hi)
-        d_new: FloatArray = (
-            d + (-4 * d**2 + 4 * d) * alpha
-        )  # current + 2nd degree polynomial: p(0) = 0, p(1) = 0, p(0.5) = alpha
-        mean_new: float = np.mean(d_new)
-        if mean_new < volfrac:
-            lo = alpha
-        else:
-            hi = alpha
-        if abs(mean_new - volfrac) < tol:
-            break
+    def quad_mean(alpha: float) -> float:
+        return float(np.mean(np.clip(d + (-4 * d**2 + 4 * d) * alpha, 0.0, 1.0)))
 
-    return np.clip(d_new, 0, 1)
+    lo_q, hi_q = quad_mean(-2.0), quad_mean(2.0)
+    if lo_q - tol <= target <= hi_q + tol:
+        alpha = _bisect_alpha(quad_mean, -2.0, 2.0, target)
+        return np.clip(d + (-4 * d**2 + 4 * d) * alpha, 0.0, 1.0)
+
+    def shift_mean(alpha: float) -> float:
+        return float(np.mean(np.clip(d + alpha, 0.0, 1.0)))
+
+    alpha = _bisect_alpha(shift_mean, -1.0, 1.0, target)
+    return np.clip(d + alpha, 0.0, 1.0)
 
 
 def initialize_material(
@@ -172,8 +199,8 @@ def initialize_material(
             return _rescale_densities(d=raw, volfrac=volfrac)
 
         case InitType.RANDOM:
-            np.random.seed(42)
-            raw: FloatArray = np.random.rand(nel)
+            rng = np.random.default_rng(42)
+            raw: FloatArray = rng.random(nel)
             return _rescale_densities(d=raw, volfrac=volfrac)
 
         case InitType.CURRENT:
@@ -286,8 +313,8 @@ def initialize_materials(
                 pattern = _rescale_densities(d=raw, volfrac=volfrac)
 
         case InitType.RANDOM:
-            np.random.seed(42)
-            raw = np.random.rand(nel)
+            rng = np.random.default_rng(42)
+            raw = rng.random(nel)
             pattern = _rescale_densities(d=raw, volfrac=volfrac)
 
         case InitType.CURRENT:

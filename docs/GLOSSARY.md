@@ -72,7 +72,19 @@ The physical density field used by FEM solves and export. It usually means the c
 
 ### Volume Fraction (`volfrac`)
 
-The target fraction of the design domain that may remain filled with material. Lower values produce lighter structures but can make the optimization problem harder.
+The maximum mean density of the **designable** elements (an upper bound, as
+in the classic SIMP codes). For compliance problems (rigid case) the bound is
+active and the design uses exactly `volfrac`; a compliant mechanism may use
+less material when removing it improves the output displacement. Lower values
+produce lighter structures but can make the optimization problem harder.
+
+Regions are *passive*: elements covered by a region are excluded from the
+design variables and from the volume budget. A "Filled" region therefore adds
+material on top of the budget, and a "Void" region removes it, so the mean
+density of the whole domain can differ from `volfrac`. For multi-material
+runs, the per-material targets are `volfrac * percent / 100` over the
+designable elements (each an upper bound), and the per-element sum over
+materials never exceeds one.
 
 ### Penalization (`penal`)
 
