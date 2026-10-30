@@ -4,7 +4,6 @@
 
 import copy
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +29,7 @@ def _load_presets():
     return presets_data.items()
 
 
+@pytest.mark.filterwarnings("ignore:No support is defined")
 @pytest.mark.parametrize("preset_name, preset_params", _load_presets())
 def test_displacement_with_presets(preset_name: str, preset_params: dict):
     """Unit Test: Runs the 2D/3D optimizer with a given preset."""
@@ -100,12 +100,10 @@ def test_displacement_with_presets(preset_name: str, preset_params: dict):
     assert np.array_equal(zero_factor_result_displaced, result), (
         "Iterative displacement with factor 0 should return the same result"
     )
-    # Compare with reference data if not random initialization.
-    # Regenerate with tests/references/regenerate_references.py after any
-    # intentional numerical change.
-    # Note: We skip this check in CI environments because it failes on GitHub Actions
-    # (maybe due to difference in library versions).
-    if params["Materials"]["init_type"] != 2 and os.getenv("CI") == "false":
+    # Compare with the reference output. Regenerate with
+    # tests/references/regenerate_references.py after any intentional
+    # numerical change, and document the change in the commit message.
+    if params["Materials"]["init_type"] != 2:
         reference_path = (
             REFERENCES_DIR / f"test_displacement_with_presets_{preset_name}.npz"
         )
