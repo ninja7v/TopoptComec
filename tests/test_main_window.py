@@ -425,9 +425,8 @@ def test__on_visibility_toggled(qt_app):
     window.close()
 
 
-@patch("topoptcomec.gui.main_window.np.savez_compressed")
-@patch("topoptcomec.gui.main_window.os.makedirs")
-def test_handle_optimization_results(mock_makedirs, mock_savez, qt_app):
+@patch("topoptcomec.gui.main_window.result_cache.save_density_cache")
+def test_handle_optimization_results(mock_save_cache, qt_app):
     """Test that _handle_optimization_results sets xPhys and enables buttons."""
     import numpy as np
 
@@ -602,7 +601,9 @@ def test_low_density_validation(qt_app):
     import numpy as np
 
     window: MainWindow = MainWindow()
-    assert window.xPhys_valid == (window.xPhys is not None)
+    # At startup the plot shows the initial density field, but no optimization
+    # result has been produced yet, so no result-dependent action is enabled.
+    assert window.xPhys_valid is False
 
     # 1. Test handle results with low density (< 1%)
     nelx: int
@@ -631,7 +632,7 @@ def test_low_density_validation(qt_app):
 
     # 3. Test handle results with valid density (>= 1%)
     mock_xPhys_valid = np.ones(nel)
-    with patch("topoptcomec.gui.main_window.np.savez_compressed"):
+    with patch("topoptcomec.gui.main_window.result_cache.save_density_cache"):
         window._handle_optimization_results((mock_xPhys_valid, mock_u))
 
     assert window.xPhys_valid is True
