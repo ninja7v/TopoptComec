@@ -1030,6 +1030,10 @@ class PlottingMixin:
         if self._interactive_tools_setup:
             return
         self._interactive_tools_setup = True
+        # Headless render windows (CI, off-screen servers) have no
+        # interactor, so picking and key bindings cannot be installed.
+        if self.plotter.iren is None:
+            return
         # Picking: default trigger is the 'p' key (also right-click, but
         # that conflicts with the image-style zoom). 'p' does not.
         self.plotter.enable_mesh_picking(
