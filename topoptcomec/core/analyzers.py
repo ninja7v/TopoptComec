@@ -58,6 +58,11 @@ def _checkerboard(x: FloatArray) -> bool:
 
     mask2 = ~mask1
 
+    # A grid smaller than the mask cannot contain a checkerboard; skipping the
+    # sliding window also avoids "window shape cannot be larger than input".
+    if any(size < mask for size, mask in zip(xbin.shape, mask1.shape)):
+        return False
+
     windows = np.lib.stride_tricks.sliding_window_view(xbin, mask1.shape)
 
     return bool(
