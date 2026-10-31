@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
+# Type aliases
 FloatArray = npt.NDArray[np.float64]
 IntArray = npt.NDArray[np.int64]
 
