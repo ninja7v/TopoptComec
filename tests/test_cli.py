@@ -593,3 +593,66 @@ def test_run_cli_cache_invalidated_on_param_change(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "different parameters" in out
     assert "Loading cached density field" not in out
+
+
+def test_run_cli_rejects_path_traversal_preset_name(tmp_path, capsys):
+    """A preset name must never write outside the output directory."""
+    preset = _tiny_preset()
+    presets_file = tmp_path / "presets.json"
+    presets_file.write_text(json.dumps({"../evil": preset}), encoding="utf-8")
+    out_dir = tmp_path / "out"
+    argv = _argv(presets_file, out_dir, "-f", "png", name="../evil")
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as cm:
+        run_cli()
+    assert cm.value.code == 1
+    assert "path separators" in capsys.readouterr().out
+    assert not (tmp_path / "evil.png").exists()
+
+
+def test_run_cli_rejects_duplicate_preset_names(tmp_path, capsys):
+    """Two workers must not race on the same cache and export paths."""
+    presets_file, out_dir = _prepare(tmp_path, _tiny_preset())
+    argv = _argv(presets_file, out_dir, "-f", "png", name="Tiny,Tiny")
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as cm:
+        run_cli()
+    assert cm.value.code == 1
+    assert "more than once" in capsys.readouterr().out
+
+
+def test_run_cli_reports_malformed_preset_without_traceback(tmp_path, capsys):
+    """Malformed presets get a friendly message instead of a traceback."""
+    preset = _tiny_preset()
+    del preset["Dimensions"]["nelxyz"]
+    presets_file, out_dir = _prepare(tmp_path, preset)
+    with (
+        patch.object(sys, "argv", _argv(presets_file, out_dir, "-f", "png")),
+        pytest.raises(SystemExit) as cm,
+    ):
+        run_cli()
+    out = capsys.readouterr().out
+    assert cm.value.code == 1
+    assert "is invalid" in out
+    assert "Traceback" not in out
+
+
+def test_run_cli_rejects_corrupt_restart_field(tmp_path, capsys):
+    """NaN/inf/out-of-range restart fields are rejected before the solver."""
+    preset = _tiny_preset()
+    presets_file, out_dir = _prepare(tmp_path, preset)
+    nelxyz = preset["Dimensions"]["nelxyz"]
+    nel = nelxyz[0] * nelxyz[1]
+    ndof = 2 * (nelxyz[0] + 1) * (nelxyz[1] + 1)
+    restart = tmp_path / "restart.npz"
+    np.savez_compressed(
+        restart,
+        xPhys=np.full(nel, np.nan),
+        u=np.zeros(ndof),
+    )
+    argv = _argv(presets_file, out_dir, "-f", "png") + [
+        "--restart-from",
+        str(restart),
+    ]
+    with patch.object(sys, "argv", argv), pytest.raises(SystemExit) as cm:
+        run_cli()
+    assert cm.value.code == 1
+    assert "NaN or infinite" in capsys.readouterr().out

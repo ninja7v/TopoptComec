@@ -117,3 +117,40 @@ def test_invalid_json_is_reported(workdir):
     (workdir / "presets.json").write_text("{not json", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         load_presets()
+
+
+def test_invalid_preset_names_are_rejected():
+    """Preset names are path components and must not escape the output."""
+    from topoptcomec.presets_io import validate_preset_name
+
+    assert validate_preset_name("Good_Name-1") is None
+    for name in ("../evil", "/tmp/evil", "a/b", "a\\b", "..", ".", "", None, 3):
+        assert validate_preset_name(name) is not None
+
+
+def test_preset_structure_rejects_malformed_values():
+    """Malformed JSON is reported instead of raising in the solvers."""
+    from topoptcomec.presets_io import validate_preset_structure
+
+    valid = {
+        "Dimensions": {"nelxyz": [8, 6, 0], "volfrac": 0.4},
+        "Forces": {"fidir": ["X:→"]},
+        "Materials": {"E": [1.0], "nu": [0.3]},
+        "Optimizer": {"n_it": 10},
+    }
+    assert validate_preset_structure(valid) is None
+
+    broken = json.loads(json.dumps(valid))
+    broken["Dimensions"]["nelxyz"] = ["8", "6", "0"]
+    assert "integers" in validate_preset_structure(broken)
+
+    broken = json.loads(json.dumps(valid))
+    broken["Forces"]["fidir"] = ["Q:?"]
+    assert "unknown direction" in validate_preset_structure(broken)
+
+    broken = json.loads(json.dumps(valid))
+    broken["Regions"] = {"rshape": ["X"]}
+    assert "unknown shape" in validate_preset_structure(broken)
+
+    assert validate_preset_structure(None) is not None
+    assert validate_preset_structure({}) is not None

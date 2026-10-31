@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 import sys
 from collections.abc import MutableMapping
@@ -31,6 +32,8 @@ def _configure_qt_platform(
 
 def main() -> None:
     """Initializes and runs the Qt application."""
+    # Required so frozen builds can start the spawned CLI worker processes.
+    multiprocessing.freeze_support()
     if len(sys.argv) > 1 and sys.argv[1] == "update":
         # Update command (does not start Qt)
         from topoptcomec.cli.update import run_update_command

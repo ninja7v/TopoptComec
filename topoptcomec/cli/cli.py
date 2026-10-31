@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import multiprocessing
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -19,7 +20,11 @@ from topoptcomec import exporters, result_cache
 from topoptcomec.core import analyzers, optimizers
 from topoptcomec.core.displacements import combine_load_case_displacements
 from topoptcomec.parameter_check import ParameterCheck
-from topoptcomec.presets_io import load_presets
+from topoptcomec.presets_io import (
+    load_presets,
+    validate_preset_name,
+    validate_preset_structure,
+)
 from topoptcomec.time_estimation import TimeEstimation
 from topoptcomec.version import __version__
 
@@ -28,6 +33,29 @@ FloatArray = npt.NDArray[np.float64]
 
 #: Convergence threshold on the design-variable change (mirrors the optimizer).
 CONVERGENCE_TOLERANCE = 0.01
+
+#: Native math-library thread-pool variables capped in parallel runs.
+_BLAS_THREAD_ENV = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+
+
+def _limit_blas_threads(worker_count: int) -> None:
+    """Cap native BLAS/OpenMP threads per parallel worker.
+
+    Each worker process would otherwise start one thread per core, so N
+    workers oversubscribe the machine by a factor of N. The environment is
+    set before the workers are spawned so every child imports NumPy with the
+    reduced thread count.
+    """
+    threads: int = max(1, (os.cpu_count() or 1) // max(1, worker_count))
+    for variable in _BLAS_THREAD_ENV:
+        os.environ[variable] = str(threads)
+
 
 # Backwards-compatible alias (the hash lives in :mod:`topoptcomec.result_cache`).
 _params_hash = result_cache.params_hash
@@ -94,6 +122,9 @@ def _resolve_starting_field(
                 None,
                 f"The restart field in {source} does not match the grid {nelxyz}.",
             )
+        field_error = result_cache.validate_density_field(data)
+        if field_error:
+            return None, None, f"Invalid restart file {source}: {field_error}"
         return np.asarray(data["xPhys"], dtype=np.float64), None, None
 
     if cached is None:
@@ -165,6 +196,12 @@ def _load_or_run_optimization(
     tuple[FloatArray | None, FloatArray | None, str | None]
         xPhys, displacement field u, and an error message if one occurred.
     """
+    # Validate the preset before _resolve_starting_field indexes its keys: a
+    # malformed shared preset must produce a message, not a KeyError.
+    error: str | None = validate_preset_structure(params)
+    if error:
+        return None, None, f"Invalid preset '{preset_name}': {error}"
+
     last_xPhys, cached_result, error = _resolve_starting_field(
         preset_name, params, base_dir, verbose, restart_from
     )
@@ -173,7 +210,7 @@ def _load_or_run_optimization(
     if cached_result is not None:
         return cached_result[0], cached_result[1], None
 
-    error: str | None = ParameterCheck(last_xPhys).validate(params)
+    error = ParameterCheck(last_xPhys).validate(params)
     if error:
         return None, None, error
 
@@ -239,9 +276,6 @@ def _load_or_run_optimization(
 
         return xPhys, u, None
     except Exception as e:  # noqa: BLE001
-        import traceback
-
-        traceback.print_exc()
         return None, None, f"Optimization failed: {e}"
 
 
@@ -281,9 +315,6 @@ def _run_analysis(
             xPhys, u, params["Dimensions"], params["Forces"]
         )
     except Exception as e:  # noqa: BLE001
-        import traceback
-
-        traceback.print_exc()
         return f"Analysis failed: {e}"
 
     print(f"[{preset_name}] Analysis results:")
@@ -362,9 +393,6 @@ def _run_displacement(
                     frame_data, params["Dimensions"]["nelxyz"], str(filename), colors
                 )
     except Exception as e:  # noqa: BLE001
-        import traceback
-
-        traceback.print_exc()
         return f"Displacement failed: {e}"
 
     return None
@@ -698,12 +726,29 @@ def run_cli() -> None:
         print(f"Error reading presets: {e}")
         sys.exit(1)
 
-    # Parse and validate preset names
+    # Parse and validate preset names. Names double as filesystem path
+    # components, and presets are shareable files, so reject anything that
+    # could escape the output directory.
     preset_names: list[str] = [name.strip() for name in args.preset.split(",")]
+    if any(not name for name in preset_names):
+        print("Error: Empty preset name in --preset.")
+        sys.exit(1)
+    duplicates = sorted({name for name in preset_names if preset_names.count(name) > 1})
+    if duplicates:
+        print(f"Error: Preset(s) listed more than once: {', '.join(duplicates)}")
+        sys.exit(1)
     for name in preset_names:
         if name not in presets:
             print(f"Error: Preset '{name}' not found in the presets")
             print("Available presets:", ", ".join(presets.keys()))
+            sys.exit(1)
+        name_error = validate_preset_name(name)
+        if name_error:
+            print(f"Error: {name_error}")
+            sys.exit(1)
+        structure_error = validate_preset_structure(presets[name])
+        if structure_error:
+            print(f"Error: Preset '{name}' is invalid: {structure_error}")
             sys.exit(1)
 
     # Run
@@ -732,7 +777,13 @@ def run_cli() -> None:
         print(
             f"Running {len(preset_names)} presets in parallel ({max_workers} workers)"
         )
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # Spawn so each child imports NumPy after the thread caps below are in
+        # place (fork would inherit already-initialised BLAS thread pools).
+        _limit_blas_threads(max_workers)
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            mp_context=multiprocessing.get_context("spawn"),
+        ) as executor:
             futures: dict[object, str] = {
                 executor.submit(
                     _run_single_preset,
