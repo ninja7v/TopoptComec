@@ -608,13 +608,18 @@ class PlottingMixin:
             return
         self._camera_mode = mode
         self._camera_dims = dims
+        # Interaction styles need a render-window interactor. Headless
+        # windows have none, but the camera itself still works.
+        interactive = self.plotter.iren is not None
         if is_3d:
-            self.plotter.enable_trackball_style()
+            if interactive:
+                self.plotter.enable_trackball_style()
             self.plotter.disable_parallel_projection()
             self.plotter.view_isometric()
             bounds = (0, dims[0], 0, dims[1], 0, dims[2])
         else:
-            self.plotter.enable_image_style()
+            if interactive:
+                self.plotter.enable_image_style()
             self.plotter.view_xy()
             self.plotter.enable_parallel_projection()
             bounds = (0, dims[0], 0, dims[1], -_OVERLAY_Z, _OVERLAY_Z)
