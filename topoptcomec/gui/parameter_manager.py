@@ -472,11 +472,11 @@ class ParameterManagerMixin:
     def _cache_matches_current(self, data: dict) -> bool:
         """Whether a cached result belongs to the current parameters.
 
-        The cache must have been produced for the same grid and with the same
-        (normalized) parameters; any other cache is stale.
+        The cache must hold a valid field for the same grid and come from the
+        same (normalized) parameters; any other cache is stale.
         """
         nelxyz = self.last_params["Dimensions"]["nelxyz"]
-        if not result_cache.cache_matches_grid(data, nelxyz):
+        if result_cache.cache_error(data, nelxyz):
             return False
         if "params_hash" not in data:
             return False
@@ -514,15 +514,12 @@ class ParameterManagerMixin:
         self.u = combine_load_case_displacements(data["u"])
         self.last_successful_xPhys = self.xPhys.copy()
         self.update_mat_init_type_state()
-        mean_density: float = (
-            np.mean(self.xPhys.sum(axis=0))
-            if self.xPhys.ndim == 2
-            else np.mean(self.xPhys)
-        )
-        if mean_density < 0.01:
+        if not result_cache.has_structure(self.xPhys):
             self.xPhys_valid = False
         else:
             self.xPhys_valid = True
+            # A result is shown: stop prompting the user to press Create.
+            self.footer.stop_create_button_effect()
             self.footer.binarize_button.setEnabled(True)
             self.footer.save_button.setEnabled(True)
             self.analysis_widget.run_analysis_button.setEnabled(True)

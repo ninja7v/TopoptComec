@@ -98,7 +98,6 @@ def _resolve_starting_field(
     cache_file: Path = result_cache.cache_path(base_dir, preset_name)
     nelxyz: list[int] = params["Dimensions"]["nelxyz"]
     init_type: int = int(params.get("Materials", {}).get("init_type", 0))
-    cached = result_cache.load_density_cache(cache_file)
 
     if init_type == 3:
         # Restart: use an explicit file when given, otherwise continue from
@@ -116,31 +115,27 @@ def _resolve_starting_field(
                     "Run the preset once, or pass --restart-from."
                 ),
             )
-        if not result_cache.cache_matches_grid(data, nelxyz):
-            return (
-                None,
-                None,
-                f"The restart field in {source} does not match the grid {nelxyz}.",
-            )
-        field_error = result_cache.validate_density_field(data)
+        field_error = result_cache.cache_error(data, nelxyz)
         if field_error:
             return None, None, f"Invalid restart file {source}: {field_error}"
         return np.asarray(data["xPhys"], dtype=np.float64), None, None
 
+    cached = result_cache.load_density_cache(cache_file)
     if cached is None:
         return None, None, None
 
     cached_hash = str(cached["params_hash"]) if "params_hash" in cached else None
+    cached_error = result_cache.cache_error(cached, nelxyz)
     if cached_hash != _params_hash(params):
         if verbose:
             print(
                 f"[{preset_name}] Cached result was produced with different "
                 "parameters; re-running optimization."
             )
-    elif not result_cache.cache_matches_grid(cached, nelxyz):
+    elif cached_error:
         if verbose:
             print(
-                f"[{preset_name}] Cached result does not match the grid; "
+                f"[{preset_name}] Cached result ignored ({cached_error}); "
                 "re-running optimization."
             )
     else:
@@ -251,10 +246,7 @@ def _load_or_run_optimization(
             **optimizer_params, multimaterial=is_multimaterial, verbose=verbose
         )
 
-        mean_density: float = (
-            np.mean(xPhys.sum(axis=0)) if xPhys.ndim == 2 else np.mean(xPhys)
-        )
-        if mean_density < 0.01:
+        if not result_cache.has_structure(xPhys):
             return (
                 None,
                 None,

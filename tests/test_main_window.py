@@ -885,3 +885,37 @@ def test_preset_selection_does_not_block_on_running_worker(qt_app):
     assert window.preset.presets_combo.currentText() == previous
     window.worker = None
     window.close()
+
+
+def test_preset_selection_loads_cached_result_once(qt_app, tmp_path, monkeypatch):
+    """Selecting a preset reads and displays its cached result exactly once."""
+    from topoptcomec import result_cache
+
+    monkeypatch.chdir(tmp_path)
+    window = MainWindow()
+    name = window.preset.presets_combo.currentText()
+    nelxyz = window.last_params["Dimensions"]["nelxyz"]
+    result_cache.save_density_cache(
+        result_cache.cache_path("results", name),
+        np.full(result_cache.nel_of(nelxyz), 0.3),
+        np.zeros(result_cache.ndof_of(nelxyz)),
+        window._normalized_params(window.last_params),
+        nelxyz,
+        converged=True,
+    )
+    window.preset.presets_combo.setCurrentIndex(0)
+    window._on_preset_selected()
+    window.preset.presets_combo.setCurrentText(name)
+
+    load = result_cache.load_density_cache
+    with (
+        patch.object(result_cache, "load_density_cache", side_effect=load) as spy,
+        patch.object(MainWindow, "replot") as replot,
+    ):
+        window._on_preset_selected()
+
+    assert spy.call_count == 1
+    assert replot.call_count == 1
+    assert window.xPhys_valid
+    assert window.status_bar.currentMessage() == f"Loaded cached result for {name}."
+    window.close()

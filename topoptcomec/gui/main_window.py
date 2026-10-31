@@ -604,13 +604,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.footer.create_button.setEnabled(True)
         self.footer.stop_create_button_effect()
 
-        # Validate convergence (density > 1%)
-        mean_density: float = (
-            np.mean(self.xPhys.sum(axis=0))
-            if self.xPhys.ndim == 2
-            else np.mean(self.xPhys)
-        )
-        if mean_density < 0.01:
+        # Validate convergence (finite field, density > 1%)
+        if not result_cache.has_structure(self.xPhys):
             self.xPhys_valid = False
             QMessageBox.warning(
                 self,
@@ -1203,7 +1198,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         preset_name = self.preset.presets_combo.currentText()
         if preset_name in self.presets:
             try:
-                self.footer.start_create_button_effect()
+                # Also loads the preset's cached result, through
+                # on_parameter_changed -> _sync_preset_selection.
                 self._apply_parameters(self.presets[preset_name])
             except Exception as e:  # noqa: BLE001
                 # A malformed preset must not leave the UI half-applied.
@@ -1213,25 +1209,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 return
             self._applied_preset_name = preset_name
             self.preset.delete_preset_button.setEnabled(True)
-            cache_file = result_cache.cache_path("results", preset_name)
-            data = result_cache.load_density_cache(cache_file)
-            if data is not None and self._cache_matches_current(data):
-                try:
-                    self._handle_optimization_results(
-                        (
-                            np.asarray(data["xPhys"], dtype=np.float64),
-                            np.asarray(data["u"], dtype=np.float64),
-                        )
-                    )
-                    self.status_bar.showMessage(
-                        f"Loaded cached result for {preset_name}.", 5000
-                    )
-                except Exception as e:  # noqa: BLE001
-                    print(f"Failed to load cache: {e}")
-            elif data is not None:
-                print(
-                    f"Ignoring cached result for {preset_name}: it was produced "
-                    "with different parameters."
+            if self.u is not None:
+                self.status_bar.showMessage(
+                    f"Loaded cached result for {preset_name}.", 5000
                 )
 
         else:
@@ -1534,12 +1514,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.footer.binarize_button.setEnabled(False)
 
         # Validate density after binarization (> 1%)
-        mean_density: float = (
-            np.mean(self.xPhys.sum(axis=0))
-            if self.xPhys.ndim == 2
-            else np.mean(self.xPhys)
-        )
-        if mean_density < 0.01:
+        if not result_cache.has_structure(self.xPhys):
             self.xPhys_valid = False
             self.footer.save_button.setEnabled(False)
             self.analysis_widget.run_analysis_button.setEnabled(False)
