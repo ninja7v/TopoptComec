@@ -41,6 +41,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up headless rendering
+        uses: pyvista/setup-headless-display-action@v3
+        with:
+          install-mesa3d-offscreen: true
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -56,12 +61,14 @@ jobs:
       - name: Run core and exporter tests
         env:
           QT_QPA_PLATFORM: offscreen
+          PYVISTA_OFF_SCREEN: "true"
         run: |
           pytest -W error -q tests/test_numerics.py tests/test_fem.py tests/test_optimizers.py tests/test_exporters.py tests/test_parameter_validation.py
 
       - name: CLI smoke test
         env:
           QT_QPA_PLATFORM: offscreen
+          PYVISTA_OFF_SCREEN: "true"
         run: |
           topoptcomec -p Bridge_2D -f png -o results
 

@@ -103,6 +103,40 @@ def test_boundary_conditions_parsing(fem_2d: FEM):
     assert fem_2d.forces_i[2 * node + 1, 0] == -1.0
 
 
+@pytest.mark.parametrize(
+    "supports, loads_in, expected",
+    [
+        # Clamped left edge: every rigid-body motion is blocked.
+        (
+            [
+                Support(x=0, y=0, fix_x=True, fix_y=True),
+                Support(x=0, y=1, fix_x=True, fix_y=True),
+            ],
+            [Load(x=2, y=0, axis=0, sign=1, magnitude=1.0)],
+            False,
+        ),
+        # Roller in Y and a Y spring on the same vertical line: X translation
+        # and the rotation about that line are free.
+        (
+            [Support(x=1, y=0, fix_y=True)],
+            [Load(x=1, y=1, axis=1, sign=1, magnitude=1.0)],
+            True,
+        ),
+        # Pin and a Y spring vertically above it: only the rotation about the
+        # pin is free, which no single basis mode reveals on its own.
+        (
+            [Support(x=1, y=0, fix_x=True, fix_y=True)],
+            [Load(x=1, y=1, axis=1, sign=1, magnitude=1.0)],
+            True,
+        ),
+    ],
+)
+def test_free_rigid_body_mode_detection(fem_2d: FEM, supports, loads_in, expected):
+    """Rigid-body modes are detected from any combination of basis modes."""
+    fem_2d.setup_boundary_conditions(loads_in, [], supports)
+    assert fem_2d._has_free_rigid_body_mode() is expected
+
+
 def test_solver_mechanics(fem_2d: FEM):
     """Test that the solver produces a non-zero displacement in the direction of force."""
     # Fix left edge (x=0): nodes (0,0) and (0,1).

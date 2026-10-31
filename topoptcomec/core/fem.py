@@ -30,10 +30,9 @@ MIN_STIFFNESS_RATIO = 1e-9
 #: memory bounded for large meshes.
 AUTO_DIRECT_WORK_2D = 2e7
 AUTO_DIRECT_WORK_3D = 2e6
-#: Diagonal regularisation applied to every free stiffness matrix.
-#: It pins any unconstrained rigid-body modes without changing the strain of
-#: a self-equilibrated load case (the load vector is orthogonal to them), and
-#: keeps the solution deterministic when supports fix only some directions.
+#: Diagonal regularisation applied when a rigid-body mode is unconstrained.
+#: It pins the free mode without changing the strain of a self-equilibrated
+#: load case (the load vector is orthogonal to it).
 RIGID_BODY_REGULARISATION = 1e-12
 
 
@@ -472,14 +471,11 @@ class FEM:
 
         # Solving: one factorisation / Krylov solve for all load cases.
         K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
-        if K_free.shape[0] > 0:
-            # Pin any unconstrained rigid-body modes so the factorisation is
-            # deterministic across platforms. Supports can fix only some
-            # directions (e.g. a roller), so a non-empty fixed_dofs array does
-            # not guarantee a non-singular system. The load vector is
-            # orthogonal to the rigid modes for a self-equilibrated case, so
-            # the strain is unchanged; for well-constrained systems the added
-            # diagonal is negligible.
+        if K_free.shape[0] > 0 and self._has_free_rigid_body_mode():
+            # Supports may fix only some directions (e.g. a roller), leaving a
+            # rigid-body mode free. Pin it so the factorisation is deterministic
+            # across platforms. For a self-equilibrated load case the load
+            # vector is orthogonal to the free mode, so the strain is unchanged.
             eps = RIGID_BODY_REGULARISATION * float(
                 np.max(np.abs(K_free.diagonal())) or 1.0
             )
@@ -688,6 +684,57 @@ class FEM:
         return float(np.mean(vals)) if vals else 0.0
 
     # --- Internal Helper Methods ---
+
+    def _has_free_rigid_body_mode(self) -> bool:
+        """
+        Whether the constrained DOFs leave a rigid-body mode unconstrained.
+
+        Supports and artificial springs constrain a DOF. A rigid-body motion
+        (any combination of the translations and rotations) is still free when
+        its displacement is zero at every constrained DOF; such a motion makes
+        the free stiffness matrix singular. It exists exactly when the matrix
+        of rigid-body modes sampled at the constrained DOFs is rank deficient.
+
+        Returns
+        -------
+        bool
+            True when at least one rigid-body mode is still free.
+        """
+        constrained = np.unique(np.concatenate([self.fixed_dofs, self._spring_dofs]))
+        if constrained.size == 0:
+            return True
+
+        dim = self.grid.dofs_per_node
+        nodes = constrained // dim
+        axes = constrained % dim
+        nx1 = self.grid.nelx + 1
+        ny1 = self.grid.nely + 1
+        y = nodes % ny1
+        x = (nodes // ny1) % nx1
+        z = nodes // (nx1 * ny1) if self.grid.is_3d else np.zeros_like(nodes)
+
+        if self.grid.is_3d:
+            modes = np.array(
+                [
+                    axes == 0,
+                    axes == 1,
+                    axes == 2,
+                    (axes == 1) * (-z) + (axes == 2) * y,
+                    (axes == 0) * z + (axes == 2) * (-x),
+                    (axes == 0) * (-y) + (axes == 1) * x,
+                ],
+                dtype=np.float64,
+            )
+        else:
+            modes = np.array(
+                [
+                    axes == 0,
+                    axes == 1,
+                    (axes == 0) * (-y) + (axes == 1) * x,
+                ],
+                dtype=np.float64,
+            )
+        return bool(np.linalg.matrix_rank(modes) < modes.shape[0])
 
     def _use_direct_solver(self, size: int) -> bool:
         """Whether the direct factorisation should be used for this system.
