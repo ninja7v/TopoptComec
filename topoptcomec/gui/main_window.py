@@ -34,6 +34,8 @@ from topoptcomec.presets_io import (
     load_preset_layers,
     resolve_presets_file,
     save_user_presets,
+    validate_preset_name,
+    validate_preset_structure,
 )
 from topoptcomec.update import UpdateCheck, UpdatePlan, UpdateResult
 
@@ -96,6 +98,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self._set_theme(self.current_theme)
 
         self.presets: dict = {}
+        #: Preset currently applied to the widgets (used to revert a rejected
+        #: switch while a computation is running).
+        self._applied_preset_name: str = "Select a preset..."
         #: Presets that are not owned by the user (built-in and ./presets.json).
         self._builtin_presets: dict = {}
         # Presets saved in the GUI go to the per-user file only, so the source
@@ -1069,6 +1074,23 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             self._builtin_presets = {}
             print(f"Presets could not be read ({error}). Starting fresh.")
 
+        # Drop entries that are malformed or whose name is not a safe path
+        # component. Presets are shareable files: a bad entry must not crash
+        # the GUI or escape results/.
+        invalid: dict[str, str] = {}
+        for name, params in list(self.presets.items()):
+            error = validate_preset_name(name) or validate_preset_structure(params)
+            if error:
+                invalid[name] = error
+                del self.presets[name]
+                self._builtin_presets.pop(name, None)
+        if invalid:
+            summary = "; ".join(f"{name}: {error}" for name, error in invalid.items())
+            print(f"Ignoring invalid presets: {summary}")
+            self.status_bar.showMessage(
+                f"Ignored {len(invalid)} invalid preset(s).", 5000
+            )
+
         self.preset.presets_combo.blockSignals(True)
         self.preset.presets_combo.clear()
         self.preset.presets_combo.addItem("Select a preset...")  # Index 0
@@ -1088,6 +1110,10 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         )
 
         if ok and preset_name:
+            name_error = validate_preset_name(preset_name)
+            if name_error:
+                QMessageBox.warning(self, "Save Preset", name_error)
+                return
             if preset_name in self.presets:
                 reply = QMessageBox.question(
                     self,
@@ -1144,17 +1170,48 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             else:
                 self.status_bar.showMessage(f"Preset '{preset_name}' deleted.", 3000)
 
+    def _is_worker_running(self) -> bool:
+        """Whether the current worker is a live QThread.
+
+        The isinstance check keeps tests and partially torn-down states (where
+        ``self.worker`` is a stand-in object) from being mistaken for a run.
+        """
+        worker = self.worker
+        return isinstance(worker, QThread) and worker.isRunning()
+
     def _on_preset_selected(self) -> None:
         """
         Apply the selected preset to the UI widgets and, if a cached result
         exists under `results/<preset>/`, load it into the viewer.
         """
+        # Never block the GUI thread waiting for a running worker. Applying a
+        # preset used to call _handle_optimization_results -> _finalize_worker
+        # -> wait(), freezing the UI for the rest of the optimization.
+        if self._is_worker_running():
+            combo = self.preset.presets_combo
+            combo.blockSignals(True)
+            combo.setCurrentText(self._applied_preset_name)
+            combo.blockSignals(False)
+            self.status_bar.showMessage(
+                "A computation is running. Stop it before switching presets.",
+                5000,
+            )
+            return
+
         self.last_successful_xPhys = None
         self.update_mat_init_type_state()
         preset_name = self.preset.presets_combo.currentText()
         if preset_name in self.presets:
-            self.footer.start_create_button_effect()
-            self._apply_parameters(self.presets[preset_name])
+            try:
+                self.footer.start_create_button_effect()
+                self._apply_parameters(self.presets[preset_name])
+            except Exception as e:  # noqa: BLE001
+                # A malformed preset must not leave the UI half-applied.
+                self.status_bar.showMessage(
+                    f"Preset '{preset_name}' is invalid: {e}", 5000
+                )
+                return
+            self._applied_preset_name = preset_name
             self.preset.delete_preset_button.setEnabled(True)
             cache_file = result_cache.cache_path("results", preset_name)
             data = result_cache.load_density_cache(cache_file)
@@ -1178,6 +1235,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                 )
 
         else:
+            self._applied_preset_name = "Select a preset..."
             self.preset.delete_preset_button.setEnabled(False)
 
     def _apply_parameters(self, params: dict) -> None:
@@ -1784,6 +1842,19 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
             )
             event.ignore()
             return
+        # Stop and join any running computation before Qt destroys the window.
+        # Otherwise the QThread is garbage-collected while its run() is still
+        # executing, which aborts the whole process with
+        # "QThread: Destroyed while thread is still running".
+        if self.worker is not None:
+            self.worker.request_stop()
+            if not self.worker.wait(5000):
+                # A single FEM solve cannot be interrupted cooperatively.
+                # Terminating the thread is the last resort to avoid aborting
+                # the process during shutdown.
+                self.worker.terminate()
+                self.worker.wait(5000)
+            self.worker = None
         # Needed for the tests
         if self.plotter is not None:
             self.plotter.close()

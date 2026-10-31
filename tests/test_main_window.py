@@ -850,3 +850,38 @@ def test_deformed_force_arrows_follow_the_node_displacement_in_3d():
     node = grid.node_index(3, 2, 1)
     expected = [3 + u[3 * node], 2 - u[3 * node + 1], 1 + u[3 * node + 2]]
     np.testing.assert_allclose(captured["red"][0], expected)
+
+
+def test_close_event_stops_and_joins_running_worker(qt_app):
+    """Closing during a run must not destroy a live QThread (SIGABRT)."""
+    from unittest.mock import MagicMock
+
+    window = MainWindow()
+    worker = MagicMock()
+    worker.wait.return_value = True
+    window.worker = worker
+
+    window.close()
+
+    worker.request_stop.assert_called_once()
+    worker.wait.assert_called_once()
+    assert window.worker is None
+
+
+def test_preset_selection_does_not_block_on_running_worker(qt_app):
+    """Selecting a preset during a run must not wait() on the GUI thread."""
+    from unittest.mock import MagicMock
+
+    window = MainWindow()
+    previous = window._applied_preset_name
+    worker = MagicMock()
+    window.worker = worker
+    window.preset.presets_combo.setCurrentText("BeeSting_3D")
+
+    with patch.object(window, "_is_worker_running", return_value=True):
+        window._on_preset_selected()
+
+    worker.wait.assert_not_called()
+    assert window.preset.presets_combo.currentText() == previous
+    window.worker = None
+    window.close()
