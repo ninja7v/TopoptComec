@@ -242,3 +242,19 @@ def test_efficiency_heuristic_is_unit_free():
     scaled["finorm"] = [10.0]
     scaled["fonorm"] = [10.0]
     assert analyzers._efficient(u * 0.01, dimensions, scaled) == baseline
+
+
+def test_checkerboard_small_grids_are_supported():
+    """Analysis must not fail when a grid is smaller than the 3x3 mask."""
+    assert analyzers._checkerboard(np.ones((2, 5))) is False
+    assert analyzers._checkerboard(np.ones((1, 1))) is False
+    assert analyzers._checkerboard(np.ones((5, 5, 2))) is False
+    assert analyzers._checkerboard(np.ones((5, 5, 1))) is False
+
+
+def test_checkerboard_still_detected_on_large_grids():
+    """The small-grid guard must not disable the actual detection."""
+    field = np.indices((5, 5)).sum(axis=0) % 2
+    assert analyzers._checkerboard(field) is True
+    field_3d = np.indices((5, 5, 5)).sum(axis=0) % 2
+    assert analyzers._checkerboard(field_3d) is True
