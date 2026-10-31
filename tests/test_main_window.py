@@ -919,3 +919,19 @@ def test_preset_selection_loads_cached_result_once(qt_app, tmp_path, monkeypatch
     assert window.xPhys_valid
     assert window.status_bar.currentMessage() == f"Loaded cached result for {name}."
     window.close()
+
+
+def test_headless_window_skips_interactive_tools(qt_app):
+    """Headless render windows have no interactor; setup and camera must work."""
+    window = MainWindow()
+    window.plotter.iren = None
+
+    window._interactive_tools_setup = False
+    window._setup_interactive_overlay_tools()
+
+    for is_3d, dims in ((False, (10, 10, 0)), (True, (10, 10, 10))):
+        window._camera_mode = None
+        window._camera_dims = None
+        window._update_camera(is_3d, dims)
+
+    window.close()
