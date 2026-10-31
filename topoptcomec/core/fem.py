@@ -30,9 +30,10 @@ MIN_STIFFNESS_RATIO = 1e-9
 #: memory bounded for large meshes.
 AUTO_DIRECT_WORK_2D = 2e7
 AUTO_DIRECT_WORK_3D = 2e6
-#: Diagonal regularisation applied when the model has no supports at all.
-#: It pins the rigid-body modes without changing the strain of a
-#: self-equilibrated load case (the load vector is orthogonal to them).
+#: Diagonal regularisation applied to every free stiffness matrix.
+#: It pins any unconstrained rigid-body modes without changing the strain of
+#: a self-equilibrated load case (the load vector is orthogonal to them), and
+#: keeps the solution deterministic when supports fix only some directions.
 RIGID_BODY_REGULARISATION = 1e-12
 
 
@@ -471,10 +472,14 @@ class FEM:
 
         # Solving: one factorisation / Krylov solve for all load cases.
         K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
-        if self.fixed_dofs.size == 0 and K_free.shape[0] > 0:
-            # No support at all: pin the rigid-body modes so the factorisation
-            # is non-singular. The load vector is orthogonal to them for a
-            # self-equilibrated case, so the strain is unchanged.
+        if K_free.shape[0] > 0:
+            # Pin any unconstrained rigid-body modes so the factorisation is
+            # deterministic across platforms. Supports can fix only some
+            # directions (e.g. a roller), so a non-empty fixed_dofs array does
+            # not guarantee a non-singular system. The load vector is
+            # orthogonal to the rigid modes for a self-equilibrated case, so
+            # the strain is unchanged; for well-constrained systems the added
+            # diagonal is negligible.
             eps = RIGID_BODY_REGULARISATION * float(
                 np.max(np.abs(K_free.diagonal())) or 1.0
             )

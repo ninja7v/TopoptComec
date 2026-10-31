@@ -1299,11 +1299,6 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         nb_input_forces = len(pf.get("fix", [])) if "fix" in pf else 0
         current_input_num = len(self.forces_widget.input_forces)
         while current_input_num > nb_input_forces:
-            last_btn = self.forces_widget.input_forces[-1]["remove_btn"]
-            try:
-                last_btn.clicked.disconnect(self.on_parameter_changed)
-            except TypeError:
-                pass
             self.forces_widget.remove_force(current_input_num - 1, True, False)
             current_input_num -= 1
         while current_input_num < nb_input_forces:
@@ -1323,11 +1318,6 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         nb_output_forces = len(pf.get("fox", [])) if "fox" in pf else 0
         current_output_num = len(self.forces_widget.output_forces)
         while current_output_num > nb_output_forces:
-            last_btn = self.forces_widget.output_forces[-1]["remove_btn"]
-            try:
-                last_btn.clicked.disconnect(self.on_parameter_changed)
-            except TypeError:
-                pass
             self.forces_widget.remove_force(current_output_num - 1, False, False)
             current_output_num -= 1
         while current_output_num < nb_output_forces:
@@ -1351,11 +1341,6 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         num_supports_in_preset = len(ps.get("sx", []))
         current_num = len(self.supports_widget.inputs)
         while current_num > num_supports_in_preset:
-            last_btn = self.supports_widget.inputs[-1]["remove_btn"]
-            try:
-                last_btn.clicked.disconnect(self.on_parameter_changed)
-            except TypeError:
-                pass
             self.supports_widget.remove_support(current_num - 1, False)
             current_num -= 1
         while current_num < num_supports_in_preset:
@@ -1378,11 +1363,6 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         num_material_in_preset = len(pm.get("E", []))
         current_num = len(self.materials_widget.inputs)
         while current_num > num_material_in_preset:
-            last_btn = self.materials_widget.inputs[-1]["remove_btn"]
-            try:
-                last_btn.clicked.disconnect()
-            except (TypeError, RuntimeError):
-                pass
             self.materials_widget.remove_material(current_num - 1, False)
             current_num -= 1
         while current_num < num_material_in_preset:
