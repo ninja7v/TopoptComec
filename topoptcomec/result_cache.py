@@ -24,6 +24,9 @@ FloatArray = npt.NDArray[np.float64]
 #: Keys that belong to a single run and must not invalidate a cache.
 _VOLATILE_KEYS = ("current_xPhys", "progress_callback", "multimaterial")
 
+#: Minimum mean total density of a result that contains a structure.
+MIN_MEAN_DENSITY = 0.01
+
 
 def params_hash(params: dict) -> str:
     """
@@ -98,9 +101,40 @@ def load_density_cache(path: Path) -> dict | None:
         return None
 
 
-def cache_matches_grid(data: dict, nelxyz: list[int]) -> bool:
+def has_structure(xPhys: FloatArray | None) -> bool:
     """
-    Whether a cached result was produced for the given grid.
+    Whether a density field is a usable result.
+
+    A result is usable when every value is finite and the mean total density
+    reaches :data:`MIN_MEAN_DENSITY`. The finiteness check matters because
+    ``nan < threshold`` is ``False``, so a NaN field would otherwise pass.
+
+    Parameters
+    ----------
+    xPhys : FloatArray or None
+        Density field, shape (nel,) or (n_mat, nel).
+
+    Returns
+    -------
+    bool
+        ``True`` when the field holds a structure worth keeping.
+    """
+    if xPhys is None:
+        return False
+    field = np.asarray(xPhys, dtype=np.float64)
+    if field.size == 0 or not np.all(np.isfinite(field)):
+        return False
+    total = field.sum(axis=0) if field.ndim == 2 else field
+    return bool(np.mean(total) >= MIN_MEAN_DENSITY)
+
+
+def cache_error(data: dict, nelxyz: list[int]) -> str | None:
+    """
+    Check that a loaded cache fits a grid and holds a valid density field.
+
+    This is the single check for every density field read from disk (cache
+    reuse and restart files), since files are the only external source of
+    density fields.
 
     Parameters
     ----------
@@ -111,37 +145,22 @@ def cache_matches_grid(data: dict, nelxyz: list[int]) -> bool:
 
     Returns
     -------
-    bool
-        ``True`` when the density and displacement shapes fit the grid.
-    """
-    x_phys = np.asarray(data["xPhys"])
-    u = np.asarray(data["u"])
-    nel = nel_of(nelxyz)
-    return x_phys.shape[-1] == nel and u.shape[0] == ndof_of(nelxyz)
-
-
-def validate_density_field(data: dict) -> str | None:
-    """
-    Check that a loaded density field is usable as a restart point.
-
-    Parameters
-    ----------
-    data : dict
-        Dictionary returned by :func:`load_density_cache`.
-
-    Returns
-    -------
     str or None
-        An error message when the field contains non-finite or out-of-range
-        values, otherwise ``None``.
+        An error message, or ``None`` when the cache can be used.
     """
-    if "xPhys" not in data:
-        return "The restart file does not contain a density field."
-    field = np.asarray(data["xPhys"], dtype=np.float64)
-    if not np.all(np.isfinite(field)):
-        return "The restart density field contains NaN or infinite values."
-    if field.size and (field.min() < 0.0 or field.max() > 1.0):
-        return "The restart density field must contain values between 0 and 1."
+    x_phys = np.asarray(data["xPhys"], dtype=np.float64)
+    u = np.asarray(data["u"], dtype=np.float64)
+    if (
+        x_phys.ndim not in (1, 2)
+        or x_phys.shape[-1] != nel_of(nelxyz)
+        or u.ndim == 0
+        or u.shape[0] != ndof_of(nelxyz)
+    ):
+        return f"The stored field does not match the grid {list(nelxyz)}."
+    if not (np.all(np.isfinite(x_phys)) and np.all(np.isfinite(u))):
+        return "The stored field contains NaN or infinite values."
+    if x_phys.size and (x_phys.min() < 0.0 or x_phys.max() > 1.0):
+        return "The stored density field must contain values between 0 and 1."
     return None
 
 
@@ -183,12 +202,13 @@ def save_density_cache(
 
 
 __all__ = [
-    "cache_matches_grid",
+    "MIN_MEAN_DENSITY",
+    "cache_error",
     "cache_path",
+    "has_structure",
     "load_density_cache",
     "ndof_of",
     "nel_of",
     "params_hash",
     "save_density_cache",
-    "validate_density_field",
 ]
