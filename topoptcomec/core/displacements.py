@@ -462,8 +462,10 @@ def run_iterative_displacement(
     )
 
     # Simulation Parameters
-    pd: dict = params["Displacement"]
-    delta_disp: float = pd["disp_factor"] / max(1, pd["disp_iterations"])
+    pd: dict = params.get("Displacement", {})
+    delta_disp: float = float(pd.get("disp_factor", 1.0)) / max(
+        1, int(pd.get("disp_iterations", 1))
+    )
 
     def _density_for_fem(xp: FloatArray) -> FloatArray:
         """Density in the shape expected by the FEM.

@@ -16,6 +16,9 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
+from topoptcomec.presets_io import validate_preset_name
+
+# Type aliases
 FloatArray = npt.NDArray[np.float64]
 
 #: Keys that belong to a single run and must not invalidate a cache.
@@ -42,7 +45,17 @@ def params_hash(params: dict) -> str:
 
 
 def cache_path(base_dir: str | Path, preset_name: str) -> Path:
-    """Path of the density-field cache of one preset."""
+    """Path of the density-field cache of one preset.
+
+    Raises
+    ------
+    ValueError
+        If ``preset_name`` is not a safe single path component. Presets are
+        shareable files, so a hostile name must never escape ``base_dir``.
+    """
+    error = validate_preset_name(preset_name)
+    if error:
+        raise ValueError(f"Invalid preset name {preset_name!r}: {error}")
     return Path(base_dir) / preset_name / f"{preset_name}_density_field.npz"
 
 
@@ -107,6 +120,31 @@ def cache_matches_grid(data: dict, nelxyz: list[int]) -> bool:
     return x_phys.shape[-1] == nel and u.shape[0] == ndof_of(nelxyz)
 
 
+def validate_density_field(data: dict) -> str | None:
+    """
+    Check that a loaded density field is usable as a restart point.
+
+    Parameters
+    ----------
+    data : dict
+        Dictionary returned by :func:`load_density_cache`.
+
+    Returns
+    -------
+    str or None
+        An error message when the field contains non-finite or out-of-range
+        values, otherwise ``None``.
+    """
+    if "xPhys" not in data:
+        return "The restart file does not contain a density field."
+    field = np.asarray(data["xPhys"], dtype=np.float64)
+    if not np.all(np.isfinite(field)):
+        return "The restart density field contains NaN or infinite values."
+    if field.size and (field.min() < 0.0 or field.max() > 1.0):
+        return "The restart density field must contain values between 0 and 1."
+    return None
+
+
 def save_density_cache(
     path: Path,
     xPhys: FloatArray,
@@ -152,4 +190,5 @@ __all__ = [
     "nel_of",
     "params_hash",
     "save_density_cache",
+    "validate_density_field",
 ]

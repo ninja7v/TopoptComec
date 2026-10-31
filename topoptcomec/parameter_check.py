@@ -6,6 +6,10 @@ import numpy as np
 import numpy.typing as npt
 
 from topoptcomec.core import preset_format
+from topoptcomec.presets_io import (
+    check_directions,
+    validate_preset_structure,
+)
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -49,6 +53,12 @@ class ParameterCheck:
             Error message describing the invalid parameter, or `None` when
             validation passes.
         """
+        # Reject malformed presets before any direct indexing below; this
+        # keeps shareable JSON files from raising KeyError/TypeError.
+        structure_error = validate_preset_structure(params)
+        if structure_error:
+            return structure_error
+
         nelx: int
         nely: int
         nelz: int
@@ -304,6 +314,9 @@ class ParameterCheck:
             return
 
         nelx, nely, nelz = params["Dimensions"]["nelxyz"]
+        error = check_directions(list(ps.get("sdim", [])), "Support")
+        if error:
+            return error
         for i, dim in enumerate(ps.get("sdim", [])):
             if dim == "-":
                 continue
