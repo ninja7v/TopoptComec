@@ -438,9 +438,11 @@ class ParameterManagerMixin:
                 )  # Set to "Select a preset..."
                 self.preset.presets_combo.blockSignals(False)
                 self.preset.delete_preset_button.setEnabled(False)
+                self._applied_preset_name = "Select a preset..."
                 return False
             # Preset still matches: reload the cached result (xPhys may
             # have been cleared by on_parameter_changed).
+            self._applied_preset_name = current_preset_name
             return self._load_preset_cache(current_preset_name)
         # Check if the current state matches any preset
         for preset_name, preset_params in self.presets.items():
@@ -451,6 +453,7 @@ class ParameterManagerMixin:
                 if index != -1:
                     self.preset.presets_combo.setCurrentIndex(index)
                     self.preset.delete_preset_button.setEnabled(True)
+                    self._applied_preset_name = preset_name
                 self.preset.presets_combo.blockSignals(False)
                 # Apply the existing result if available
                 return self._load_preset_cache(preset_name)
@@ -461,7 +464,9 @@ class ParameterManagerMixin:
         normalized = copy.deepcopy(params)
         self._normalize_params(normalized)
         # Colors only affect the display, never the optimized field.
-        normalized.get("Materials", {}).pop("color", None)
+        materials = normalized.get("Materials")
+        if isinstance(materials, dict):
+            materials.pop("color", None)
         return normalized
 
     def _cache_matches_current(self, data: dict) -> bool:
@@ -604,11 +609,15 @@ class ParameterManagerMixin:
         p : dict
             Parameters dictionary to normalize (modified in place).
         """
-        pd: dict = p["Dimensions"]
-        if "nelxyz" in pd:
-            is_2d: bool = len(pd["nelxyz"]) < 3 or pd["nelxyz"][2] == 0.0
+        # Tolerate malformed presets: this runs while comparing the current
+        # parameters against every known preset, so a bad entry must not raise.
+        pd = p.get("Dimensions")
+        is_2d: bool = False
+        if isinstance(pd, dict) and isinstance(pd.get("nelxyz"), (list, tuple)):
+            nelxyz = pd["nelxyz"]
+            is_2d = len(nelxyz) < 3 or nelxyz[2] == 0.0
             if is_2d:
-                pd["nelxyz"] = pd["nelxyz"][:2]
+                pd["nelxyz"] = list(nelxyz)[:2]
 
         self._normalize_regions(p, is_2d)
         self._normalize_supports(p, is_2d)
@@ -634,7 +643,7 @@ class ParameterManagerMixin:
             Parameters dictionary containing Optimizer (modified in place).
         """
         po = p.get("Optimizer")
-        if po is not None:
+        if isinstance(po, dict):
             po.pop("save_frames", None)  # UI-only, not stored in presets
 
     def _normalize_regions(self, p: dict, is_2d: bool) -> None:
@@ -648,8 +657,8 @@ class ParameterManagerMixin:
         is_2d : bool
             Whether this is a 2D problem.
         """
-        if "Regions" in p:
-            pr: dict = p["Regions"]
+        pr = p.get("Regions")
+        if isinstance(pr, dict):
             if "rshape" in pr:
                 zipped = zip(
                     pr.get("rshape", []),
@@ -689,8 +698,8 @@ class ParameterManagerMixin:
         is_2d : bool
             Whether this is a 2D problem.
         """
-        if "Supports" in p:
-            ps: dict = p["Supports"]
+        ps = p.get("Supports")
+        if isinstance(ps, dict):
             if "sdim" in ps:
                 zipped = zip(
                     ps.get("sx", []),
@@ -724,7 +733,9 @@ class ParameterManagerMixin:
         is_2d : bool
             Whether this is a 2D problem.
         """
-        pf: dict = p["Forces"]
+        pf = p.get("Forces")
+        if not isinstance(pf, dict):
+            return
         for prefix in ["fi", "fo"]:
             dir_key: str = f"{prefix}dir"
             if dir_key in pf:
@@ -761,9 +772,9 @@ class ParameterManagerMixin:
         p : dict
             Parameters dictionary containing Materials.
         """
-        if "Materials" in p:
-            pm: dict = p["Materials"]
-            if len(pm["E"]) == 1:
+        pm = p.get("Materials")
+        if isinstance(pm, dict):
+            if isinstance(pm.get("E"), (list, tuple)) and len(pm["E"]) == 1:
                 # If only one material, ignore the percentage
                 pm["percent"] = [100]
                 if "color" not in pm or pm["color"] == [""]:
