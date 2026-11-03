@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from topoptcomec import result_cache
 from topoptcomec.core.displacements import combine_load_case_displacements
+from topoptcomec.preset_normalization import normalize_params, normalized_params
 from topoptcomec.time_estimation import TimeEstimation
 
 
@@ -461,13 +462,7 @@ class ParameterManagerMixin:
 
     def _normalized_params(self, params: dict) -> dict:
         """Copy of ``params`` reduced to what defines the optimization result."""
-        normalized = copy.deepcopy(params)
-        self._normalize_params(normalized)
-        # Colors only affect the display, never the optimized field.
-        materials = normalized.get("Materials")
-        if isinstance(materials, dict):
-            materials.pop("color", None)
-        return normalized
+        return normalized_params(params)
 
     def _cache_matches_current(self, data: dict) -> bool:
         """Whether a cached result belongs to the current parameters.
@@ -480,7 +475,7 @@ class ParameterManagerMixin:
             return False
         if "params_hash" not in data:
             return False
-        expected = result_cache.params_hash(self._normalized_params(self.last_params))
+        expected = result_cache.params_hash(self.last_params)
         return str(data["params_hash"]) == expected
 
     def _load_preset_cache(self, preset_name: str) -> bool:
@@ -588,200 +583,11 @@ class ParameterManagerMixin:
 
     def _are_parameters_equivalent(self, params1: dict, params2: dict) -> bool:
         """Compares two parameter dictionaries, ignoring irrelevant data."""
-        # Create deep copies to avoid modifying the original dictionaries
         p1 = copy.deepcopy(params1)
         p2 = copy.deepcopy(params2)
-
-        self._normalize_params(p1)
-        self._normalize_params(p2)
-
+        normalize_params(p1)
+        normalize_params(p2)
         return p1 == p2
-
-    def _normalize_params(self, p: dict) -> None:
-        """
-        Normalize parameters for comparison by removing irrelevant keys.
-
-        Parameters
-        ----------
-        p : dict
-            Parameters dictionary to normalize (modified in place).
-        """
-        # Tolerate malformed presets: this runs while comparing the current
-        # parameters against every known preset, so a bad entry must not raise.
-        pd = p.get("Dimensions")
-        is_2d: bool = False
-        if isinstance(pd, dict) and isinstance(pd.get("nelxyz"), (list, tuple)):
-            nelxyz = pd["nelxyz"]
-            is_2d = len(nelxyz) < 3 or nelxyz[2] == 0.0
-            if is_2d:
-                pd["nelxyz"] = list(nelxyz)[:2]
-
-        self._normalize_regions(p, is_2d)
-        self._normalize_supports(p, is_2d)
-        self._normalize_forces(p, is_2d)
-        self._normalize_materials(p)
-        self._normalize_optimizer(p)
-
-        # Remove irrelevant keys (post-processing only, or optimizer-only state)
-        p.pop("Displacement", None)
-        p.pop("current_xPhys", None)
-
-    def _normalize_optimizer(self, p: dict) -> None:
-        """
-        Normalize optimizer parameters for comparison.
-
-        Optimizer settings (solver, filter, penalization, iterations, ...)
-        are part of a preset's identity: changing any of them must deselect
-        the preset. Only UI-only keys are ignored.
-
-        Parameters
-        ----------
-        p : dict
-            Parameters dictionary containing Optimizer (modified in place).
-        """
-        po = p.get("Optimizer")
-        if isinstance(po, dict):
-            po.pop("save_frames", None)  # UI-only, not stored in presets
-
-    def _normalize_regions(self, p: dict, is_2d: bool) -> None:
-        """
-        Normalize region parameters for comparison.
-
-        Parameters
-        ----------
-        p : dict
-            Parameters dictionary containing Regions.
-        is_2d : bool
-            Whether this is a 2D problem.
-        """
-        pr = p.get("Regions")
-        if isinstance(pr, dict):
-            if "rshape" in pr:
-                zipped = zip(
-                    pr.get("rshape", []),
-                    pr.get("rstate", []),
-                    pr.get("rradius", []),
-                    pr.get("rx", []),
-                    pr.get("ry", []),
-                    pr.get("rz", []) if not is_2d else [0] * len(pr.get("rx", [])),
-                )
-                active = [r for r in zipped if r[0] != "-"]
-                if active:
-                    (
-                        pr["rshape"],
-                        pr["rstate"],
-                        pr["rradius"],
-                        pr["rx"],
-                        pr["ry"],
-                        pr["rz"],
-                    ) = map(list, zip(*active))
-                else:
-                    p.pop("Regions", None)
-                    return
-
-                if is_2d and "rz" in pr:
-                    pr.pop("rz")
-            else:
-                p.pop("Regions", None)
-
-    def _normalize_supports(self, p: dict, is_2d: bool) -> None:
-        """
-        Normalize support parameters for comparison.
-
-        Parameters
-        ----------
-        p : dict
-            Parameters dictionary containing Supports.
-        is_2d : bool
-            Whether this is a 2D problem.
-        """
-        ps = p.get("Supports")
-        if isinstance(ps, dict):
-            if "sdim" in ps:
-                zipped = zip(
-                    ps.get("sx", []),
-                    ps.get("sy", []),
-                    ps.get("sz", []) if not is_2d else [0] * len(ps.get("sx", [])),
-                    ps.get("sdim", []),
-                    ps.get("sr", []),
-                )
-                active = [s for s in zipped if s[3] != "-"]
-                if active:
-                    (ps["sx"], ps["sy"], ps["sz"], ps["sdim"], ps["sr"]) = map(
-                        list, zip(*active)
-                    )
-                else:
-                    p.pop("Supports", None)
-                    return
-
-                if is_2d and "sz" in ps:
-                    ps.pop("sz")
-            else:
-                p.pop("Supports", None)
-
-    def _normalize_forces(self, p: dict, is_2d: bool) -> None:
-        """
-        Normalize force parameters for comparison.
-
-        Parameters
-        ----------
-        p : dict
-            Parameters dictionary containing Forces.
-        is_2d : bool
-            Whether this is a 2D problem.
-        """
-        pf = p.get("Forces")
-        if not isinstance(pf, dict):
-            return
-        for prefix in ["fi", "fo"]:
-            dir_key: str = f"{prefix}dir"
-            if dir_key in pf:
-                keys = [
-                    f"{prefix}x",
-                    f"{prefix}y",
-                    f"{prefix}z",
-                    f"{prefix}dir",
-                    f"{prefix}norm",
-                ]
-                vals: list = [pf.get(k, []) for k in keys]
-                zipped: tuple = zip(*vals)
-                active: list = []
-                # Keep if direction is not "-"
-                active: list = [item for item in zipped if item[3] != "-"]
-
-                if active:
-                    unzipped: list = list(zip(*active))
-                    for i, k in enumerate(keys):
-                        pf[k] = list(unzipped[i])
-                else:
-                    for k in keys:
-                        pf.pop(k, None)
-
-                if is_2d and f"{prefix}z" in pf:
-                    pf.pop(f"{prefix}z")
-
-    def _normalize_materials(self, p: dict) -> None:
-        """
-        Normalize material parameters for comparison.
-
-        Parameters
-        ----------
-        p : dict
-            Parameters dictionary containing Materials.
-        """
-        pm = p.get("Materials")
-        if isinstance(pm, dict):
-            if isinstance(pm.get("E"), (list, tuple)) and len(pm["E"]) == 1:
-                # If only one material, ignore the percentage
-                pm["percent"] = [100]
-                if "color" not in pm or pm["color"] == [""]:
-                    pm["color"] = ["#000000"]  # Default black color
-                if "init_type" not in pm:
-                    pm["init_type"] = 0
-            # Normalize hex color case: presets may store uppercase (#30EF54)
-            # while the GUI color picker returns lowercase (#30ef54).
-            if "color" in pm:
-                pm["color"] = [c.lower() for c in pm["color"]]
 
     def _update_position_ranges(self) -> None:
         """

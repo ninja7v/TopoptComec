@@ -94,7 +94,9 @@ The GUI layer lives in `topoptcomec/gui/`.
   estimation, and the result cache, so changes in shared logic affect both.
 - Regions are passive: their elements are excluded from the design variables
   and from the volume budget.
-- Generated output (`results/`, user presets under `~/.topoptcomec/`) never
-  touches the source checkout, so the git updater stays usable.
+- Generated output under `results/` is tracked so regenerated results show up
+  in diffs. The updater discards local result changes and preserves untracked
+  custom preset results. User presets live under `~/.topoptcomec/`, so they
+  never touch the source checkout.
 - Multi-material support exists in the core, but not every surrounding
   workflow is equally mature.

@@ -2,20 +2,23 @@
 # MIT License - Copyright (c) 2025-2026 Luc Prevost
 # Installation detection, verified downloads, and safe update installation.
 #
-# The updater only ever acts on a clean git checkout. Frozen executables and
-# packages installed into site-packages receive instructions instead of an
-# automatic replacement, because the project does not publish installable
-# binaries yet.
+# The updater only ever acts on a git checkout without unrelated local changes.
+# Changes under results/ never block an update: tracked result changes are
+# discarded, and untracked result directories (custom presets) are preserved
+# unless the release adds the same path. Frozen executables and packages
+# installed into site-packages receive instructions instead of an automatic
+# replacement, because the project does not publish installable binaries yet.
 
 from __future__ import annotations
 
 import hashlib
 import http.client
+import json
 import os
 import subprocess
 import sys
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from ..version import __version__
 from .errors import (
@@ -45,6 +48,8 @@ MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 UPDATE_STAGING_DIR = Path.home() / ".topoptcomec" / "updates"
 _GIT_TIMEOUT = 120
 _DOWNLOAD_CHUNK = 64 * 1024
+_RESULTS_DIRECTORY = "results"
+_RESULTS_STASH_MESSAGE = "TopoptComec update: custom preset results"
 
 
 def detect_installation(
@@ -124,13 +129,15 @@ def build_plan(
             supported=True,
             summary=(
                 f"Fast-forward the git checkout at {location} to {tag}. "
-                "Uncommitted changes are detected and block the update."
+                "Local result changes are discarded; other uncommitted changes "
+                "block the update."
             ),
             instructions=(
                 f"Update manually with:\n"
                 f"  git -C {location} fetch --tags origin\n"
                 f"  git -C {location} merge --ff-only {tag}\n"
-                f"If the checkout has local changes, commit or stash them first."
+                f"If the checkout has local changes outside results/, commit or "
+                "stash them first."
             ),
         )
 
@@ -189,9 +196,11 @@ def install_update(
 ) -> UpdateResult:
     """Install an available update.
 
-    Only a clean git checkout is updated automatically. Every other
-    installation raises :class:`InstallationError` carrying manual
-    instructions, so the running installation is never modified blindly.
+    Only a git checkout without unrelated local changes is updated
+    automatically. Local result changes are discarded and untracked custom
+    preset results are preserved. Every other installation raises
+    :class:`InstallationError` carrying manual instructions, so the running
+    installation is never modified blindly.
 
     Parameters
     ----------
@@ -355,17 +364,60 @@ def download_asset(
 def _update_git_checkout(
     repository: Path, check: UpdateCheck, progress: ProgressCallback | None
 ) -> UpdateResult:
-    """Fast-forward a clean git checkout to the release tag."""
+    """Fast-forward a git checkout to the release tag.
+
+    Local changes under ``results/`` never block an update. Tracked result
+    changes are discarded; untracked result directories (custom presets) are
+    stashed and restored, unless the release adds the same path. Any change
+    outside ``results/`` still blocks the update.
+    """
     _report(progress, 0, "Checking the working tree...")
     _verify_official_origin(repository)
     status = _run_git(repository, "status", "--porcelain")
-    if status.stdout.strip():
+    changes = [line for line in status.stdout.splitlines() if line.strip()]
+    blocking = [line for line in changes if not _is_results_change(line)]
+    if blocking:
         raise InstallationError(
-            "The git checkout has uncommitted changes, so it was not updated. "
-            "Commit or stash them and run the update again.\n"
-            f"Changed files:\n{status.stdout.strip()}"
+            "The git checkout has uncommitted changes outside results/, so it "
+            "was not updated. Commit or stash them and run the update again.\n"
+            "Changed files:\n" + "\n".join(blocking)
         )
 
+    custom_paths = _untracked_results(changes)
+    custom_names = _custom_preset_names(repository, custom_paths)
+    stash_ref: str | None = None
+    if custom_paths:
+        stash_ref = _stash_results(repository, custom_paths, progress)
+    discarded = len(changes) > len(custom_paths)
+    if changes:
+        _report(progress, 10, "Discarding local result changes...")
+        _discard_results(repository)
+
+    try:
+        return _fast_forward_git_checkout(
+            repository,
+            check,
+            progress,
+            stash_ref=stash_ref,
+            custom_names=custom_names,
+            discarded=discarded,
+        )
+    except InstallationError:
+        if stash_ref is not None:
+            _restore_results(repository)
+        raise
+
+
+def _fast_forward_git_checkout(
+    repository: Path,
+    check: UpdateCheck,
+    progress: ProgressCallback | None,
+    *,
+    stash_ref: str | None,
+    custom_names: set[str],
+    discarded: bool,
+) -> UpdateResult:
+    """Fetch the release tag and fast-forward the checkout."""
     _report(progress, 15, "Fetching the release tag...")
     fetch = _run_git(repository, "fetch", "--tags", "--prune", "origin")
     if fetch.returncode != 0:
@@ -407,16 +459,150 @@ def _update_git_checkout(
             f"release tag {tag}; the installed version was not reported "
             "correctly and the update was refused."
         )
+
+    restored = True
+    if stash_ref is not None:
+        conflicts = custom_names & _builtin_preset_names(repository)
+        if conflicts:
+            _report(
+                progress, 95, "Preset name conflict; keeping the release version..."
+            )
+            _discard_results(repository)
+            restored = False
+        else:
+            _report(progress, 95, "Restoring custom preset results...")
+            restored = _restore_results(repository)
+
     _report(progress, 100, "Update installed.")
     revision = head.stdout.strip()[:7] or "unknown"
+    message = (
+        f"TopoptComec was updated to {check.latest_version} "
+        f"(commit {revision}). Restart TopoptComec to use the new version."
+    )
+    if discarded:
+        message += "\nLocal changes in results/ were discarded."
+    if not restored:
+        message += (
+            "\nYour custom preset results conflicted with the release and "
+            f"were kept in git stash {stash_ref}. Apply them with "
+            "'git stash pop'."
+        )
     return UpdateResult(
         success=True,
         restart_required=True,
-        message=(
-            f"TopoptComec was updated to {check.latest_version} "
-            f"(commit {revision}). Restart TopoptComec to use the new version."
-        ),
+        message=message,
     )
+
+
+def _status_path(status_line: str) -> str:
+    """Extract the path from a ``git status --porcelain`` line."""
+    path = status_line[3:]
+    if " -> " in path:
+        path = path.split(" -> ", 1)[1]
+    return path.strip().strip('"')
+
+
+def _is_results_path(path: str) -> bool:
+    """Whether ``path`` is inside the results directory."""
+    return path == _RESULTS_DIRECTORY or path.startswith(f"{_RESULTS_DIRECTORY}/")
+
+
+def _is_results_change(status_line: str) -> bool:
+    """Whether a ``git status --porcelain`` line concerns ``results/``."""
+    return _is_results_path(_status_path(status_line))
+
+
+def _untracked_results(changes: list[str]) -> list[str]:
+    """Paths of untracked result files and directories (custom presets)."""
+    paths = []
+    for line in changes:
+        if line.startswith("??"):
+            path = _status_path(line)
+            if _is_results_path(path):
+                paths.append(path)
+    return paths
+
+
+def _custom_preset_names(repository: Path, paths: list[str]) -> set[str]:
+    """Preset names of untracked result paths, e.g. ``results/My_2D/file``."""
+    names = set()
+    for path in paths:
+        parts = PurePosixPath(path).parts
+        if len(parts) >= 2 and parts[0] == _RESULTS_DIRECTORY:
+            names.add(parts[1])
+        elif parts and parts[0] == _RESULTS_DIRECTORY:
+            # The whole results directory is untracked: inspect its children.
+            results_dir = repository / _RESULTS_DIRECTORY
+            if results_dir.is_dir():
+                names.update(p.name for p in results_dir.iterdir() if p.is_dir())
+    return names
+
+
+def _builtin_preset_names(repository: Path) -> set[str]:
+    """Preset names shipped in the checkout after the update."""
+    path = repository / "topoptcomec" / "presets.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    return set(data) if isinstance(data, dict) else set()
+
+
+def _stash_results(
+    repository: Path, paths: list[str], progress: ProgressCallback | None
+) -> str:
+    """Stash untracked custom preset results and return a short ref."""
+    _report(progress, 5, "Preserving custom preset results...")
+    stash = _run_git(
+        repository,
+        "stash",
+        "push",
+        "--include-untracked",
+        "--message",
+        _RESULTS_STASH_MESSAGE,
+        "--",
+        *paths,
+    )
+    if stash.returncode != 0:
+        raise InstallationError(
+            "Could not preserve the custom preset results before updating: "
+            f"{stash.stderr.strip() or stash.stdout.strip()}"
+        )
+    ref = _run_git(repository, "rev-parse", "--verify", "--quiet", "refs/stash")
+    return ref.stdout.strip()[:7] or "stash"
+
+
+def _discard_results(repository: Path) -> None:
+    """Reset tracked result files and remove untracked ones."""
+    _run_git(
+        repository,
+        "restore",
+        "--source=HEAD",
+        "--staged",
+        "--worktree",
+        "--",
+        _RESULTS_DIRECTORY,
+    )
+    _run_git(repository, "clean", "-fd", "--", _RESULTS_DIRECTORY)
+
+
+def _restore_results(repository: Path) -> bool:
+    """Restore stashed custom results; return False on a naming conflict."""
+    pop = _run_git(repository, "stash", "pop", "--quiet")
+    if pop.returncode == 0:
+        return True
+    # Keep the stash entry, and leave the release version of results/ intact.
+    _run_git(
+        repository,
+        "restore",
+        "--source=HEAD",
+        "--staged",
+        "--worktree",
+        "--",
+        _RESULTS_DIRECTORY,
+    )
+    _run_git(repository, "clean", "-fd", "--", _RESULTS_DIRECTORY)
+    return False
 
 
 def _verify_official_origin(repository: Path) -> None:

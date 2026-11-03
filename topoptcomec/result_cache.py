@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
+from topoptcomec.preset_normalization import normalized_params
 from topoptcomec.presets_io import validate_preset_name
 
 # Type aliases
@@ -32,6 +33,9 @@ def params_hash(params: dict) -> str:
     """
     Stable hash of a parameter dictionary, used to invalidate cached results.
 
+    The dictionary is normalized first, so the GUI and the CLI hash the same
+    parameter set even when one of them carries UI-only keys or colors.
+
     Parameters
     ----------
     params : dict
@@ -42,7 +46,9 @@ def params_hash(params: dict) -> str:
     str
         Hex digest identifying this exact parameter set.
     """
-    payload = {k: v for k, v in params.items() if k not in _VOLATILE_KEYS}
+    payload = {
+        k: v for k, v in normalized_params(params).items() if k not in _VOLATILE_KEYS
+    }
     encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 

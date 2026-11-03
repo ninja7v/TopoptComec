@@ -53,7 +53,7 @@ check or installation can run at a time.
 
 | Installation | Automatic update |
 | ------------ | ---------------- |
-| Git clone (the documented `git clone` + `uv run topoptcomec` workflow) | Yes, when the checkout is clean |
+| Git clone (the documented `git clone` + `uv run topoptcomec` workflow) | Yes, local `results/` changes do not block it |
 | Standalone PyInstaller executable | No; the app links to the release page |
 | Package installed into `site-packages` | No; the project is not published on PyPI |
 
@@ -62,7 +62,7 @@ check or installation can run at a time.
 The updater fetches tags from `origin` and fast-forwards the current branch to
 the release tag with `git merge --ff-only`. It refuses to do anything when:
 
-- there are uncommitted or untracked changes,
+- there are uncommitted or untracked changes outside `results/`,
 - local commits make a fast-forward impossible,
 - the release tag is missing or does not match the release version.
 
@@ -71,9 +71,13 @@ update again. Because the previous revision remains in the git history, you
 can return to it with `git reset --hard ORIG_HEAD` if needed (this discards any
 changes made after the update).
 
-Running TopoptComec does not make the checkout dirty: `results/` is ignored by
-git and the GUI saves your presets to `~/.topoptcomec/presets.json` instead of
-the repository. Presets of a new release show up alongside your own ones.
+Results are tracked so regenerated outputs show up in diffs. Local changes
+under `results/` never block an update: tracked result changes are discarded,
+while untracked result directories (your custom presets) are stashed and
+restored. If the release adds a preset with the same name, the release version
+wins and your copy stays in the stash; apply it later with `git stash pop`. The
+GUI saves your presets to `~/.topoptcomec/presets.json` instead of the
+repository, so presets of a new release show up alongside your own ones.
 
 ### Standalone executable or installed package
 

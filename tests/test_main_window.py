@@ -601,6 +601,11 @@ def test_low_density_validation(qt_app):
     import numpy as np
 
     window: MainWindow = MainWindow()
+    # At startup the plot may show a cached preset result; this test needs the
+    # no-result state that exists before any optimization has been displayed.
+    window.xPhys = None
+    window.u = None
+    window.xPhys_valid = False
     # At startup the plot shows the initial density field, but no optimization
     # result has been produced yet, so no result-dependent action is enabled.
     assert window.xPhys_valid is False

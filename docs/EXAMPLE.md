@@ -64,7 +64,8 @@ result (`results/<preset>/<preset>_density_field.npz`).
   checkout, else the packaged ones), `~/.topoptcomec/presets.json` and
   `./presets.json` are merged, the later one winning on a name clash.
 - CLI outputs are written to `results/` by default (override with `-o`).
-  `results/` is generated output and is not tracked by git.
+  `results/` is generated output tracked in git, so regenerated results show
+  up in diffs.
 - Results are cached per preset. The cache records a hash of the parameters
   and the grid it was produced for, and is invalidated automatically when
   either changes.

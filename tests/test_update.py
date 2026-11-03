@@ -796,7 +796,14 @@ def make_remote_and_clone(tmp_path: Path) -> tuple[Path, Path]:
     return remote, work
 
 
-def publish_release(work: Path, tmp_path: Path, version: str) -> None:
+def publish_release(
+    work: Path,
+    tmp_path: Path,
+    version: str,
+    *,
+    results_content: bytes | None = None,
+    preset_names: list[str] | None = None,
+) -> None:
     """Publish a new commit and tag from a second clone."""
     publisher = tmp_path / f"publisher-{version}"
     subprocess.run(
@@ -808,10 +815,31 @@ def publish_release(work: Path, tmp_path: Path, version: str) -> None:
     git(publisher, "config", "user.email", "tests@example.com")
     git(publisher, "config", "user.name", "Tests")
     (publisher / "app.py").write_text(f"VERSION = '{version}'\n", encoding="utf-8")
-    git(publisher, "add", "app.py")
+    if results_content is not None:
+        path = publisher / "results" / "Bird_2D" / "Bird_2D_density_field.npz"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(results_content)
+    if preset_names is not None:
+        path = publisher / "topoptcomec" / "presets.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({name: {} for name in preset_names}), encoding="utf-8"
+        )
+    git(publisher, "add", "--all")
     git(publisher, "commit", "-m", f"release {version}")
     git(publisher, "tag", f"v{version}")
     git(publisher, "push", "origin", "main", "--tags")
+
+
+def track_results(work: Path, content: bytes = b"initial results") -> Path:
+    """Commit a result file so later runs can modify it."""
+    path = work / "results" / "Bird_2D" / "Bird_2D_density_field.npz"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    git(work, "add", "results")
+    git(work, "commit", "-m", "track results")
+    git(work, "push", "origin", "main")
+    return path
 
 
 def git_installation(work: Path) -> Installation:
@@ -852,6 +880,97 @@ def test_git_update_refuses_dirty_checkout(tmp_path):
 
     assert (work / "app.py").read_text(encoding="utf-8") == "local experiment\n"
     assert git(work, "rev-parse", "HEAD") == before
+
+
+def test_git_update_discards_tracked_result_changes(tmp_path):
+    """Regenerated tracked results do not block the update; they are reset."""
+    _remote, work = make_remote_and_clone(tmp_path)
+    path = track_results(work)
+    publish_release(work, tmp_path, "2.0.0")
+    path.write_bytes(b"regenerated results")
+    check = make_installer_check()
+
+    result = install_update(check, build_plan(check, git_installation(work)))
+
+    assert result.success
+    assert path.read_bytes() == b"initial results"
+    assert "discarded" in result.message
+    assert git(work, "stash", "list") == ""
+    assert (work / "app.py").read_text(encoding="utf-8") == "VERSION = '2.0.0'\n"
+
+
+def test_git_update_preserves_untracked_custom_results(tmp_path):
+    """Untracked result directories (custom presets) survive the update."""
+    _remote, work = make_remote_and_clone(tmp_path)
+    path = work / "results" / "Custom_2D" / "Custom_2D_density_field.npz"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"custom results")
+    publish_release(work, tmp_path, "2.0.0")
+    check = make_installer_check()
+
+    result = install_update(check, build_plan(check, git_installation(work)))
+
+    assert result.success
+    assert path.read_bytes() == b"custom results"
+    assert "discarded" not in result.message
+    assert git(work, "stash", "list") == ""
+    assert (work / "app.py").read_text(encoding="utf-8") == "VERSION = '2.0.0'\n"
+
+
+def test_git_update_discards_tracked_and_keeps_custom_results(tmp_path):
+    """Tracked results are reset while untracked custom results are kept."""
+    _remote, work = make_remote_and_clone(tmp_path)
+    tracked = track_results(work)
+    custom = work / "results" / "Custom_2D" / "Custom_2D_density_field.npz"
+    custom.parent.mkdir(parents=True)
+    custom.write_bytes(b"custom results")
+    publish_release(work, tmp_path, "2.0.0")
+    tracked.write_bytes(b"regenerated results")
+    check = make_installer_check()
+
+    result = install_update(check, build_plan(check, git_installation(work)))
+
+    assert result.success
+    assert tracked.read_bytes() == b"initial results"
+    assert custom.read_bytes() == b"custom results"
+    assert "discarded" in result.message
+    assert git(work, "stash", "list") == ""
+
+
+def test_git_update_release_wins_on_custom_result_name_conflict(tmp_path):
+    """A release preset with the same name wins; the local copy stays stashed."""
+    _remote, work = make_remote_and_clone(tmp_path)
+    path = work / "results" / "Bird_2D" / "Bird_2D_density_field.npz"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"custom results")
+    publish_release(work, tmp_path, "2.0.0", results_content=b"release results")
+    check = make_installer_check()
+
+    result = install_update(check, build_plan(check, git_installation(work)))
+
+    assert result.success
+    assert "stash" in result.message
+    assert path.read_bytes() == b"release results"
+    assert git(work, "stash", "list") != ""
+    assert (work / "app.py").read_text(encoding="utf-8") == "VERSION = '2.0.0'\n"
+
+
+def test_git_update_release_preset_name_wins_over_custom_results(tmp_path):
+    """A shipped preset with the same name also wins, even without files."""
+    _remote, work = make_remote_and_clone(tmp_path)
+    path = work / "results" / "Custom_2D" / "Custom_2D_density_field.npz"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"custom results")
+    publish_release(work, tmp_path, "2.0.0", preset_names=["Custom_2D"])
+    check = make_installer_check()
+
+    result = install_update(check, build_plan(check, git_installation(work)))
+
+    assert result.success
+    assert "stash" in result.message
+    assert not path.exists()
+    assert git(work, "stash", "list") != ""
+    assert (work / "app.py").read_text(encoding="utf-8") == "VERSION = '2.0.0'\n"
 
 
 def test_git_update_refuses_unrelated_origin(tmp_path):
