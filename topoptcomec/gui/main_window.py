@@ -638,7 +638,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
                     cache_file,
                     self.xPhys,
                     self.u,
-                    self._normalized_params(self.last_params),
+                    self.last_params,
                     self.last_params["Dimensions"]["nelxyz"],
                     converged=self._last_change <= 0.01,
                 )

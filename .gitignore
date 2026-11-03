@@ -3,10 +3,10 @@ __pycache__/
 *.py[cod]
 
 # Saved results
-# The whole directory is generated output: keeping it out of git means running
-# the CLI or the GUI never makes the checkout dirty (which would block the
-# updater, see docs/UPDATING.md).
-/results/
+# Results are tracked so regenerated outputs show up in diffs. The updater
+# preserves local results/ changes before updating (see docs/UPDATING.md).
+# Local backups are not results.
+/results/results.bak/
 
 # Test outputs
 /tests/test_output*
