@@ -248,28 +248,27 @@ def save_as_png(
 
         if is_3d:
             eff_density = xPhys.sum(axis=0) if is_multi else xPhys
-            elem_colors = _compute_element_colors(xPhys, is_multi, colors)
-            opacity = np.interp(
-                np.clip(eff_density, 0.0, 1.0),
-                (0.0, 1.0),
-                (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
-            )
-            elem_colors = np.column_stack(
-                (elem_colors, np.round(opacity * 255).astype(np.uint8))
-            )
-
-            structured_grid = StructuredGrid(nx, ny, nz)
-            grid = _ImageData(dimensions=(nx + 1, ny + 1, nz + 1))
-            grid.cell_data["density"] = structured_grid.to_vtk_cell_order(eff_density)
-            grid.cell_data["colors"] = structured_grid.to_vtk_cell_order(elem_colors)
-            visible = grid.threshold(0.01, scalars="density")
-            if visible.n_cells > 0:
-                plotter.add_mesh(
-                    visible,
-                    scalars="colors",
-                    rgb=True,
-                    lighting=False,
+            mask = eff_density > 0.01
+            if np.any(mask):
+                elem_colors = _compute_element_colors(xPhys, is_multi, colors)[mask]
+                opacity = np.interp(
+                    np.clip(eff_density[mask], 0.0, 1.0),
+                    (0.0, 1.0),
+                    (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
                 )
+                elem_colors = np.column_stack(
+                    (elem_colors, np.round(opacity * 255).astype(np.uint8))
+                )
+
+                # Draw one cube per visible element, matching the in-app
+                # material view. Thresholding the density field would only
+                # render the outer surface and hide the individual voxels.
+                centers = StructuredGrid(nx, ny, nz).element_centers()[mask]
+                poly = pv.PolyData(centers)
+                poly.point_data["colors"] = elem_colors
+                cube = pv.Cube(x_length=1.0, y_length=1.0, z_length=1.0)
+                glyphs = poly.glyph(geom=cube, orient=False, scale=False, factor=1.0)
+                plotter.add_mesh(glyphs, scalars="colors", rgb=True)
             plotter.view_isometric()
         else:
             elem_colors = _compute_element_colors(xPhys, is_multi, colors)
