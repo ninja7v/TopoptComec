@@ -1,7 +1,8 @@
 <img width="30" height="30" alt="TopoptComec_logo" src="https://github.com/user-attachments/assets/b93640d7-cda4-4a47-9a7a-783906d2c19c" /> TopoptComec
 ============
 **Interactive topology optimization for compliant mechanisms — unleash your creativity!**
-![TopoptComec_demo](https://github.com/user-attachments/assets/24a2853e-c53b-44d8-89d0-d7df75364ca9)
+
+<img width="900" alt="TopoptComec_demo" src="https://github.com/user-attachments/assets/cfb2207c-4adf-4bfe-94c9-83a1fbd19766" />
 
 ## What is TopoptComec?
 TopoptComec helps you design compliant mechanisms — flexible structures that achieve motion through material deformation rather than joints.
@@ -35,7 +36,7 @@ uv run topoptcomec
 ```bash
 uv run topoptcomec -p ForceInverter_2Sup_2D --preview
 ```
-<img width="500" alt="image" src="https://github.com/user-attachments/assets/bf4e7643-2014-4521-bf0c-4d2cc78c7fe7" />
+<img width="600" alt="TopoptComec_cli" src="https://github.com/user-attachments/assets/62b4be04-5085-4edc-ad68-3be169d11fd7" />
 
 ### 3. Create
 Tweak the parameters or choose a preset and hit "Create"!
@@ -61,7 +62,7 @@ Once you’re happy with your mechanism, export it for visualization in ParaView
 ## 📖Wiki
 The interface should feel intuitive, but you’ll find detailed visual explanations in the [Wiki](https://github.com/ninja7v/TopoptComec/wiki).
 
-![TopoptComec_intro](https://github.com/user-attachments/assets/b36106a4-f642-4f50-9926-128de2fab463)
+<img width="700" alt="BeeSting_3D" src="https://github.com/user-attachments/assets/38f82626-73b6-4946-abf6-5451c18381c5" />
 
 ## ✍️Contribute
 Ideas, bug reports, or pull requests — all are welcome. Let’s build something awesome together!
