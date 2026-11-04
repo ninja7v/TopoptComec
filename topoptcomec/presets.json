@@ -40,8 +40,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 1.0,
-      "disp_iterations": 1
+      "disp_factor": 6.0,
+      "disp_iterations": 5
     }
   },
   "Gripper_2D": {
@@ -93,8 +93,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 1.0,
-      "disp_iterations": 1
+      "disp_factor": 12.0,
+      "disp_iterations": 5
     }
   },
   "KeyboardKey_3D": {
@@ -138,7 +138,7 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 1.0,
+      "disp_factor": 2.0,
       "disp_iterations": 1
     }
   },
@@ -183,8 +183,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 1.0,
-      "disp_iterations": 1
+      "disp_factor": 10.0,
+      "disp_iterations": 6
     }
   },
   "Butterfly_2D": {
@@ -221,8 +221,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 2.0,
-      "disp_iterations": 3
+      "disp_factor": 4.5,
+      "disp_iterations": 5
     }
   },
   "Bird_2D": {
@@ -266,8 +266,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 2.0,
-      "disp_iterations": 3
+      "disp_factor": 12.0,
+      "disp_iterations": 6
     }
   },
   "Bridge_2D": {
@@ -306,8 +306,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 1.0,
-      "disp_iterations": 1
+      "disp_factor": 8.0,
+      "disp_iterations": 8
     }
   },
   "Shelf_2D": {
@@ -346,8 +346,8 @@
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 1.0,
-      "disp_iterations": 1
+      "disp_factor": 7.0,
+      "disp_iterations": 6
     }
   },
   "BeeSting_3D": {
@@ -432,8 +432,8 @@
       "save_frames": false
     },
     "Displacement": {
-      "disp_factor": 3.0,
-      "disp_iterations": 1,
+      "disp_factor": 5.0,
+      "disp_iterations": 5,
       "save_frames": false
     }
   }
