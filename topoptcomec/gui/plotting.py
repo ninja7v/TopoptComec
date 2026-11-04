@@ -167,43 +167,9 @@ class PlottingMixin:
                     + Z[x_idx + 1, y_idx + 1, z_idx + 1]
                 ) / 8.0
 
-                # Colors pre-blended against white with alpha = density
-                is_multi_3d: bool = hasattr(self.xPhys, "ndim") and self.xPhys.ndim > 1
-                eff_density: np.ndarray = (
-                    self.xPhys.sum(axis=0) if is_multi_3d else self.xPhys
-                )
-                mask: np.ndarray = eff_density > 0.01
-                if not np.any(mask):
-                    return
-                colors: np.ndarray = self._material_colors(self.xPhys, is_multi_3d)[
-                    mask
-                ]
-                opacity: np.ndarray = np.interp(
-                    np.clip(eff_density[mask], 0.0, 1.0),
-                    (0.0, 1.0),
-                    (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
-                )
-                if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-                    colors = np.column_stack(
-                        (colors, np.round(opacity * 255).astype(np.uint8))
-                    )
-
                 # One cube glyph per visible displaced voxel center
-                points: np.ndarray = np.column_stack([cx[mask], cy[mask], cz[mask]])
-                poly = pv.PolyData(points)
-                poly.point_data["colors"] = colors
-                cube = pv.Cube(x_length=1.0, y_length=1.0, z_length=1.0)
-                glyphs = poly.glyph(geom=cube, orient=False, scale=False, factor=1.0)
-
-                self._remove_material_actor()
-                self._material_actor = self.plotter.add_mesh(
-                    glyphs,
-                    scalars="colors",
-                    rgb=True,
-                    reset_camera=False,
-                    render=False,
-                )
-                self._material_grid = None
+                centers: np.ndarray = np.column_stack([cx, cy, cz])
+                self._plot_voxels_3d(self.xPhys, nelx, nely, nelz, centers=centers)
             else:
                 X, Y = self.last_displayed_frame_data
 
@@ -802,8 +768,8 @@ class PlottingMixin:
         """
         Plot 3D material density field as voxels.
 
-        Elements denser than 0.01 are extracted with a threshold and shown
-        as solid voxels colored by material (faded by effective density).
+        Elements denser than 0.01 are drawn as individual cube glyphs
+        colored by material (faded by effective density).
 
         Parameters
         ----------
@@ -814,27 +780,66 @@ class PlottingMixin:
         is_multi : bool
             Whether this is multi-material data.
         """
-        self._remove_material_actor()
+        self._plot_voxels_3d(data, nelx, nely, nelz, is_multi=is_multi)
 
+    def _plot_voxels_3d(
+        self,
+        data: np.ndarray,
+        nelx: int,
+        nely: int,
+        nelz: int,
+        is_multi: bool | None = None,
+        centers: np.ndarray | None = None,
+    ):
+        """Draw one cube per visible element.
+
+        A thresholded density field only renders the outer surface of the
+        material, which hides the individual voxel boundaries. Building an
+        independent cube per element (as the single-frame displacement view
+        does) keeps every voxel visible, so static, animated and deformed
+        views look the same.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Density data of shape (nel,) or (n_mat, nel).
+        nelx, nely, nelz : int
+            Number of elements in each dimension.
+        is_multi : bool, optional
+            Whether this is multi-material data. Inferred from ``data``
+            when None.
+        centers : np.ndarray, optional
+            Element centers of shape (nel, 3). Defaults to the undeformed
+            element centers of the grid.
+        """
+        if is_multi is None:
+            is_multi = data.ndim > 1
         eff_density: np.ndarray = data.sum(axis=0) if is_multi else data
-        colors: np.ndarray = self._material_colors(data, is_multi)
+        mask: np.ndarray = eff_density > 0.01
+        if not np.any(mask):
+            self._remove_material_actor()
+            return
+
+        colors: np.ndarray = self._material_colors(data, is_multi)[mask]
         opacity: np.ndarray = np.interp(
-            np.clip(eff_density, 0.0, 1.0),
+            np.clip(eff_density[mask], 0.0, 1.0),
             (0.0, 1.0),
             (_VOXEL_OPACITY_MIN, _VOXEL_OPACITY_MAX),
         )
         if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
             colors = np.column_stack((colors, np.round(opacity * 255).astype(np.uint8)))
 
-        structured_grid = StructuredGrid(nelx, nely, nelz)
-        grid = ImageData(dimensions=(nelx + 1, nely + 1, nelz + 1))
-        grid.cell_data["density"] = structured_grid.to_vtk_cell_order(eff_density)
-        grid.cell_data["colors"] = structured_grid.to_vtk_cell_order(colors)
-        visible = grid.threshold(0.01, scalars="density")
-        if visible.n_cells == 0:
-            return
+        if centers is None:
+            centers = StructuredGrid(nelx, nely, nelz).element_centers()
+        points: np.ndarray = np.asarray(centers)[mask]
+        poly = pv.PolyData(points)
+        poly.point_data["colors"] = colors
+        cube = pv.Cube(x_length=1.0, y_length=1.0, z_length=1.0)
+        glyphs = poly.glyph(geom=cube, orient=False, scale=False, factor=1.0)
+
+        self._remove_material_actor()
         self._material_actor = self.plotter.add_mesh(
-            visible,
+            glyphs,
             scalars="colors",
             rgb=True,
             name="material",
