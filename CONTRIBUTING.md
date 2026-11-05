@@ -18,8 +18,22 @@ Create an [issues](https://github.com/ninja7v/topoptcomec/issues).
 
 1. Create a branch for a single, focused change.
 2. Implement and add tests where appropriate.
-3. Install the dev dependencies: `python -m pip install -r requirements-dev.txt`
-4. Run formatting `ruff format .` and checks `ruff format --check . && ruff check . && lizard -L 150 -C 30 -w topoptcomec tests && pytest`.
+3. Install the runtime and dev dependencies with uv:
+
+   ```bash
+   uv sync --group dev
+   ```
+
+4. Format the code, then run the checks:
+
+   ```bash
+   uv run ruff format .
+   uv run ruff format --check .
+   uv run ruff check .
+   uv run lizard -L 150 -C 30 -w topoptcomec tests
+   uv run pytest
+   ```
+
 5. Open a pull request describing what you changed and why.
 
 Vibe coders are welcome, just make sure to read and understand every line!
