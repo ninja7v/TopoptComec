@@ -150,7 +150,7 @@ class TimeEstimation:
         size_matrix = self._compute_size_matrix()
         forces: dict = self.params.get("Forces", {})
         nb_iteration: int = int(any(d != "-" for d in forces.get("fidir", [])))
-        nb_solves: int = self.params.get("Optimizer", {}).get("n_it", 50)
+        nb_solves: int = self.params.get("Displacement", {}).get("disp_iterations", 1)
 
         return self._estimated_solving_cost(nb_iteration, nb_solves, size_matrix)
 

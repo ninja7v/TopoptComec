@@ -315,3 +315,19 @@ def test_rescale_densities_binary_field_reaches_target():
     assert result.mean() == pytest.approx(0.2, abs=1e-3)
     assert result.min() >= 0.0 and result.max() <= 1.0
     assert result.sum() < binary.sum()
+
+
+@pytest.mark.parametrize("multi", [False, True])
+def test_distance_initializer_is_symmetric_about_a_centred_point(multi):
+    """Distances are measured from the element centres, so a point in the
+    middle of the grid gives a field symmetric in both directions."""
+    nelx, nely = 8, 6
+    args = (0.4, nelx, nely, 0, np.array([4.0]), np.array([3.0]), np.array([0.0]))
+    if multi:
+        field = initializers.initialize_materials(1, [60, 40], *args).sum(axis=0)
+    else:
+        field = initializers.initialize_material(1, *args)
+    spatial = field.reshape(nelx, nely)
+    np.testing.assert_allclose(spatial, spatial[::-1, :], atol=1e-12)
+    np.testing.assert_allclose(spatial, spatial[:, ::-1], atol=1e-12)
+    np.testing.assert_allclose(field.mean(), 0.4, atol=1e-3)

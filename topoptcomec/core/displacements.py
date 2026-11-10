@@ -29,10 +29,6 @@ def combine_load_case_displacements(u: FloatArray) -> FloatArray:
     ----------
     u : FloatArray
         Displacement vector from FEM solve, shape (ndof,) or (ndof, n_forces).
-    n_forces : int
-        Number of load cases.
-    is_3d : bool
-        Whether the problem is 3D.
 
     Returns
     -------
@@ -463,9 +459,8 @@ def run_iterative_displacement(
 
     # Simulation Parameters
     pd: dict = params.get("Displacement", {})
-    delta_disp: float = float(pd.get("disp_factor", 1.0)) / max(
-        1, int(pd.get("disp_iterations", 1))
-    )
+    n_iterations: int = int(pd.get("disp_iterations", 1))
+    delta_disp: float = float(pd.get("disp_factor", 1.0)) / max(1, n_iterations)
 
     def _density_for_fem(xp: FloatArray) -> FloatArray:
         """Density in the shape expected by the FEM.
@@ -495,7 +490,7 @@ def run_iterative_displacement(
     c_val: float = -nominator / (1 + np.exp(k / 2))
 
     # Iterative Loop
-    for it in range(pd["disp_iterations"]):
+    for it in range(n_iterations):
         # Solve FEM to get the deformation
         ui, _ = fem.solve(_density_for_fem(xPhys if is_multi else xPhys[0]))
 
