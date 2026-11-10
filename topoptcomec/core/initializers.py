@@ -180,11 +180,11 @@ def initialize_material(
                 Z: FloatArray = np.repeat(np.arange(nelz), nelx * nely)
                 X: FloatArray = np.tile(np.repeat(np.arange(nelx), nely), nelz)
                 Y: FloatArray = np.tile(np.arange(nely), nelx * nelz)
-                coords: FloatArray = np.column_stack((X, Y, Z))
+                coords: FloatArray = np.column_stack((X, Y, Z)) + 0.5
             else:
                 X = np.repeat(np.arange(nelx), nely)
                 Y = np.tile(np.arange(nely), nelx)
-                coords = np.column_stack((X, Y))
+                coords = np.column_stack((X, Y)) + 0.5
 
             dists: FloatArray = cdist(
                 coords, points, metric="euclidean"
@@ -298,11 +298,11 @@ def initialize_materials(
                     Z: FloatArray = np.repeat(np.arange(nelz), nelx * nely)
                     X: FloatArray = np.tile(np.repeat(np.arange(nelx), nely), nelz)
                     Y: FloatArray = np.tile(np.arange(nely), nelx * nelz)
-                    coords: FloatArray = np.column_stack((X, Y, Z))
+                    coords: FloatArray = np.column_stack((X, Y, Z)) + 0.5
                 else:
                     X = np.repeat(np.arange(nelx), nely)
                     Y = np.tile(np.arange(nely), nelx)
-                    coords = np.column_stack((X, Y))
+                    coords = np.column_stack((X, Y)) + 0.5
 
                 dists: FloatArray = cdist(coords, points, metric="euclidean")
                 min_dist: FloatArray = dists.min(axis=1)

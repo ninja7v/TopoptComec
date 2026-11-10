@@ -249,7 +249,7 @@ def analyze(
     for step, check in enumerate(checks, start=1):
         results.append(check())
         if progress_callback and progress_callback(step):
-            print("Optimization stopped by user.")
+            print("Analysis stopped by user.")
             # Fill remaining checks with False
             results.extend([False] * (len(checks) - len(results)))
             break

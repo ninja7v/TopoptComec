@@ -309,3 +309,25 @@ def test_validate_init_type_from_current_result(qt_app):
     err: str | None = _validate(window, params)
     assert err is None
     window.close()
+
+
+def test_time_estimation_of_the_displacement_stage():
+    """The displacement stage depends on its own iteration count, not on the
+    optimizer's."""
+    import copy
+
+    from topoptcomec.time_estimation import TimeEstimation
+
+    params = {
+        "Dimensions": {"nelxyz": [40, 20, 0], "volfrac": 0.3},
+        "Forces": {"fidir": ["X:→"], "fodir": ["-"]},
+        "Optimizer": {"n_it": 30},
+        "Displacement": {"disp_iterations": 4},
+    }
+    longer = copy.deepcopy(params)
+    longer["Displacement"]["disp_iterations"] = 8
+    more_iterations = copy.deepcopy(params)
+    more_iterations["Optimizer"]["n_it"] = 60
+    base = TimeEstimation(params).displacement_cost()
+    assert TimeEstimation(longer).displacement_cost() == 2 * base
+    assert TimeEstimation(more_iterations).displacement_cost() == base

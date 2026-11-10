@@ -156,3 +156,26 @@ def test_embed_crop_3d_preserves_fem_ordering():
     # Round trip must be the identity.
     cropped = _crop_density(embedded, 1, small, large, mx, my, mz)
     np.testing.assert_array_equal(cropped[0], x)
+
+
+def test_iterative_displacement_without_displacement_section():
+    """Regression: a preset without a ``Displacement`` section raised
+    ``KeyError: 'disp_iterations'`` (the defaults were only half applied)."""
+    params = {
+        "Dimensions": {"nelxyz": [6, 4, 0], "volfrac": 0.5},
+        "Forces": {
+            "fix": [6],
+            "fiy": [2],
+            "fidir": ["Y:\u2193"],
+            "finorm": [0.01],
+            "fox": [],
+            "foy": [],
+            "fodir": [],
+            "fonorm": [],
+        },
+        "Supports": {"sx": [0], "sy": [2], "sdim": ["XY"], "sr": [3]},
+        "Materials": {"E": [1.0], "nu": [0.3]},
+        "Optimizer": {"penal": 3.0, "solver": "Direct"},
+    }
+    frames = list(displacements.run_iterative_displacement(params, np.ones(24)))
+    assert len(frames) == 2  # initial frame + the default single iteration
