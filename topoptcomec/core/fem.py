@@ -9,9 +9,10 @@ from collections.abc import Sequence
 
 import numpy as np
 import numpy.typing as npt
-from scipy.sparse import coo_matrix, csc_matrix, eye
-from scipy.sparse.linalg import LinearOperator, cg, splu
+from scipy.sparse import coo_matrix, csc_matrix, identity
+from scipy.sparse.linalg import LinearOperator, cg
 
+from topoptcomec.core.direct_solver import DirectSolver, pardiso_available
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Region, Support
 
@@ -25,15 +26,79 @@ SOLVERS = ("Direct", "Iterative", "Auto")
 FILTERS = ("Sensitivity", "Density", "None")
 #: Relative minimum stiffness (E_min = MIN_STIFFNESS_RATIO * E_max).
 MIN_STIFFNESS_RATIO = 1e-9
-#: Auto solver: estimated fill-in budget of the direct factorisation
-#: (``n_free * bandwidth``). Above it the iterative solver is used, which keeps
-#: memory bounded for large meshes.
-AUTO_DIRECT_WORK_2D = 2e7
+#: Auto solver: budget of the direct factorisation, measured as
+#: ``n_free * bandwidth``. Above it the iterative solver is used, which keeps
+#: memory bounded for large meshes. 2D factors stay sparse, so the direct
+#: solver wins up to millions of DOFs; 3D factors fill in quickly. PARDISO
+#: (multi-threaded, supernodal) pushes the 3D limit much further than SuperLU.
+AUTO_DIRECT_WORK_2D = 2e9
 AUTO_DIRECT_WORK_3D = 2e6
+AUTO_DIRECT_WORK_3D_PARDISO = 5e8
 #: Diagonal regularisation applied when a rigid-body mode is unconstrained.
 #: It pins the free mode without changing the strain of a self-equilibrated
 #: load case (the load vector is orthogonal to it).
 RIGID_BODY_REGULARISATION = 1e-12
+
+
+class _AssemblyPattern:
+    """
+    Fixed sparsity pattern of the reduced stiffness matrix.
+
+    Parameters
+    ----------
+    rows, cols : IntArray
+        Global DOF indices of every element triplet.
+    free_dofs : IntArray
+        Sorted unconstrained DOF indices.
+    ndof : int
+        Total number of DOFs.
+
+    Attributes
+    ----------
+    size : int
+        Number of free DOFs.
+    to_free : IntArray
+        Map from global DOF to reduced index (``-1`` for a fixed DOF).
+    diagonal : IntArray
+        Position of every diagonal entry in the CSC data array.
+    """
+
+    def __init__(
+        self, rows: IntArray, cols: IntArray, free_dofs: IntArray, ndof: int
+    ) -> None:
+        n = int(free_dofs.size)
+        self.size: int = n
+        self.to_free: IntArray = np.full(ndof, -1, dtype=np.int64)
+        self.to_free[free_dofs] = np.arange(n, dtype=np.int64)
+        free_rows = self.to_free[rows]
+        free_cols = self.to_free[cols]
+        keep = (free_rows >= 0) & (free_cols >= 0)
+        # Column-major key: sorting it yields the CSC entry order.
+        keys, inverse = np.unique(
+            free_cols[keep] * n + free_rows[keep], return_inverse=True
+        )
+        self.nnz: int = int(keys.size)
+        self._indices = (keys % max(n, 1)).astype(np.int32)
+        self._indptr = np.zeros(n + 1, dtype=np.int32)
+        np.cumsum(np.bincount(keys // max(n, 1), minlength=n), out=self._indptr[1:])
+        # Triplets touching a fixed DOF are summed into a discarded extra bin.
+        self._slot = np.full(rows.size, self.nnz, dtype=np.intp)
+        self._slot[keep] = inverse
+        self.diagonal: IntArray = np.searchsorted(
+            keys, np.arange(n, dtype=np.int64) * (n + 1)
+        )
+
+    def sum_triplets(self, values: FloatArray) -> FloatArray:
+        """Sum element triplet values into the CSC data array."""
+        return np.bincount(
+            self._slot, weights=np.ravel(values), minlength=self.nnz + 1
+        )[: self.nnz]
+
+    def matrix(self, data: FloatArray) -> csc_matrix:
+        """CSC matrix sharing this pattern with the given data."""
+        return csc_matrix(
+            (data, self._indices, self._indptr), shape=(self.size, self.size)
+        )
 
 
 class FEM:
@@ -142,6 +207,13 @@ class FEM:
         self._spring_dofs: IntArray = np.array([], dtype=np.int64)
         self._spring_vals: FloatArray = np.array([], dtype=np.float64)
         self._no_support_warned: bool = False
+        self._rigid_body_mode_free: bool = True
+        # Sparsity pattern of the reduced stiffness matrix (built lazily, it
+        # only depends on the free DOFs) and the last iterative solutions
+        # (warm start of the next Krylov solve).
+        self._pattern: _AssemblyPattern | None = None
+        self._warm_start: FloatArray | None = None
+        self._direct = DirectSolver()
 
     def _validate_materials(self) -> None:
         """Reject material constants that would produce an invalid system."""
@@ -243,10 +315,15 @@ class FEM:
                 if self.is_3d and sup.fix_z:
                     fixed.append(node_dof + 2)
 
-        self.fixed_dofs = np.unique(np.asarray(fixed, dtype=np.int64))
+        fixed_dofs = np.unique(np.asarray(fixed, dtype=np.int64))
+        if self._pattern is None or not np.array_equal(fixed_dofs, self.fixed_dofs):
+            self._pattern = None
+            self._warm_start = None
+        self.fixed_dofs = fixed_dofs
         self.free_dofs = np.setdiff1d(
             np.arange(self.ndof, dtype=np.int64), self.fixed_dofs
         )
+        self._rigid_body_mode_free = self._has_free_rigid_body_mode()
         if (
             self.fixed_dofs.size == 0
             and (self.loads_in or self.loads_out)
@@ -452,34 +529,7 @@ class FEM:
         Tuple[FloatArray, FloatArray]
             (ui, uo) - Displacement arrays for input and output loads.
         """
-        E_eff = self._material_stiffness(xPhys)  # (nb_mat, nel)
-        sK = np.zeros((self.KE.size, self.nel), dtype=np.float64)
-        for m in range(self.nb_mat):
-            sK += self._KE_flat_mats[m][:, None] * E_eff[m]
-
-        # Element triplets + artificial spring triplets in a single assembly.
-        K = coo_matrix(
-            (
-                np.concatenate([sK.ravel(order="F"), self._spring_vals]),
-                (
-                    np.concatenate([self.iK, self._spring_dofs]),
-                    np.concatenate([self.jK, self._spring_dofs]),
-                ),
-            ),
-            shape=(self.ndof, self.ndof),
-        ).tocsc()
-
-        # Solving: one factorisation / Krylov solve for all load cases.
-        K_free = K[np.ix_(self.free_dofs, self.free_dofs)]
-        if K_free.shape[0] > 0 and self._has_free_rigid_body_mode():
-            # Supports may fix only some directions (e.g. a roller), leaving a
-            # rigid-body mode free. Pin it so the factorisation is deterministic
-            # across platforms. For a self-equilibrated load case the load
-            # vector is orthogonal to the free mode, so the strain is unchanged.
-            eps = RIGID_BODY_REGULARISATION * float(
-                np.max(np.abs(K_free.diagonal())) or 1.0
-            )
-            K_free = K_free + eps * eye(K_free.shape[0], format="csc")
+        K_free = self._assemble_free(self._linear_element_values(xPhys))
 
         ui = np.zeros(self.ndof, dtype=np.float64)
         uo = np.zeros(self.ndof, dtype=np.float64)
@@ -491,6 +541,67 @@ class FEM:
                 uo[self.free_dofs] = solutions[:, 1]
 
         return ui, uo
+
+    def _linear_element_values(self, xPhys: FloatArray) -> FloatArray:
+        """
+        SIMP-scaled linear element stiffness entries, shape (nel, eldof**2).
+
+        Row ``e`` holds the flattened element matrix
+        :math:`\\sum_m E_{m,e}\\mathbf{K}_{e,m}^0` in the triplet order of
+        ``iK`` / ``jK``.
+        """
+        return self._material_stiffness(xPhys).T @ self._KE_flat_mats
+
+    def _assembly_pattern(self) -> _AssemblyPattern:
+        """
+        Sparsity pattern of the reduced (free-DOF) stiffness matrix.
+
+        The pattern only depends on the mesh and on the fixed DOFs, so it is
+        built once and reused by every assembly: summing the element triplets
+        then reduces to a single ``np.bincount`` instead of a COO to CSC
+        conversion followed by a fancy-indexed row/column extraction.
+        """
+        if self._pattern is None:
+            self._pattern = _AssemblyPattern(
+                self.iK, self.jK, self.free_dofs, self.ndof
+            )
+        return self._pattern
+
+    def _assemble_free(self, element_values: FloatArray) -> csc_matrix:
+        """
+        Assemble the reduced stiffness matrix from element matrix entries.
+
+        Artificial springs are added on the diagonal, as well as a tiny
+        regularisation when the supports leave a rigid-body mode free (e.g. a
+        roller): it pins the mode so the factorisation is deterministic across
+        platforms. For a self-equilibrated load case the load vector is
+        orthogonal to the free mode, so the strain is unchanged.
+
+        Parameters
+        ----------
+        element_values : FloatArray
+            Element matrix entries, shape (nel, eldof**2), in the triplet
+            order of ``iK`` / ``jK``.
+
+        Returns
+        -------
+        csc_matrix
+            Reduced stiffness matrix, shape (n_free, n_free).
+        """
+        pattern = self._assembly_pattern()
+        data = pattern.sum_triplets(element_values)
+        if self._spring_dofs.size:
+            spring_free = pattern.to_free[self._spring_dofs]
+            active = spring_free >= 0
+            np.add.at(
+                data, pattern.diagonal[spring_free[active]], self._spring_vals[active]
+            )
+        if pattern.size > 0 and self._rigid_body_mode_free:
+            diagonal = data[pattern.diagonal]
+            data[pattern.diagonal] += RIGID_BODY_REGULARISATION * float(
+                np.max(np.abs(diagonal)) or 1.0
+            )
+        return pattern.matrix(data)
 
     def _load_case_matrix(self) -> FloatArray:
         """Simultaneous input load and (optional) adjoint output load.
@@ -763,8 +874,52 @@ class FEM:
         limit = AUTO_DIRECT_WORK_2D
         if self.is_3d:
             bandwidth *= self.nelx + 1
-            limit = AUTO_DIRECT_WORK_3D
+            limit = (
+                AUTO_DIRECT_WORK_3D_PARDISO
+                if pardiso_available()
+                else AUTO_DIRECT_WORK_3D
+            )
         return float(size) * float(bandwidth) <= limit
+
+    def _solve_iterative(
+        self, K_free: csc_matrix, F: FloatArray
+    ) -> tuple[FloatArray, int]:
+        """
+        Conjugate gradients with a Jacobi preconditioner, one solve per column.
+
+        Each solve starts from the previous solution of the same load case:
+        consecutive optimization iterations solve nearly identical systems, so
+        the warm start saves a large share of the Krylov iterations.
+
+        Returns
+        -------
+        tuple[FloatArray, int]
+            Solutions, shape ``(n_free, n_cases)``, and the first non-zero
+            ``info`` flag of :func:`scipy.sparse.linalg.cg` (0 on success).
+        """
+        size, n_cases = F.shape
+        diagonal = K_free.diagonal()
+        D_inv = 1.0 / np.where(diagonal == 0, 1.0, diagonal)
+        M = LinearOperator(K_free.shape, lambda x: D_inv * x)
+        warm = self._warm_start
+        if warm is None or warm.shape != F.shape:
+            warm = None
+        solutions = np.zeros((size, n_cases), dtype=np.float64)
+        for column in range(n_cases):
+            u_sol, info = cg(
+                K_free,
+                F[:, column],
+                x0=None if warm is None else warm[:, column],
+                M=M,
+                rtol=1e-10,
+                maxiter=max(1000, size),
+            )
+            if info != 0:
+                self._warm_start = None
+                return solutions, int(info)
+            solutions[:, column] = u_sol
+        self._warm_start = solutions.copy()
+        return solutions, 0
 
     def _solve_all(self, K_free: csc_matrix, F: FloatArray) -> FloatArray:
         """Solve ``K_free x = F`` for every column of ``F``.
@@ -784,18 +939,19 @@ class FEM:
         Raises
         ------
         RuntimeError
-            If the iterative solver does not converge in ``Iterative`` mode.
+            If the selected solver fails in ``Direct`` or ``Iterative`` mode
+            (``Auto`` falls back to the other solver first).
         """
         size, n_cases = F.shape
         if n_cases == 0:
             return np.zeros((size, 0), dtype=np.float64)
 
+        def direct() -> FloatArray:
+            return self._direct.factorize(K_free)(F).reshape(size, n_cases)
+
         if self._use_direct_solver(size):
             try:
-                factors = splu(K_free.tocsc())
-                return np.asarray(factors.solve(F), dtype=np.float64).reshape(
-                    size, n_cases
-                )
+                return direct()
             except RuntimeError as error:  # singular factorisation
                 if self.solver_type == "Direct":
                     raise RuntimeError(
@@ -808,39 +964,21 @@ class FEM:
                     stacklevel=2,
                 )
 
-        # Iterative solver (CG with a Jacobi preconditioner).
-        diagonal = K_free.diagonal()
-        if np.any(diagonal == 0):
-            diagonal = np.where(diagonal == 0, 1.0, diagonal)
-        D_inv = 1.0 / diagonal
-        M = LinearOperator(K_free.shape, lambda x: D_inv * x)
-        solutions = np.zeros((size, n_cases), dtype=np.float64)
-        for column in range(n_cases):
-            u_sol, info = cg(
-                K_free,
-                F[:, column],
-                M=M,
-                rtol=1e-10,
-                maxiter=max(1000, size),
-            )
-            if info != 0:
-                message = (
-                    f"Iterative solver did not converge (info={info}) after "
-                    f"{size} iterations."
-                )
-                if self.solver_type == "Iterative":
-                    raise RuntimeError(message)
-                warnings.warn(
-                    f"{message} Falling back to the direct solver.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                factors = splu(K_free.tocsc())
-                return np.asarray(factors.solve(F), dtype=np.float64).reshape(
-                    size, n_cases
-                )
-            solutions[:, column] = u_sol
-        return solutions
+        solutions, info = self._solve_iterative(K_free, F)
+        if info == 0:
+            return solutions
+        message = (
+            f"Iterative solver did not converge (info={info}) after "
+            f"{max(1000, size)} iterations."
+        )
+        if self.solver_type == "Iterative":
+            raise RuntimeError(message)
+        warnings.warn(
+            f"{message} Falling back to the direct solver.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return direct()
 
     def _solve_linear_system(
         self,
@@ -1156,7 +1294,7 @@ class FEM:
         """
         if self.filter_radius <= 0 or self.filter_type == "None":
             # No error raised since it is equivalent to no filtering.
-            H = eye(self.nel, format="csc", dtype=np.float64)
+            H = identity(self.nel, format="csc", dtype=np.float64)
             Hs = np.ones(self.nel, dtype=np.float64)
             return H, Hs
 
