@@ -13,6 +13,7 @@ from topoptcomec.core import initializers, preset_format
 from topoptcomec.core.fem import FEM
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Region, Support
+from topoptcomec.core.nonlinear import NonlinearFEM
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -23,6 +24,9 @@ IntArray = npt.NDArray[np.int64]
 RHO_MIN: float = 1e-6
 #: Convergence threshold on the maximum design-variable change.
 CONVERGENCE_TOLERANCE: float = 0.01
+
+#: Accepted structural analysis identifiers.
+ANALYSES = ("Linear", "Nonlinear")
 
 VolumeFunction = Callable[[FloatArray], float]
 
@@ -268,7 +272,11 @@ def _translate_problem(
 
 def make_fem(grid: StructuredGrid, Materials: dict, Optimizer: dict) -> FEM:
     """
-    Build the solver from the legacy preset dictionaries.
+    Build the solver selected by the legacy preset dictionaries.
+
+    ``Optimizer["analysis"]`` selects the linear solver (default) or the
+    geometrically non-linear one (``"Nonlinear"``), whose input forces are
+    scaled by ``Optimizer["load_factor"]``.
 
     Parameters
     ----------
@@ -282,15 +290,22 @@ def make_fem(grid: StructuredGrid, Materials: dict, Optimizer: dict) -> FEM:
     FEM
         Solver without boundary conditions.
     """
-    return FEM(
-        grid,
-        E=Materials.get("E", [1.0]),
-        nu=Materials.get("nu", [0.3]),
-        penal=float(Optimizer.get("penal", 3.0)),
-        solver=Optimizer.get("solver", "Auto"),
-        filter_type=Optimizer.get("filter_type", "Sensitivity"),
-        filter_radius=float(Optimizer.get("filter_radius_min", 0.0)),
-    )
+    arguments = {
+        "E": Materials.get("E", [1.0]),
+        "nu": Materials.get("nu", [0.3]),
+        "penal": float(Optimizer.get("penal", 3.0)),
+        "solver": Optimizer.get("solver", "Auto"),
+        "filter_type": Optimizer.get("filter_type", "Sensitivity"),
+        "filter_radius": float(Optimizer.get("filter_radius_min", 0.0)),
+    }
+    analysis = Optimizer.get("analysis", ANALYSES[0])
+    if analysis not in ANALYSES:
+        raise ValueError(f"Unknown analysis {analysis!r}; expected one of {ANALYSES}")
+    if analysis == "Nonlinear":
+        return NonlinearFEM(
+            grid, load_factor=float(Optimizer.get("load_factor", 1.0)), **arguments
+        )
+    return FEM(grid, **arguments)
 
 
 def _active_coords(
@@ -440,10 +455,7 @@ def _update_design(
         Updated design variables and physical density field.
     """
     x = x.copy()
-    sensitivities = [
-        fem.compute_sensitivities(xPhys[i], ui, uo, mat_idx=i)
-        for i in range(fem.nb_mat)
-    ]
+    sensitivities = fem.compute_all_sensitivities(xPhys, ui, uo)
     for i, (dc_i, dv_i) in enumerate(sensitivities):
         x[i], _ = _oc(
             fem.nel,
@@ -458,6 +470,12 @@ def _update_design(
             volume=space.volume_function(i),
         )
     return x, space.physical_field(x)
+
+
+def _load_level_text(fem: FEM) -> str:
+    """Progress suffix with the load level reached by a non-linear solve."""
+    fraction = getattr(fem, "last_load_fraction", None)
+    return "" if fraction is None else f", Load: {100 * fraction:.0f}%"
 
 
 def optimize(
@@ -553,11 +571,13 @@ def optimize(
     _emit(0, 0.0, 1.0)
 
     stopped: bool = False
-    while change > CONVERGENCE_TOLERANCE and loop < n_it:
+    final_analysis: bool = False
+    while (change > CONVERGENCE_TOLERANCE or not final_analysis) and loop < n_it:
         loop += 1
         xold: FloatArray = x.copy()
 
         # Finite element analysis
+        final_analysis = fem.begin_iteration(loop, n_it)
         ui, uo = fem.solve(_density_argument())
 
         # Objective value (for logging/convergence display)
@@ -574,6 +594,7 @@ def optimize(
                 f"It.: {loop:3d}, Obj.: {obj_val:.4f}, "
                 + ", ".join(f"V{i}: {xPhys[i].mean():.3f}" for i in range(n_mat))
                 + f", Ch.: {change:.3f}"
+                + _load_level_text(fem)
             )
 
         if _emit(loop, obj_val, change):
@@ -584,6 +605,7 @@ def optimize(
 
     # Re-solve on the *final* design so the returned displacement matches the
     # returned density field (the loop solves before updating xPhys).
+    fem.begin_iteration(n_it, n_it)
     ui, uo = fem.solve(_density_argument())
     final_obj: float = fem.compute_objective(_density_argument(), ui, uo)
     converged: bool = change <= CONVERGENCE_TOLERANCE
@@ -593,6 +615,14 @@ def optimize(
             f"converging (last change {change:.3f} > 0.010)."
         )
         print(f"Warning: {message} Increase n_it for a converged result.")
+    load_fraction = float(getattr(fem, "last_load_fraction", 1.0))
+    if load_fraction < 1.0:
+        print(
+            "Warning: The non-linear analysis only reached "
+            f"{100 * load_fraction:.0f}% of the load: the structure probably "
+            "buckles beyond it. The result is optimized for the reached load "
+            "level; reduce the load factor or increase n_it."
+        )
     if verbose:
         print(f"Optimizer finished. Final objective: {final_obj:.4f}")
     # Emit the final design (same iteration index; consumers replace the

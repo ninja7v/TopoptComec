@@ -442,7 +442,9 @@ def run_iterative_displacement(
     # Initialize FEM on the enlarged grid
     materials: dict = params["Materials"]
     optimizer: dict = params["Optimizer"]
-    fem: FEM = make_fem(large, materials, optimizer)
+    # The simulation is incremental (small linear steps), so it always uses
+    # the linear solver, whatever analysis produced the design.
+    fem: FEM = make_fem(large, materials, {**optimizer, "analysis": "Linear"})
     fem.setup_boundary_conditions(loads_in, loads_out, supports)
 
     # Embed Material into Expanded Domain
