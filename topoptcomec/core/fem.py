@@ -633,10 +633,6 @@ class FEM:
             )
         return self.E_min[:, None] + xP**self.penal * (self.E_max - self.E_min)[:, None]
 
-    def _effective_stiffness(self, xPhys: FloatArray) -> FloatArray:
-        """Summed SIMP effective stiffness per element, shape (nel,)."""
-        return self._material_stiffness(xPhys).sum(axis=0)
-
     def compute_ce(
         self, ui: FloatArray, uo: FloatArray, mat_idx: int = 0
     ) -> FloatArray:
@@ -979,30 +975,6 @@ class FEM:
             stacklevel=2,
         )
         return direct()
-
-    def _solve_linear_system(
-        self,
-        K_free: csc_matrix,
-        F: FloatArray | None,
-        U_full: FloatArray,
-    ) -> None:
-        """
-        Solve the reduced system and write the result into ``U_full``.
-
-        Parameters
-        ----------
-        K_free : csc_matrix
-            Reduced stiffness matrix (free DOFs only).
-        F : FloatArray | None
-            Force-component matrix, shape (ndof, n_components). Columns are
-            summed into one simultaneous load vector.
-        U_full : FloatArray
-            Displacement vector to fill, shape (ndof,), modified in place.
-        """
-        if F is None or F.shape[1] == 0:
-            return
-        F_sum = F[self.free_dofs].sum(axis=1)[:, np.newaxis]
-        U_full[self.free_dofs] = self._solve_all(K_free, F_sum)[:, 0]
 
     def _apply_filter(
         self, x: FloatArray, dc: FloatArray, dv: FloatArray

@@ -11,6 +11,8 @@ import numpy as np
 import numpy.typing as npt
 from scipy.spatial.distance import cdist
 
+from topoptcomec.core.grid import StructuredGrid
+
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
 
@@ -101,6 +103,55 @@ def _rescale_densities(d: FloatArray, volfrac: float) -> FloatArray:
     return np.clip(d + alpha, 0.0, 1.0)
 
 
+def _seed_pattern(
+    init_type: int,
+    volfrac: float,
+    grid: StructuredGrid,
+    all_x: FloatArray,
+    all_y: FloatArray,
+    all_z: FloatArray,
+) -> FloatArray:
+    """
+    Spatial density pattern of the uniform, distance and random strategies.
+
+    Parameters
+    ----------
+    init_type : int
+        ``InitType.UNIFORM``, ``InitType.DISTANCE`` or ``InitType.RANDOM``.
+    volfrac : float
+        Target mean of the pattern.
+    grid : StructuredGrid
+        Mesh definition (element ordering).
+    all_x, all_y, all_z : FloatArray
+        Active coordinates of the distance strategy.
+
+    Returns
+    -------
+    FloatArray
+        Pattern of shape (nel,) with values in [0, 1] and mean ``volfrac``.
+    """
+    uniform = np.full(grid.nel, volfrac, dtype=np.float64)
+    if init_type == InitType.UNIFORM:
+        return uniform
+    if init_type == InitType.RANDOM:
+        rng = np.random.default_rng(42)
+        return _rescale_densities(d=rng.random(grid.nel), volfrac=volfrac)
+    if init_type != InitType.DISTANCE:
+        raise ValueError(f"Invalid init_type: {init_type}")
+
+    points: FloatArray = np.column_stack(
+        [all_x, all_y, all_z] if grid.is_3d else [all_x, all_y]
+    )
+    if len(points) == 0:
+        return uniform
+    min_dist: FloatArray = cdist(grid.element_centers(), points).min(axis=1)
+    # Invert distance: Near = 1.0, Far = 0.0
+    distance_max = float(np.linalg.norm(grid.spatial_shape))
+    return _rescale_densities(
+        d=(distance_max - min_dist) / distance_max, volfrac=volfrac
+    )
+
+
 def initialize_material(
     init_type: int,
     volfrac: float,
@@ -160,68 +211,25 @@ def initialize_material(
     ValueError
         If `init_type` is not one of the supported integers (0, 1, 2, 3).
     """
-    is_3d: bool = nelz > 0
-    nel: int = nelx * nely * (nelz if is_3d else 1)
+    grid = StructuredGrid(nelx, nely, max(0, nelz))
+    nel: int = grid.nel
+    if init_type != InitType.CURRENT:
+        return _seed_pattern(init_type, volfrac, grid, all_x, all_y, all_z)
 
-    match init_type:
-        case InitType.UNIFORM:
-            return np.full(nel, volfrac, dtype=np.float64)
+    if current_xPhys is not None:
+        res = None
+        if current_xPhys.ndim == 2:
+            if current_xPhys.shape[1] == nel:
+                res = current_xPhys[0].copy()
+        elif current_xPhys.ndim == 1 and current_xPhys.size == nel:
+            res = current_xPhys.copy()
 
-        case InitType.DISTANCE:
-            points: FloatArray = np.column_stack(
-                [all_x, all_y, all_z] if is_3d else [all_x, all_y]
-            )
+        if res is not None:
+            if not np.isclose(np.mean(res), volfrac, atol=1e-4):
+                res = _rescale_densities(res, volfrac)
+            return res
 
-            if len(points) == 0:
-                return np.full(nel, volfrac, dtype=np.float64)
-
-            # Generate element center coordinates matching FEM loop order:
-            if is_3d:
-                Z: FloatArray = np.repeat(np.arange(nelz), nelx * nely)
-                X: FloatArray = np.tile(np.repeat(np.arange(nelx), nely), nelz)
-                Y: FloatArray = np.tile(np.arange(nely), nelx * nelz)
-                coords: FloatArray = np.column_stack((X, Y, Z)) + 0.5
-            else:
-                X = np.repeat(np.arange(nelx), nely)
-                Y = np.tile(np.arange(nely), nelx)
-                coords = np.column_stack((X, Y)) + 0.5
-
-            dists: FloatArray = cdist(
-                coords, points, metric="euclidean"
-            )  # Shape: (nel, n_points)
-            min_dist: FloatArray = dists.min(axis=1)
-
-            # Invert distance: Near = 1.0, Far = 0.0
-            distance_max: float = np.sqrt(nelx**2 + nely**2 + (nelz**2 if is_3d else 0))
-
-            raw: FloatArray = (distance_max - min_dist) / distance_max
-
-            return _rescale_densities(d=raw, volfrac=volfrac)
-
-        case InitType.RANDOM:
-            rng = np.random.default_rng(42)
-            raw: FloatArray = rng.random(nel)
-            return _rescale_densities(d=raw, volfrac=volfrac)
-
-        case InitType.CURRENT:
-            if current_xPhys is not None:
-                res = None
-                if current_xPhys.ndim == 2:
-                    if current_xPhys.shape[1] == nel:
-                        res = current_xPhys[0].copy()
-
-                elif current_xPhys.ndim == 1 and current_xPhys.size == nel:
-                    res = current_xPhys.copy()
-
-                if res is not None:
-                    if not np.isclose(np.mean(res), volfrac, atol=1e-4):
-                        res = _rescale_densities(res, volfrac)
-                    return res
-
-            return np.full(nel, volfrac, dtype=np.float64)
-
-        case _:
-            raise ValueError(f"Invalid init_type: {init_type}")
+    return np.full(nel, volfrac, dtype=np.float64)
 
 
 def initialize_materials(
@@ -277,73 +285,31 @@ def initialize_materials(
 
     n_mat: int = len(materials_percentage)
     shares: FloatArray = np.array(materials_percentage, dtype=np.float64) / 100.0
-    materials_frac: FloatArray = volfrac * shares
-    is_3d: bool = nelz > 0
-    nel: int = nelx * nely * (nelz if is_3d else 1)
-    rho: FloatArray | None = None
-    pattern: FloatArray
+    grid = StructuredGrid(nelx, nely, max(0, nelz))
+    nel: int = grid.nel
 
-    match init_type:
-        case InitType.UNIFORM:
-            pattern = np.full(nel, volfrac, dtype=np.float64)
-
-        case InitType.DISTANCE:
-            points: FloatArray = np.column_stack(
-                [all_x, all_y, all_z] if is_3d else [all_x, all_y]
-            )
-            if len(points) == 0:
-                pattern = np.full(nel, volfrac, dtype=np.float64)
-            else:
-                if is_3d:
-                    Z: FloatArray = np.repeat(np.arange(nelz), nelx * nely)
-                    X: FloatArray = np.tile(np.repeat(np.arange(nelx), nely), nelz)
-                    Y: FloatArray = np.tile(np.arange(nely), nelx * nelz)
-                    coords: FloatArray = np.column_stack((X, Y, Z)) + 0.5
-                else:
-                    X = np.repeat(np.arange(nelx), nely)
-                    Y = np.tile(np.arange(nely), nelx)
-                    coords = np.column_stack((X, Y)) + 0.5
-
-                dists: FloatArray = cdist(coords, points, metric="euclidean")
-                min_dist: FloatArray = dists.min(axis=1)
-                distance_max: float = float(
-                    np.sqrt(nelx**2 + nely**2 + (nelz**2 if is_3d else 0))
-                )
-                raw: FloatArray = (distance_max - min_dist) / distance_max
-                pattern = _rescale_densities(d=raw, volfrac=volfrac)
-
-        case InitType.RANDOM:
-            rng = np.random.default_rng(42)
-            raw = rng.random(nel)
-            pattern = _rescale_densities(d=raw, volfrac=volfrac)
-
-        case InitType.CURRENT:
-            if (
-                current_xPhys is not None
-                and current_xPhys.ndim == 2
-                and current_xPhys.shape == (n_mat, nel)
-            ):
-                # Reuse a full per-material field: rescale each row to its
-                # new target, preserving per-material spatial structure.
-                rho = current_xPhys.copy()
-                for i in range(n_mat):
-                    rho[i] = _rescale_densities(d=rho[i], volfrac=materials_frac[i])
-            else:
-                # Reuse a single-material field as the shared pattern.
-                if (
-                    current_xPhys is not None
-                    and current_xPhys.ndim == 1
-                    and current_xPhys.size == nel
-                ):
-                    pattern = _rescale_densities(d=current_xPhys, volfrac=volfrac)
-                else:  # fallback to uniform pattern
-                    pattern = np.full(nel, volfrac, dtype=np.float64)
-
-        case _:
-            raise ValueError(f"Invalid init_type: {init_type}")
+    if init_type != InitType.CURRENT:
+        pattern = _seed_pattern(init_type, volfrac, grid, all_x, all_y, all_z)
+    elif (
+        current_xPhys is not None
+        and current_xPhys.ndim == 2
+        and current_xPhys.shape == (n_mat, nel)
+    ):
+        # Reuse a full per-material field: rescale each row to its new
+        # target, preserving per-material spatial structure.
+        rho = current_xPhys.copy()
+        for i in range(n_mat):
+            rho[i] = _rescale_densities(d=rho[i], volfrac=volfrac * shares[i])
+        return np.clip(rho, 1e-6, 1.0)
+    elif (
+        current_xPhys is not None
+        and current_xPhys.ndim == 1
+        and current_xPhys.size == nel
+    ):
+        # Reuse a single-material field as the shared pattern.
+        pattern = _rescale_densities(d=current_xPhys, volfrac=volfrac)
+    else:  # fallback to uniform pattern
+        pattern = np.full(nel, volfrac, dtype=np.float64)
 
     # Shared-pattern cases: split the spatial pattern across materials.
-    if rho is None:
-        rho = shares[:, None] * pattern[None, :]
-
-    return np.clip(rho, 1e-6, 1.0)
+    return np.clip(shares[:, None] * pattern[None, :], 1e-6, 1.0)

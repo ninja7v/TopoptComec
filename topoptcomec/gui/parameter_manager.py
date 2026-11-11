@@ -352,16 +352,7 @@ class ParameterManagerMixin:
             return ()
 
         # Optimizer section: all widgets display-irrelevant.
-        optimizer_widgets = (
-            self.optimizer_widget.opt_ft,
-            self.optimizer_widget.opt_fr,
-            self.optimizer_widget.opt_p,
-            self.optimizer_widget.opt_eta,
-            self.optimizer_widget.opt_max_change,
-            self.optimizer_widget.opt_n_it,
-            self.optimizer_widget.opt_solver,
-        )
-        if any(sender is w for w in optimizer_widgets):
+        if any(sender is w for w in self.optimizer_widget.parameter_widgets()):
             return ()
 
         # Material section.
@@ -550,16 +541,7 @@ class ParameterManagerMixin:
             return False
 
         # Optimizer section: all widgets display-irrelevant
-        optimizer_widgets = (
-            self.optimizer_widget.opt_ft,
-            self.optimizer_widget.opt_fr,
-            self.optimizer_widget.opt_p,
-            self.optimizer_widget.opt_eta,
-            self.optimizer_widget.opt_max_change,
-            self.optimizer_widget.opt_n_it,
-            self.optimizer_widget.opt_solver,
-        )
-        if any(sender is w for w in optimizer_widgets):
+        if any(sender is w for w in self.optimizer_widget.parameter_widgets()):
             return True
 
         # Material section: E and nu only (percent, color, init_type affect display)
@@ -749,13 +731,7 @@ class ParameterManagerMixin:
             self.dim_widget.nz,
             self.dim_widget.volfrac,
             self.materials_widget.mat_init_type,
-            self.optimizer_widget.opt_ft,
-            self.optimizer_widget.opt_fr,
-            self.optimizer_widget.opt_p,
-            self.optimizer_widget.opt_eta,
-            self.optimizer_widget.opt_max_change,
-            self.optimizer_widget.opt_n_it,
-            self.optimizer_widget.opt_solver,
+            *self.optimizer_widget.parameter_widgets(),
         ]
         for w in all_widgets:
             w.blockSignals(block)

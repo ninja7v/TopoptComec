@@ -749,6 +749,22 @@ def test_optimizer_change_deselects_preset(qt_app):
     window.close()
 
 
+def test_every_optimizer_widget_is_wired(qt_app):
+    """Every optimizer parameter widget is connected to on_parameter_changed
+    (the connections are made in a loop over parameter_widgets())."""
+    window = MainWindow()
+    for widget in window.optimizer_widget.parameter_widgets():
+        signal = (
+            "2currentIndexChanged(int)"
+            if hasattr(widget, "currentIndexChanged")
+            else "2valueChanged(double)"
+            if hasattr(widget, "decimals")
+            else "2valueChanged(int)"
+        )
+        assert widget.receivers(signal) >= 1, widget
+    window.close()
+
+
 def test_region_material_state_survives_a_preset_round_trip(qt_app):
     """Loading a preset must keep the material assigned to each region.
 

@@ -182,31 +182,47 @@ def _partition_upper(x: FloatArray, mat_idx: int) -> FloatArray:
 class _DesignSpace:
     """Physical field and volume measure shared by the OC update steps.
 
+    The passive masks of every material are computed once: the volume measure
+    is evaluated at each bisection step of the OC update, so rebuilding them
+    from the region geometry every time would dominate the update cost.
+
     Parameters
     ----------
     fem : FEM
         Configured solver (filter and grid).
     regions : list[Region]
         Passive geometric constraints.
-    free : npt.NDArray[np.bool_]
-        Mask of designable elements.
     """
 
-    def __init__(
-        self, fem: FEM, regions: list[Region], free: npt.NDArray[np.bool_]
-    ) -> None:
+    def __init__(self, fem: FEM, regions: list[Region]) -> None:
         self.fem = fem
-        self.regions = regions
-        self.free = free
+        self._masks = [fem.region_masks(regions, mat_idx=m) for m in range(fem.nb_mat)]
+        passive = np.zeros(fem.nel, dtype=bool)
+        for solid, void in self._masks:
+            passive |= solid | void
+        #: Mask of designable elements. A region makes the covered elements
+        #: non-designable for *every* material (solid for the targeted
+        #: material, void for the others).
+        self.free: npt.NDArray[np.bool_] = ~passive
+        self._has_regions: bool = bool(passive.any())
+
+    def apply_regions(self, x_m: FloatArray, mat_idx: int) -> FloatArray:
+        """Copy of ``x_m`` with the passive elements of one material imposed."""
+        out = x_m.copy()
+        if self._has_regions:
+            solid, void = self._masks[mat_idx]
+            out[solid] = 1.0
+            out[void] = RHO_MIN
+        return out
 
     def physical(self, x_m: FloatArray, mat_idx: int) -> FloatArray:
         """Physical density of one material (filter, then passive regions)."""
-        return self.fem.apply_regions(
-            self.fem.update_xPhys(x_m), self.regions, mat_idx=mat_idx
-        )
+        return self.apply_regions(self.fem.update_xPhys(x_m), mat_idx)
 
     def volume_function(self, mat_idx: int) -> VolumeFunction:
         """Sum of the physical density of one material over the free elements."""
+        if self.fem.filter_type != "Density" and not self._has_regions:
+            return lambda x_m: float(np.sum(x_m))
 
         def volume(x_m: FloatArray) -> float:
             return float(np.sum(self.physical(x_m, mat_idx)[self.free]))
@@ -250,25 +266,23 @@ def _translate_problem(
     return grid, loads_in, loads_out, supports, regions
 
 
-def build_fem(
-    Dimensions: dict,
-    Forces: dict,
-    Materials: dict,
-    Optimizer: dict,
-    Supports: dict | None = None,
-) -> tuple[FEM, list[Region]]:
+def make_fem(grid: StructuredGrid, Materials: dict, Optimizer: dict) -> FEM:
     """
-    Build a configured FEM solver from legacy preset dictionaries.
+    Build the solver from the legacy preset dictionaries.
+
+    Parameters
+    ----------
+    grid : StructuredGrid
+        Mesh definition.
+    Materials, Optimizer : dict
+        Legacy preset sections.
 
     Returns
     -------
-    tuple[FEM, list[Region]]
-        FEM instance with boundary conditions applied, and parsed regions.
+    FEM
+        Solver without boundary conditions.
     """
-    grid, loads_in, loads_out, supports, regions = _translate_problem(
-        Dimensions, Forces, Supports, None
-    )
-    fem = FEM(
+    return FEM(
         grid,
         E=Materials.get("E", [1.0]),
         nu=Materials.get("nu", [0.3]),
@@ -277,8 +291,6 @@ def build_fem(
         filter_type=Optimizer.get("filter_type", "Sensitivity"),
         filter_radius=float(Optimizer.get("filter_radius_min", 0.0)),
     )
-    fem.setup_boundary_conditions(loads_in, loads_out, supports)
-    return fem, regions
 
 
 def _active_coords(
@@ -294,50 +306,11 @@ def _active_coords(
     return arr[:, 0], arr[:, 1], arr[:, 2]
 
 
-def _volume_targets(
-    fem: FEM, regions: list[Region], Materials: dict, volfrac: float
-) -> tuple[npt.NDArray[np.bool_], FloatArray]:
-    """
-    Designable elements and per-material volume bound.
-
-    A region makes the covered elements non-designable for *every* material
-    (solid for the targeted material, void for the others). Passive elements
-    are excluded from the volume budget: ``volfrac`` bounds the mean density
-    of the *designable* elements.
-
-    Parameters
-    ----------
-    fem : FEM
-        Configured solver.
-    regions : list[Region]
-        Passive geometric constraints.
-    Materials : dict
-        Legacy materials section (``percent`` shares).
-    volfrac : float
-        Volume fraction bound.
-
-    Returns
-    -------
-    tuple
-        ``(free, targets)``: mask of designable elements and the bound on the
-        sum of the physical densities over them, per material.
-    """
-    n_mat = fem.nb_mat
-    passive = np.zeros(fem.nel, dtype=bool)
-    for m in range(n_mat):
-        solid, void = fem.region_masks(regions, mat_idx=m)
-        passive |= solid | void
-    free: npt.NDArray[np.bool_] = ~passive
-    shares = _material_shares(Materials.get("percent"), n_mat)
-    return free, volfrac * shares * int(np.count_nonzero(free))
-
-
 def _initialize_design(
     fem: FEM,
-    regions: list[Region],
+    space: _DesignSpace,
     Materials: dict,
     volfrac: float,
-    free: npt.NDArray[np.bool_],
     targets: FloatArray,
     current_xPhys: FloatArray | None,
     multimaterial: bool,
@@ -355,14 +328,12 @@ def _initialize_design(
     ----------
     fem : FEM
         Configured solver (grid, materials, filter).
-    regions : list[Region]
-        Passive geometric constraints.
+    space : _DesignSpace
+        Physical field, passive regions and volume measure.
     Materials : dict
         Legacy materials section (``init_type``, ``percent``).
     volfrac : float
         Target mean density of the designable elements.
-    free : npt.NDArray[np.bool_]
-        Mask of designable elements.
     targets : FloatArray
         Target physical volume (sum over free elements) per material.
     current_xPhys : FloatArray | None
@@ -408,18 +379,17 @@ def _initialize_design(
 
     x = np.maximum(np.asarray(x, dtype=np.float64), RHO_MIN)
     for i in range(n_mat):
-        x[i] = fem.apply_regions(x[i], regions, mat_idx=i)
+        x[i] = space.apply_regions(x[i], i)
     # Partition of unity in design space, then project every material onto its
     # target physical volume so the first analysis already satisfies it.
     column_sums = x.sum(axis=0)
     over = column_sums > 1.0
     if np.any(over):
         x[:, over] /= column_sums[over]
-    space = _DesignSpace(fem, regions, free)
     for i in range(n_mat):
         x[i] = _project_volume(
             x[i],
-            free,
+            space.free,
             float(targets[i]),
             _partition_upper(x, i),
             space.volume_function(i),
@@ -530,29 +500,27 @@ def optimize(
     grid, loads_in, loads_out, supports, regions = _translate_problem(
         Dimensions, Forces, Supports, Regions
     )
-    fem = FEM(
-        grid,
-        E=Materials.get("E", [1.0]),
-        nu=Materials.get("nu", [0.3]),
-        penal=float(Optimizer.get("penal", 3.0)),
-        solver=Optimizer.get("solver", "Auto"),
-        filter_type=Optimizer.get("filter_type", "Sensitivity"),
-        filter_radius=float(Optimizer.get("filter_radius_min", 0.0)),
-    )
+    fem = make_fem(grid, Materials, Optimizer)
     fem.setup_boundary_conditions(loads_in, loads_out, supports)
 
     n_mat: int = fem.nb_mat
     volfrac: float = float(Dimensions.get("volfrac", 0.5))
     all_x, all_y, all_z = _active_coords(loads_in, loads_out, supports)
 
-    free, targets = _volume_targets(fem, regions, Materials, volfrac)
+    # Passive elements are excluded from the volume budget: ``volfrac`` bounds
+    # the mean density of the *designable* elements, split between materials.
+    space = _DesignSpace(fem, regions)
+    targets: FloatArray = (
+        volfrac
+        * _material_shares(Materials.get("percent"), n_mat)
+        * int(np.count_nonzero(space.free))
+    )
 
     x, xPhys = _initialize_design(
         fem,
-        regions,
+        space,
         Materials,
         volfrac,
-        free,
         targets,
         current_xPhys,
         multimaterial,
@@ -560,8 +528,6 @@ def optimize(
         all_y,
         all_z,
     )
-
-    space = _DesignSpace(fem, regions, free)
 
     # Optimization Params
     eta: float = Optimizer.get("eta", 1.0)

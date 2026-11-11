@@ -15,6 +15,7 @@ from topoptcomec.core import preset_format
 from topoptcomec.core.fem import FEM
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Support
+from topoptcomec.core.optimizers import make_fem
 
 # Type aliases
 FloatArray = npt.NDArray[np.float64]
@@ -441,15 +442,7 @@ def run_iterative_displacement(
     # Initialize FEM on the enlarged grid
     materials: dict = params["Materials"]
     optimizer: dict = params["Optimizer"]
-    fem: FEM = FEM(
-        large,
-        E=materials.get("E", [1.0]),
-        nu=materials.get("nu", [0.3]),
-        penal=float(optimizer.get("penal", 3.0)),
-        solver=optimizer.get("solver", "Auto"),
-        filter_type=optimizer.get("filter_type", "Sensitivity"),
-        filter_radius=float(optimizer.get("filter_radius_min", 0.0)),
-    )
+    fem: FEM = make_fem(large, materials, optimizer)
     fem.setup_boundary_conditions(loads_in, loads_out, supports)
 
     # Embed Material into Expanded Domain

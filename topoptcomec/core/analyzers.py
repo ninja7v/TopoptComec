@@ -224,13 +224,8 @@ def analyze(
     xPhys_copy: FloatArray = xPhys.copy()
     if xPhys.ndim == 2:
         xPhys_copy = np.clip(xPhys_copy.sum(axis=0, keepdims=True), 0.0, 1.0)
-    x: FloatArray = (
-        xPhys_copy.reshape(
-            Dimensions["nelxyz"][2], Dimensions["nelxyz"][0], Dimensions["nelxyz"][1]
-        )
-        if Dimensions["nelxyz"][2] > 0
-        else xPhys_copy.reshape(Dimensions["nelxyz"][0], Dimensions["nelxyz"][1])
-    )
+    nelx, nely, nelz = (int(v) for v in Dimensions["nelxyz"])
+    x: FloatArray = StructuredGrid(nelx, nely, max(0, nelz)).to_spatial(xPhys_copy)
 
     checks = [
         partial(_checkerboard, x),
