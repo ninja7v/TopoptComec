@@ -119,7 +119,14 @@ uv sync
 The version has a single source: `topoptcomec/version.py`. `pyproject.toml`
 reads it dynamically.
 
-1. Bump `__version__` in `topoptcomec/version.py`.
+Between releases, `main` carries the next version with a `.devN` suffix (e.g.
+`5.0.dev0` after `v4.0`): it sorts after the last release and before the next
+one, so git installs of `main` are reported as ahead of the latest release and
+are still offered the next release once it is published. Hotfixes of a
+released version are made on a branch from its tag (e.g. `4.x` from `v4.0`).
+
+1. Bump `__version__` in `topoptcomec/version.py`, dropping the `.devN`
+   suffix (e.g. `5.0.dev0` becomes `5.0`).
 2. Merge to `main`, then create and push a matching tag, e.g. `v3.1`
    (a leading `v` is optional when comparing versions).
 3. Publish a GitHub release for that tag with the release notes.
