@@ -736,6 +736,7 @@ def test_optimizer_change_deselects_preset(qt_app):
         lambda: window.optimizer_widget.opt_p.setValue(
             window.optimizer_widget.opt_p.value() + 0.5
         ),
+        lambda: window.optimizer_widget.opt_analysis.setCurrentText("Nonlinear"),
     ]
     for i, change in enumerate(changes):
         combo.setCurrentIndex(1)
@@ -746,6 +747,32 @@ def test_optimizer_change_deselects_preset(qt_app):
         assert combo.currentText() == "Select a preset...", (
             f"Optimizer change #{i} did not deselect the preset"
         )
+    window.close()
+
+
+def test_analysis_and_load_factor_round_trip(qt_app):
+    """The non-linear analysis settings must survive gather -> apply -> gather,
+    and a linear run must not carry a load factor."""
+    window = MainWindow()
+    params = window._gather_parameters()
+    assert params["Optimizer"]["analysis"] == "Linear"
+    assert "load_factor" not in params["Optimizer"]
+    assert not window.optimizer_widget.opt_load_factor.isEnabled()
+
+    params["Optimizer"]["analysis"] = "Nonlinear"
+    params["Optimizer"]["load_factor"] = 7.5
+    window._apply_parameters(params)
+
+    assert window.optimizer_widget.opt_load_factor.isEnabled()
+    gathered = window._gather_parameters()["Optimizer"]
+    assert gathered["analysis"] == "Nonlinear"
+    assert gathered["load_factor"] == 7.5
+
+    # A preset without the keys (written before v5) resets both widgets.
+    del params["Optimizer"]["analysis"], params["Optimizer"]["load_factor"]
+    window._apply_parameters(params)
+    assert window._gather_parameters()["Optimizer"]["analysis"] == "Linear"
+    assert window.optimizer_widget.opt_load_factor.value() == 1.0
     window.close()
 
 

@@ -127,8 +127,11 @@ class ParameterManagerMixin:
             "max_change": self.optimizer_widget.opt_max_change.value(),
             "n_it": self.optimizer_widget.opt_n_it.value(),
             "solver": self.optimizer_widget.opt_solver.currentText(),
+            "analysis": self.optimizer_widget.opt_analysis.currentText(),
             "save_frames": self.optimizer_widget.save_frames_cb.isChecked(),
         }
+        if Optimizer["analysis"] == "Nonlinear":
+            Optimizer["load_factor"] = self.optimizer_widget.opt_load_factor.value()
         params["Optimizer"] = Optimizer
 
         # --- Displacement (optional) ---

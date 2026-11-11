@@ -1393,6 +1393,9 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.optimizer_widget.opt_max_change.setValue(po.get("max_change", 0.05))
         self.optimizer_widget.opt_n_it.setValue(po.get("n_it", 30))
         self.optimizer_widget.opt_solver.setCurrentText(po.get("solver", "Auto"))
+        self.optimizer_widget.opt_analysis.setCurrentText(po.get("analysis", "Linear"))
+        self.optimizer_widget.opt_load_factor.setValue(po.get("load_factor", 1.0))
+        self.optimizer_widget.update_load_factor_state()
         self.optimizer_widget.save_frames_cb.setChecked(po.get("save_frames", False))
 
     def _apply_displacement_param(self, params: dict) -> None:
