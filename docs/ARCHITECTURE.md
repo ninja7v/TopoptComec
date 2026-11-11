@@ -40,6 +40,12 @@ used as a library.
 - `fem.py`: finite element solver — stiffness assembly, boundary
   conditions, linear solves, objective and sensitivity computation. Takes a
   `StructuredGrid` and typed `Load`/`Support`/`Region` objects only
+- `nonlinear.py`: `NonlinearFEM`, the geometrically non-linear solver
+  (Newton-Raphson with load control, energy interpolation, adjoint
+  sensitivities). It subclasses `FEM` and is selected with
+  `Optimizer["analysis"] = "Nonlinear"`
+- `direct_solver.py`: sparse direct factorisation (SuperLU in symmetric mode,
+  or MKL PARDISO when the optional `pypardiso` package is installed)
 - `optimizers.py`: SIMP optimization loop (single- and multi-material share
   one implementation); accepts legacy preset dictionaries and translates
   them at the boundary
@@ -98,5 +104,8 @@ The GUI layer lives in `topoptcomec/gui/`.
   in diffs. The updater discards local result changes and preserves untracked
   custom preset results. User presets live under `~/.topoptcomec/`, so they
   never touch the source checkout.
+- The optimizer only talks to the solver through `begin_iteration`, `solve`,
+  `compute_all_sensitivities` and `compute_objective`, so the linear and the
+  non-linear analyses share the whole optimization loop.
 - Multi-material support exists in the core, but not every surrounding
   workflow is equally mature.
