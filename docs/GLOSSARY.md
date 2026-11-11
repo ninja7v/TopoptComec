@@ -42,6 +42,21 @@ independently of the force.
   simultaneous input loads, averaged over output ports. Positive objective
   values mean the outputs move in the requested directions.
 
+### Analysis (`analysis`, `load_factor`)
+
+- **Linear** (default): small-displacement elasticity, `K u = f`. The design
+  does not depend on the force magnitude.
+- **Nonlinear**: geometrically non-linear (total Lagrangian) analysis with a
+  St. Venant-Kirchhoff material, valid for large displacements and
+  rotations. Equilibrium is found with Newton-Raphson iterations and adaptive
+  load control; low-density elements are stabilised with an energy
+  interpolation (Wang, Lazarov, Sigmund & Jensen, 2014); sensitivities are
+  exact adjoint derivatives. `load_factor` multiplies the input forces
+  (not the port springs) and therefore sets the displacement level. The same
+  objectives are used: end compliance for rigid structures, output
+  displacement for mechanisms. The applied forces keep their direction
+  (dead loads).
+
 ## Optimization Terms
 
 ### SIMP

@@ -35,6 +35,14 @@ dependencies = [
     "packaging>=23.0",
 ]
 
+[project.optional-dependencies]
+# Intel MKL PARDISO: a much faster sparse direct solver, used automatically
+# when installed (x86-64 only). `uv sync --extra fast` or
+# `pip install topoptcomec[fast]`.
+fast = [
+    "pypardiso>=0.4.6; platform_machine == 'x86_64' or platform_machine == 'AMD64'",
+]
+
 [project.urls]
 Homepage = "https://github.com/ninja7v/topoptcomec"
 Repository = "https://github.com/ninja7v/topoptcomec.git"

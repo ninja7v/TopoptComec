@@ -31,6 +31,8 @@ Quick map of the repository.
 - `model.py`: typed problem definition (`Load`, `Support`, `Region`)
 - `preset_format.py`: legacy preset dictionary -> typed model translation
 - `fem.py`: FEM model and solves
+- `nonlinear.py`: geometrically non-linear FEM (large displacements)
+- `direct_solver.py`: sparse direct factorisation (SuperLU / optional PARDISO)
 - `optimizers.py`: optimization loops (single- and multi-material)
 - `initializers.py`: density initialization
 - `displacements.py`: displacement simulation
@@ -63,6 +65,7 @@ Quick map of the repository.
 - `tests/test_cli.py`: CLI behavior (mocked and end-to-end)
 - `tests/test_fem.py`: FEM behavior
 - `tests/test_numerics.py`: stiffness matrices vs Gauss quadrature, finite-difference sensitivity checks, solver equivalence, filter behavior
+- `tests/test_nonlinear.py`: non-linear solver (tangent and sensitivity checks against finite differences, load control, non-linear optimization)
 - `tests/test_optimizers.py`: optimizer behavior
 - `tests/test_initializers.py`: initializer behavior
 - `tests/test_displacements.py`: displacement behavior

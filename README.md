@@ -13,6 +13,7 @@ Simply draw your domain, set forces and supports, choose your material and optim
 None of the existing competing solutions combine all of these features in a single tool:
 - 🔨 **Rigid structure *and* compliant mechanism**  — Same solver, just change the loads.
 - 🧊 **2D *and* 3D support** — Real engineering isn’t flat.
+- 🌀 **Linear *and* non-linear analysis** — Optimize for small or large displacements.
 - 🚀 **Fast, like really fast** — Designed for performance, not academic demos.
 - 🧪 **Flexible** — Tons of parameters to tweak → infinite design possibilities.
 - 🍰 **Easy to use** — Intuitive GUI *and* CLI, piece of cake to use.
@@ -36,6 +37,11 @@ uv run topoptcomec
 ```bash
 uv run topoptcomec -p ForceInverter_2Sup_2D --preview
 ```
+#### Faster solver (optional, x86-64 only):
+```bash
+uv sync --extra fast
+```
+Installs [pypardiso](https://github.com/haasad/PyPardisoProject) (Intel MKL PARDISO), which is used automatically: several times faster in 2D, tens of times faster in 3D.
 <img width="600" alt="TopoptComec_cli" src="https://github.com/user-attachments/assets/62b4be04-5085-4edc-ad68-3be169d11fd7" />
 
 ### 3. Create

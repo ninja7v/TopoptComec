@@ -57,6 +57,34 @@ topoptcomec -p Shelf_2D --restart-from results/Shelf_2D/Shelf_2D_density_field.n
 Without `--restart-from`, a restart preset continues from its own previous
 result (`results/<preset>/<preset>_density_field.npz`).
 
+## Large displacements (non-linear analysis)
+
+The default analysis is linear: it assumes small displacements, and the
+result does not depend on the force magnitude. To design a mechanism for a
+large stroke, select **Analysis: Nonlinear** in the Optimizer section (GUI)
+or add two keys to the `Optimizer` section of a preset:
+
+```json
+"Optimizer": {
+    "filter_type": "Sensitivity", "filter_radius_min": 1.3, "penal": 3.0,
+    "eta": 0.3, "max_change": 0.05, "n_it": 60, "solver": "Auto",
+    "analysis": "Nonlinear", "load_factor": 8.0
+}
+```
+
+- `load_factor` multiplies the input forces without changing the port
+  springs. Because the spring stiffness equals the force magnitude, the input
+  port can move by at most `load_factor` elements: this is the knob that sets
+  how large the displacements are. `1` applies the preset forces as written
+  (displacements of about one element), which is not the linear limit: use
+  the linear analysis for small displacements.
+- The load is ramped up automatically during the first half of the
+  iterations, so give the optimizer more iterations than for a linear run
+  (60 instead of 30 is a good start).
+- A non-linear run costs roughly 5 to 10 linear runs.
+- If the log ends with "only reached N% of the load", the structure buckles
+  before the full load: reduce `load_factor`.
+
 ## Notes
 
 - The CLI can run from any directory. `--presets FILE` uses that file only;
