@@ -63,7 +63,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           PYVISTA_OFF_SCREEN: "true"
         run: |
-          pytest -W error -q tests/test_numerics.py tests/test_fem.py tests/test_optimizers.py tests/test_exporters.py tests/test_parameter_validation.py
+          pytest -W error -q tests/test_numerics.py tests/test_fem.py tests/test_optimizers.py tests/test_nonlinear.py tests/test_exporters.py tests/test_parameter_validation.py
 
       - name: CLI smoke test
         env:
@@ -128,6 +128,7 @@ jobs:
             tests/test_numerics.py \
             tests/test_fem.py \
             tests/test_optimizers.py \
+            tests/test_nonlinear.py \
             tests/test_analyzers.py \
             tests/test_initializers.py \
             tests/test_displacements.py \
