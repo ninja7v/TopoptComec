@@ -1485,12 +1485,23 @@ class OptimizerWidget(QWidget):
         )
         self.opt_solver = _make_combo(["Auto", "Direct", "Iterative"], 0, tip)
         form_layout.addRow("Solver:", self.opt_solver)
-
         self.save_frames_cb = QCheckBox("Save frames")
         self.save_frames_cb.setToolTip("Save intermediate optimization frames as PNG")
         form_layout.addRow(self.save_frames_cb)
 
         main_layout.addLayout(form_layout)
+
+    def parameter_widgets(self) -> tuple[QWidget, ...]:
+        """Widgets holding an optimizer parameter (none affects the display)."""
+        return (
+            self.opt_ft,
+            self.opt_fr,
+            self.opt_p,
+            self.opt_eta,
+            self.opt_max_change,
+            self.opt_n_it,
+            self.opt_solver,
+        )
 
 
 class AnalysisWidget(QWidget):

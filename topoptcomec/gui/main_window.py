@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QThread, QUrl
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -339,19 +340,13 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         """Creates the sixth section for optimization parameters."""
         self.optimizer_widget = OptimizerWidget()
         section = CollapsibleSection("💻 Optimizer", self.optimizer_widget)
-        self.optimizer_widget.opt_ft.currentIndexChanged.connect(
-            self.on_parameter_changed
-        )
-        self.optimizer_widget.opt_fr.valueChanged.connect(self.on_parameter_changed)
-        self.optimizer_widget.opt_p.valueChanged.connect(self.on_parameter_changed)
-        self.optimizer_widget.opt_eta.valueChanged.connect(self.on_parameter_changed)
-        self.optimizer_widget.opt_max_change.valueChanged.connect(
-            self.on_parameter_changed
-        )
-        self.optimizer_widget.opt_n_it.valueChanged.connect(self.on_parameter_changed)
-        self.optimizer_widget.opt_solver.currentIndexChanged.connect(
-            self.on_parameter_changed
-        )
+        for widget in self.optimizer_widget.parameter_widgets():
+            changed = (
+                widget.currentIndexChanged
+                if isinstance(widget, QComboBox)
+                else widget.valueChanged
+            )
+            changed.connect(self.on_parameter_changed)
         return section
 
     def _create_analysis_section(self) -> CollapsibleSection:
