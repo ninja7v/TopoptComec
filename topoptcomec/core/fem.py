@@ -339,6 +339,26 @@ class FEM:
                 stacklevel=2,
             )
 
+    def begin_iteration(self, iteration: int, n_iterations: int) -> bool:
+        """
+        Hook called by the optimizer before the analysis of every design.
+
+        Parameters
+        ----------
+        iteration : int
+            1-based optimization iteration.
+        n_iterations : int
+            Iteration budget of the optimization.
+
+        Returns
+        -------
+        bool
+            ``True`` when the analysis is the final one, i.e. the design may be
+            declared converged. Solvers using a continuation scheme return
+            ``False`` until it is complete.
+        """
+        return True
+
     def region_element_mask(self, region: Region) -> npt.NDArray[np.bool_]:
         """
         Boolean element mask covered by a region.
@@ -743,6 +763,30 @@ class FEM:
 
         # Filtering
         return self._apply_filter(xPhys, dc, dv)
+
+    def compute_all_sensitivities(
+        self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray
+    ) -> list[tuple[FloatArray, FloatArray]]:
+        """
+        Filtered sensitivities ``(dc, dv)`` of every material.
+
+        Parameters
+        ----------
+        xPhys : FloatArray
+            Physical densities, shape (nel,) or (nb_mat, nel).
+        ui, uo : FloatArray
+            Displacement solutions of :meth:`solve`.
+
+        Returns
+        -------
+        list[tuple[FloatArray, FloatArray]]
+            One ``(dc, dv)`` pair per material.
+        """
+        xP = np.atleast_2d(np.asarray(xPhys, dtype=np.float64))
+        return [
+            self.compute_sensitivities(xP[m], ui, uo, mat_idx=m)
+            for m in range(self.nb_mat)
+        ]
 
     def compute_objective(
         self, xPhys: FloatArray, ui: FloatArray, uo: FloatArray

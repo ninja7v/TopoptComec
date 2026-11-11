@@ -331,3 +331,22 @@ def test_time_estimation_of_the_displacement_stage():
     base = TimeEstimation(params).displacement_cost()
     assert TimeEstimation(longer).displacement_cost() == 2 * base
     assert TimeEstimation(more_iterations).displacement_cost() == base
+
+
+def test_time_estimation_of_the_nonlinear_analysis():
+    """Every non-linear iteration factorises several tangent matrices."""
+    import copy
+
+    from topoptcomec.time_estimation import TimeEstimation
+
+    params = {
+        "Dimensions": {"nelxyz": [40, 20, 0], "volfrac": 0.3},
+        "Forces": {"fidir": ["X:\u2192"], "fodir": ["-"]},
+        "Optimizer": {"n_it": 30},
+    }
+    nonlinear = copy.deepcopy(params)
+    nonlinear["Optimizer"]["analysis"] = "Nonlinear"
+    assert (
+        TimeEstimation(nonlinear).optimization_cost()
+        > 3 * TimeEstimation(params).optimization_cost()
+    )

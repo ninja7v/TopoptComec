@@ -27,6 +27,9 @@ class TimeEstimation:
         (1_000_000_000, "#FBC02D", "Medium (a few minutes)"),
         (10_000_000_000, "#FF7300", "Slow (less than an hour)"),
     ]
+    #: Typical number of tangent factorisations per optimization iteration of
+    #: the non-linear analysis (Newton iterations plus the adjoint tangent).
+    _NEWTON_SOLVES_PER_ITERATION: ClassVar[int] = 5
     _OPTIMIZATION_VERY_SLOW: tuple[str, str] = (
         "#FF0000",
         "Very slow (more than an hour)",
@@ -123,7 +126,11 @@ class TimeEstimation:
         nb_iteration: int = int(any(d != "-" for d in forces.get("fidir", []))) + int(
             any(d != "-" for d in forces.get("fodir", []))
         )
-        nb_solves: int = self.params.get("Optimizer", {}).get("n_it", 50)
+        optimizer: dict = self.params.get("Optimizer", {})
+        nb_solves: int = optimizer.get("n_it", 50)
+        if optimizer.get("analysis", "Linear") == "Nonlinear":
+            # Every Newton iteration factorises a tangent matrix.
+            nb_solves *= self._NEWTON_SOLVES_PER_ITERATION
 
         # 1.1 adds 10% to account for filtering and bookkeeping.
         return 1.1 * self._estimated_solving_cost(nb_iteration, nb_solves, size_matrix)
