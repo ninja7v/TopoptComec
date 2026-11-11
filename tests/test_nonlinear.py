@@ -14,6 +14,8 @@ from topoptcomec.core.fem import FEM
 from topoptcomec.core.grid import StructuredGrid
 from topoptcomec.core.model import Load, Support
 from topoptcomec.core.nonlinear import LOAD_RAMP_SHARE, NonlinearFEM
+from topoptcomec.parameter_check import ParameterCheck
+from topoptcomec.result_cache import params_hash
 
 GRIDS = [(6, 4, 0), (3, 3, 2)]
 
@@ -500,3 +502,35 @@ def test_make_fem_selects_the_analysis():
     assert isinstance(fem, NonlinearFEM) and fem.load_factor == 7.0
     with pytest.raises(ValueError, match="Unknown analysis"):
         optimizers.make_fem(grid, materials, {"analysis": "Quadratic"})
+
+
+def test_parameter_check_validates_the_analysis():
+    check = ParameterCheck()
+    assert check.validate(_inverter("Nonlinear", 2.0)) is None
+    assert check.validate(_inverter("Linear")) is None
+    assert "Unknown analysis" in check.validate(_inverter("Cubic"))
+    assert "Load factor" in check.validate(_inverter("Nonlinear", 0.0))
+    # The load factor is ignored by the linear analysis.
+    assert check.validate(_inverter("Linear", 0.0)) is None
+    bad = _inverter("Nonlinear")
+    bad["Optimizer"]["load_factor"] = "big"
+    assert "load_factor" in check.validate(bad)
+    bad = _inverter("Nonlinear")
+    bad["Optimizer"]["analysis"] = 3
+    assert "analysis" in check.validate(bad)
+
+
+def test_cache_hash_ignores_the_defaults_of_the_linear_analysis():
+    """Presets written before the non-linear analysis existed keep their hash."""
+    legacy = _inverter("Linear")
+    del legacy["Optimizer"]["analysis"], legacy["Optimizer"]["load_factor"]
+
+    assert params_hash(_inverter("Linear", 1.0)) == params_hash(legacy)
+    assert params_hash(_inverter("Linear", 9.0)) == params_hash(legacy)
+    assert params_hash(_inverter("Nonlinear", 1.0)) != params_hash(legacy)
+    assert params_hash(_inverter("Nonlinear", 1.0)) != params_hash(
+        _inverter("Nonlinear", 2.0)
+    )
+    implicit = _inverter("Nonlinear", 1.0)
+    del implicit["Optimizer"]["load_factor"]
+    assert params_hash(implicit) == params_hash(_inverter("Nonlinear", 1.0))

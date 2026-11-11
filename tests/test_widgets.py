@@ -310,6 +310,21 @@ def test_optimizer_widget_initialization(qt_app: QApplication):
     assert widget.opt_max_change.value() == 0.05
     assert widget.opt_n_it.value() == 30
     assert widget.opt_solver.currentText() == "Auto"
+    assert widget.opt_analysis.currentText() == "Linear"
+    assert widget.opt_load_factor.value() == 1.0
+
+
+def test_optimizer_widget_load_factor_follows_the_analysis(qt_app: QApplication):
+    """The load factor only applies to the non-linear analysis."""
+    widget = OptimizerWidget()
+    assert not widget.opt_load_factor.isEnabled()
+    widget.opt_analysis.setCurrentText("Nonlinear")
+    assert widget.opt_load_factor.isEnabled()
+    widget.opt_analysis.setCurrentText("Linear")
+    assert not widget.opt_load_factor.isEnabled()
+    assert widget.opt_analysis in widget.parameter_widgets()
+    assert widget.opt_load_factor in widget.parameter_widgets()
+    assert widget.save_frames_cb not in widget.parameter_widgets()
 
 
 def test_analyze_widget_initialization(qt_app: QApplication):

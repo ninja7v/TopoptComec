@@ -131,6 +131,11 @@ class ParameterCheck:
                 f"Unknown filter type '{filter_type}' "
                 "(expected Sensitivity, Density or None)."
             )
+        analysis: str = po.get("analysis", "Linear")
+        if analysis not in ("Linear", "Nonlinear"):
+            return f"Unknown analysis '{analysis}' (expected Linear or Nonlinear)."
+        if analysis == "Nonlinear" and po.get("load_factor", 1.0) <= 0.0:
+            return "Load factor must be positive."
 
     def _check_duplicates(
         self, indices: list, keyfunc: callable, msg: callable

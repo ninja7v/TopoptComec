@@ -54,10 +54,18 @@ def normalize_params(p: dict) -> None:
 
 
 def _normalize_optimizer(p: dict) -> None:
-    """Drop UI-only optimizer keys."""
+    """Drop UI-only optimizer keys and the defaults of the analysis."""
     po = p.get("Optimizer")
     if isinstance(po, dict):
         po.pop("save_frames", None)  # UI-only, not stored in presets
+        # The linear analysis is the default and ignores the load factor, so
+        # presets written before the non-linear analysis existed keep the
+        # same hash (and their cached results).
+        if po.get("analysis", "Linear") == "Linear":
+            po.pop("analysis", None)
+            po.pop("load_factor", None)
+        else:
+            po.setdefault("load_factor", 1.0)
 
 
 def _normalize_regions(p: dict, is_2d: bool) -> None:

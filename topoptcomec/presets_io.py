@@ -200,9 +200,19 @@ def _validate_optimizer(params: dict) -> str | None:
     optimizer, error = _check_section(params, "Optimizer", required=True)
     if error or optimizer is None:
         return error
-    for key in ("filter_radius_min", "eta", "penal", "max_change", "n_it"):
+    for key in (
+        "filter_radius_min",
+        "eta",
+        "penal",
+        "max_change",
+        "n_it",
+        "load_factor",
+    ):
         if key in optimizer and not _finite(optimizer[key]):
             return f"Optimizer.{key} must be a finite number."
+    for key in ("filter_type", "solver", "analysis"):
+        if key in optimizer and not isinstance(optimizer[key], str):
+            return f"Optimizer.{key} must be a string."
     return None
 
 

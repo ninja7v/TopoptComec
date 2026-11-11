@@ -1485,11 +1485,46 @@ class OptimizerWidget(QWidget):
         )
         self.opt_solver = _make_combo(["Auto", "Direct", "Iterative"], 0, tip)
         form_layout.addRow("Solver:", self.opt_solver)
+        # Analysis
+        tip = (
+            "Structural analysis used by the optimizer\n"
+            "Linear: small displacements (fast)\n"
+            "Nonlinear: large displacements and rotations "
+            "(geometrically non-linear, several times slower)"
+        )
+        self.opt_analysis = _make_combo(["Linear", "Nonlinear"], 0, tip)
+        form_layout.addRow("Analysis:", self.opt_analysis)
+        # Load factor (non-linear analysis only)
+        self.opt_load_factor = _make_dspin(
+            0.01,
+            1000.0,
+            1.0,
+            0.5,
+            "Multiplier of the input forces in the non-linear analysis.\n"
+            "The port springs are not scaled, so it sets how large the "
+            "displacements are:\nthe input port moves by at most this many "
+            "elements.\n"
+            "1 applies the preset forces as written: it is NOT the linear "
+            "limit\n(use Analysis: Linear for small displacements).",
+            None,
+        )
+        self.opt_analysis.currentTextChanged.connect(self.update_load_factor_state)
+        self.update_load_factor_state()
+        form_layout.addRow("Load factor:", self.opt_load_factor)
+
         self.save_frames_cb = QCheckBox("Save frames")
         self.save_frames_cb.setToolTip("Save intermediate optimization frames as PNG")
         form_layout.addRow(self.save_frames_cb)
 
         main_layout.addLayout(form_layout)
+
+    def update_load_factor_state(self, *_: object) -> None:
+        """Enable the load factor only for the non-linear analysis.
+
+        Also called after a preset is applied, because the parameter signals
+        are blocked while the widgets are being filled.
+        """
+        self.opt_load_factor.setEnabled(self.opt_analysis.currentText() == "Nonlinear")
 
     def parameter_widgets(self) -> tuple[QWidget, ...]:
         """Widgets holding an optimizer parameter (none affects the display)."""
@@ -1501,6 +1536,8 @@ class OptimizerWidget(QWidget):
             self.opt_max_change,
             self.opt_n_it,
             self.opt_solver,
+            self.opt_analysis,
+            self.opt_load_factor,
         )
 
 
