@@ -478,6 +478,35 @@ def _load_level_text(fem: FEM) -> str:
     return "" if fraction is None else f", Load: {100 * fraction:.0f}%"
 
 
+def _warn_incomplete_run(fem: FEM, change: float, n_it: int) -> None:
+    """
+    Warn when a run ended without converging or below the full load.
+
+    Parameters
+    ----------
+    fem : FEM
+        Solver of the run (a non-linear one reports the load level reached).
+    change : float
+        Last maximum design-variable change.
+    n_it : int
+        Iteration budget of the run.
+    """
+    if change > CONVERGENCE_TOLERANCE:
+        message = (
+            f"Optimization stopped at the iteration limit (n_it={n_it}) without "
+            f"converging (last change {change:.3f} > 0.010)."
+        )
+        print(f"Warning: {message} Increase n_it for a converged result.")
+    load_fraction = float(getattr(fem, "last_load_fraction", 1.0))
+    if load_fraction < 1.0:
+        print(
+            "Warning: The non-linear analysis only reached "
+            f"{100 * load_fraction:.0f}% of the load: the structure probably "
+            "buckles beyond it. The result is optimized for the reached load "
+            "level; reduce the load factor or increase n_it."
+        )
+
+
 def optimize(
     Dimensions: dict,
     Forces: dict,
@@ -608,21 +637,8 @@ def optimize(
     fem.begin_iteration(n_it, n_it)
     ui, uo = fem.solve(_density_argument())
     final_obj: float = fem.compute_objective(_density_argument(), ui, uo)
-    converged: bool = change <= CONVERGENCE_TOLERANCE
-    if not converged and not stopped:
-        message = (
-            f"Optimization stopped at the iteration limit (n_it={n_it}) without "
-            f"converging (last change {change:.3f} > 0.010)."
-        )
-        print(f"Warning: {message} Increase n_it for a converged result.")
-    load_fraction = float(getattr(fem, "last_load_fraction", 1.0))
-    if load_fraction < 1.0:
-        print(
-            "Warning: The non-linear analysis only reached "
-            f"{100 * load_fraction:.0f}% of the load: the structure probably "
-            "buckles beyond it. The result is optimized for the reached load "
-            "level; reduce the load factor or increase n_it."
-        )
+    if not stopped:
+        _warn_incomplete_run(fem, change, n_it)
     if verbose:
         print(f"Optimizer finished. Final objective: {final_obj:.4f}")
     # Emit the final design (same iteration index; consumers replace the
