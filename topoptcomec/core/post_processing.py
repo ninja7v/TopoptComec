@@ -231,3 +231,66 @@ def rescale_displacement_field(
         res[comp_idx::comp_count, :] = comp_flat
 
     return res[:, 0] if squeeze else res
+
+
+_GRID_AXIS = {"z": 0, "x": 1, "y": 2}
+
+
+def mirror_density_field(
+    xPhys: FloatArray, nelxyz: tuple[int, int, int], axis: str
+) -> FloatArray:
+    """
+    Mirror a density field along one axis of the element grid.
+
+    Parameters
+    ----------
+    xPhys : FloatArray
+        Density field, shape ``(nel,)`` or ``(n_materials, nel)``, in the flat
+        element ordering ``z * nelx * nely + x * nely + y``.
+    nelxyz : tuple[int, int, int]
+        Grid size; ``nelz`` is 0 for 2D.
+    axis : str
+        "x", "y" or "z".
+
+    Returns
+    -------
+    FloatArray
+        Mirrored field with the same shape as ``xPhys``.
+    """
+    nelx, nely, nelz = nelxyz
+    lead = xPhys.shape[:-1]
+    field = xPhys.reshape(lead + (max(nelz, 1), nelx, nely))
+    return np.flip(field, len(lead) + _GRID_AXIS[axis]).reshape(xPhys.shape)
+
+
+def mirror_displacement_field(
+    u: FloatArray, nelxyz: tuple[int, int, int], axis: str
+) -> FloatArray:
+    """
+    Mirror a nodal displacement field along one axis.
+
+    Nodes are mirrored across the grid and the displacement component along
+    ``axis`` changes sign.
+
+    Parameters
+    ----------
+    u : FloatArray
+        Displacements, shape ``(ndof,)`` with the DOFs of each node stored
+        together in the node ordering ``z * (nelx+1)(nely+1) + x * (nely+1) + y``.
+    nelxyz : tuple[int, int, int]
+        Grid size; ``nelz`` is 0 for 2D.
+    axis : str
+        "x", "y" or "z".
+
+    Returns
+    -------
+    FloatArray
+        Mirrored displacements with the same shape as ``u``.
+    """
+    nelx, nely, nelz = nelxyz
+    is_3d = nelz > 0
+    n_comp = 3 if is_3d else 2
+    nodes = (nelz + 1 if is_3d else 1, nelx + 1, nely + 1)
+    field = np.flip(u.reshape(nodes + (n_comp,)), _GRID_AXIS[axis]).copy()
+    field[..., "xyz".index(axis)] *= -1.0
+    return field.reshape(u.shape)

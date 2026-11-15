@@ -5,7 +5,7 @@
 import copy
 
 import numpy as np
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QMessageBox, QSpinBox
 
 from topoptcomec import result_cache
 from topoptcomec.core.displacements import combine_load_case_displacements
@@ -144,7 +144,9 @@ class ParameterManagerMixin:
 
         return params
 
-    def on_parameter_changed(self, force_reinit: bool = False) -> None:
+    def on_parameter_changed(
+        self, force_reinit: bool = False, keep_result: bool = False
+    ) -> None:
         """
         React when a parameter is changed.
 
@@ -155,6 +157,10 @@ class ParameterManagerMixin:
             Preset application uses this because it is invoked from the preset
             combo's signal, so ``sender()`` is the combo and does not reveal
             that the whole parameter set (including the grid) was replaced.
+        keep_result : bool
+            The caller already transformed the current result to match the
+            new parameters (e.g. a flip): keep it displayed instead of
+            clearing it.
         """
         had_result = self.u is not None
         # Scale last_successful_xPhys if option is "From current result" and size mismatches
@@ -200,7 +206,7 @@ class ParameterManagerMixin:
 
         sender = self.sender()
 
-        needs_reinit = (
+        needs_reinit = not keep_result and (
             force_reinit
             or had_result
             or sender is None
@@ -244,7 +250,8 @@ class ParameterManagerMixin:
         color, label = TimeEstimation(self.last_params).optimization_indicators()
         tooltip_text = f"Start the optimization process\n\nEstimation: {label}"
         self.footer.set_create_button_color(color)
-        self.footer.start_create_button_effect(color_hex=color)
+        if not keep_result:
+            self.footer.start_create_button_effect(color_hex=color)
         self.footer.create_button.setToolTip(tooltip_text)
 
         cache_loaded = self._sync_preset_selection()
@@ -252,7 +259,7 @@ class ParameterManagerMixin:
         # A cached npz was just loaded by the preset sync: a full replot is
         # needed to display it. This check must come before the had_result
         # and partial-replot branches so the npz is always shown.
-        if cache_loaded:
+        if cache_loaded or keep_result:
             self.replot()
             return
         if had_result:
@@ -587,6 +594,7 @@ class ParameterManagerMixin:
         nelx = self.dim_widget.nx.value()
         nely = self.dim_widget.ny.value()
         nelz = self.dim_widget.nz.value()
+        self.dim_widget.flip_buttons["z"].setEnabled(nelz > 0)
 
         # Update ranges for all regions
         for rw in self.regions_widget.inputs:
@@ -723,6 +731,96 @@ class ParameterManagerMixin:
             f"All parameters scaled by a factor of {scale}.", 3000
         )
 
+    def _on_flip_button_clicked(self) -> None:
+        """Flip along the axis of the flip button that was clicked."""
+        sender = self.sender()
+        for axis, button in self.dim_widget.flip_buttons.items():
+            if button is sender:
+                self._flip_parameters(axis)
+                return
+
+    def _flip_parameters(self, axis: str) -> None:
+        """
+        Mirror the whole problem, and its current result, along one axis.
+
+        Positions of regions, forces and supports become ``nel - p`` on the
+        flipped axis and force directions along that axis are reversed. A
+        mirrored row identical to an original row takes that row's place, so
+        a setup that is already symmetric is left unchanged (and its preset
+        stays recognized). The displayed result is mirrored instead of reset.
+
+        Parameters
+        ----------
+        axis : str
+            "x", "y" or "z".
+        """
+        nelxyz = (
+            self.dim_widget.nx.value(),
+            self.dim_widget.ny.value(),
+            self.dim_widget.nz.value(),
+        )
+        nel = nelxyz["xyz".index(axis)]
+        if nel == 0:  # No Z axis in 2D
+            return
+
+        # Arrows along the flipped axis swap with their opposite
+        arrows = self.forces_widget.arrows
+        first, second = {
+            "x": ("X:→", "X:←"),
+            "y": ("Y:↑", "Y:↓"),
+            "z": ("Z:<", "Z:>"),
+        }[axis]
+        swap = {arrows.index(first): arrows.index(second)}
+        swap.update({v: k for k, v in swap.items()})
+
+        groups = [
+            (self.regions_widget.inputs, "r" + axis, None),
+            (self.forces_widget.input_forces, "fi" + axis, "fidir"),
+            (self.forces_widget.output_forces, "fo" + axis, "fodir"),
+            (self.supports_widget.inputs, "s" + axis, None),
+        ]
+
+        self._block_all_parameter_signals(True)
+        for rows, pos_key, dir_key in groups:
+            original = [_row_state(row) for row in rows]
+            mirrored = []
+            for state in original:
+                state = dict(state)
+                state[pos_key] = nel - state[pos_key]
+                if dir_key is not None:
+                    state[dir_key] = swap.get(state[dir_key], state[dir_key])
+                mirrored.append(state)
+            for row, state in zip(rows, _keep_matching_order(original, mirrored)):
+                _set_row_state(row, state)
+        self._block_all_parameter_signals(False)
+
+        from topoptcomec.core.post_processing import (
+            mirror_density_field,
+            mirror_displacement_field,
+        )
+
+        n_cells = nelxyz[0] * nelxyz[1] * max(nelxyz[2], 1)
+
+        def mirrored_density(field):
+            if field is None or field.shape[-1] != n_cells:
+                return None
+            return mirror_density_field(field, nelxyz, axis)
+
+        self.last_successful_xPhys = mirrored_density(
+            getattr(self, "last_successful_xPhys", None)
+        )
+        keep_result = self.u is not None and self.xPhys is not None
+        if keep_result:
+            self.xPhys = mirrored_density(self.xPhys)
+            self.u = mirror_displacement_field(self.u, nelxyz, axis)
+            keep_result = self.xPhys is not None
+            # A deformation frame on screen belongs to the unflipped result
+            self.is_displaying_deformation = False
+            self.last_displayed_frame_data = None
+
+        self.on_parameter_changed(keep_result=keep_result)
+        self.status_bar.showMessage(f"Everything flipped along {axis.upper()}.", 3000)
+
     def _block_all_parameter_signals(self, block: bool) -> None:
         """
         Block or unblock signals for all parameter widgets.
@@ -753,3 +851,42 @@ class ParameterManagerMixin:
                 # flag set by MainWindow._connect_*_signals).
                 if hasattr(w, "blockSignals"):
                     w.blockSignals(block)
+
+
+def _row_state(row: dict) -> dict:
+    """Values of the input widgets of one region/force/support row."""
+    state = {}
+    for key, w in row.items():
+        if isinstance(w, QComboBox):
+            state[key] = w.currentIndex()
+        elif isinstance(w, (QSpinBox, QDoubleSpinBox)):
+            state[key] = w.value()
+    return state
+
+
+def _set_row_state(row: dict, state: dict) -> None:
+    """Write values produced by :func:`_row_state` back into a row."""
+    for key, value in state.items():
+        w = row[key]
+        if isinstance(w, QComboBox):
+            w.setCurrentIndex(value)
+        else:
+            w.setValue(value)
+
+
+def _keep_matching_order(original: list, mirrored: list) -> list:
+    """Reorder ``mirrored`` so entries equal to an original keep its slot.
+
+    Mirroring a symmetric pair (e.g. supports at x=0 and x=nelx) swaps the
+    two entries; restoring their original order keeps the parameters, and
+    therefore the preset match, identical.
+    """
+    pending = list(mirrored)
+    placed: list = [None] * len(original)
+    for i, state in enumerate(original):
+        if state in pending:
+            placed[i] = pending.pop(pending.index(state))
+    for i in range(len(placed)):
+        if placed[i] is None:
+            placed[i] = pending.pop(0)
+    return placed

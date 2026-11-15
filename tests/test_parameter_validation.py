@@ -350,3 +350,96 @@ def test_time_estimation_of_the_nonlinear_analysis():
         TimeEstimation(nonlinear).optimization_cost()
         > 3 * TimeEstimation(params).optimization_cost()
     )
+
+
+# --- flip_parameters tests ---
+
+
+def test_flip_parameters_x(qt_app):
+    """Flipping along X mirrors X positions and reverses X force directions."""
+    window: MainWindow = MainWindow()
+    window.dim_widget.nx.setValue(60)
+    window.dim_widget.ny.setValue(40)
+    window.dim_widget.nz.setValue(0)
+    fw = window.forces_widget.inputs[0]
+    fw["fix"].setValue(10)
+    fw["fiy"].setValue(5)
+    fw["fidir"].setCurrentText("X:→")
+    sw = window.supports_widget.inputs[0]
+    sw["sx"].setValue(5)
+    window.regions_widget.add_region()
+    rw = window.regions_widget.inputs[0]
+    rw["rx"].setValue(15)
+    window.last_successful_xPhys = np.arange(60 * 40, dtype=float)
+
+    window._flip_parameters("x")
+
+    assert fw["fix"].value() == 50
+    assert fw["fiy"].value() == 5
+    assert fw["fidir"].currentText() == "X:←"
+    assert sw["sx"].value() == 55
+    assert rw["rx"].value() == 45
+    seed = window.last_successful_xPhys.reshape(60, 40)
+    assert seed[0, 0] == 59 * 40  # element (x=59, y=0) moved to x=0
+    window.close()
+
+
+def test_flip_parameters_y_keeps_other_directions(qt_app):
+    """Flipping along Y reverses Y directions only."""
+    window: MainWindow = MainWindow()
+    window.dim_widget.ny.setValue(40)
+    fi, fo = window.forces_widget.input_forces[0], window.forces_widget.output_forces[0]
+    fi["fidir"].setCurrentText("Y:↑")
+    fo["fodir"].setCurrentText("X:→")
+    fo["foy"].setValue(40)
+
+    window._flip_parameters("y")
+
+    assert fi["fidir"].currentText() == "Y:↓"
+    assert fo["fodir"].currentText() == "X:→"
+    assert fo["foy"].value() == 0
+    window.close()
+
+
+def test_flip_z_button_enabled_only_in_3d(qt_app):
+    """The Z flip button follows the 2D/3D state of the domain."""
+    window: MainWindow = MainWindow()
+    window.dim_widget.nz.setValue(0)
+    assert not window.dim_widget.flip_buttons["z"].isEnabled()
+    window.dim_widget.nz.setValue(20)
+    assert window.dim_widget.flip_buttons["z"].isEnabled()
+    window.close()
+
+
+def test_flip_symmetric_preset_stays_recognized(qt_app):
+    """ForceInverter_2D is symmetric in X: flipping it changes nothing."""
+    window: MainWindow = MainWindow()
+    assert window.preset.presets_combo.currentText() == "ForceInverter_2D"
+    before = window._gather_parameters()
+
+    window._flip_parameters("x")
+
+    assert window._gather_parameters() == before
+    assert window.preset.presets_combo.currentText() == "ForceInverter_2D"
+    window.close()
+
+
+def test_flip_keeps_and_mirrors_result(qt_app):
+    """The displayed result is mirrored instead of being reset."""
+    window: MainWindow = MainWindow()
+    window.dim_widget.nx.setValue(6)
+    window.dim_widget.ny.setValue(5)
+    window.dim_widget.nz.setValue(0)
+    xphys = np.arange(30, dtype=float)
+    u = np.arange(2 * 7 * 6, dtype=float)
+    window.xPhys, window.u = xphys.copy(), u.copy()
+
+    window._flip_parameters("x")
+
+    assert window.xPhys is not None and window.u is not None
+    assert window.xPhys.reshape(6, 5)[0, 0] == xphys.reshape(6, 5)[5, 0]
+    flipped_u = window.u.reshape(7, 6, 2)
+    original_u = u.reshape(7, 6, 2)
+    assert flipped_u[0, 0, 0] == -original_u[6, 0, 0]  # X component negated
+    assert flipped_u[0, 0, 1] == original_u[6, 0, 1]  # Y component kept
+    window.close()

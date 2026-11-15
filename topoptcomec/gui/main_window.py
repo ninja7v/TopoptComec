@@ -239,6 +239,8 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
         self.dim_widget.nz.valueChanged.connect(self.on_parameter_changed)
         self.dim_widget.volfrac.valueChanged.connect(self.on_parameter_changed)
         self.dim_widget.scale_button.clicked.connect(self._scale_parameters)
+        for button in self.dim_widget.flip_buttons.values():
+            button.clicked.connect(self._on_flip_button_clicked)
         self.dim_widget.nx.valueChanged.connect(self._update_position_ranges)
         self.dim_widget.ny.valueChanged.connect(self._update_position_ranges)
         self.dim_widget.nz.valueChanged.connect(self._update_position_ranges)

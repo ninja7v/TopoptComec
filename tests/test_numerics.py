@@ -411,3 +411,24 @@ def test_direct_solver_is_refined_to_full_accuracy():
     rhs = fem._load_case_matrix()
     solution = DirectSolver().factorize(K)(rhs)
     assert np.linalg.norm(K @ solution - rhs) <= 1e-11 * np.linalg.norm(rhs)
+
+
+def test_mirror_fields_twice_is_identity():
+    """Mirroring density and displacement twice gives back the input."""
+    from topoptcomec.core.post_processing import (
+        mirror_density_field,
+        mirror_displacement_field,
+    )
+
+    rng = np.random.default_rng(0)
+    for nelxyz in ((5, 3, 0), (4, 3, 2)):
+        nel = nelxyz[0] * nelxyz[1] * max(nelxyz[2], 1)
+        xphys = rng.random((2, nel))
+        n_nodes = (nelxyz[0] + 1) * (nelxyz[1] + 1) * (nelxyz[2] + 1)
+        u = rng.random(n_nodes * (3 if nelxyz[2] else 2))
+        for axis in "xyz" if nelxyz[2] else "xy":
+            once = mirror_density_field(xphys, nelxyz, axis)
+            assert not np.array_equal(once, xphys)
+            assert np.array_equal(mirror_density_field(once, nelxyz, axis), xphys)
+            u_once = mirror_displacement_field(u, nelxyz, axis)
+            assert np.array_equal(mirror_displacement_field(u_once, nelxyz, axis), u)

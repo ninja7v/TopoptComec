@@ -490,6 +490,19 @@ class DimensionsWidget(QWidget):
         scale_layout.addWidget(self.scale_button)
         scale_layout.addStretch(1)
         layout.addLayout(scale_layout)
+        # Line 4: "Flip:" [X] [Y] [Z]
+        flip_layout = QHBoxLayout()
+        flip_layout.addWidget(QLabel("Flip:"))
+        self.flip_buttons: dict[str, QPushButton] = {}
+        for axis in ("x", "y", "z"):
+            button = QPushButton(axis.upper())
+            button.setFixedSize(24, 24)
+            button.setToolTip(f"Mirror every component along the {axis.upper()} axis")
+            flip_layout.addWidget(button)
+            self.flip_buttons[axis] = button
+        self.flip_buttons["z"].setEnabled(False)  # Default domain is 2D
+        flip_layout.addStretch(1)
+        layout.addLayout(flip_layout)
 
 
 class RegionsWidget(QWidget):
