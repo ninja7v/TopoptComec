@@ -417,5 +417,46 @@ def save_user_presets(presets: dict, builtin: dict) -> Path:
     }
     path = resolve_presets_file(writable=True)
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(owned, handle, indent=4)
+        handle.write(format_presets(owned))
     return path
+
+
+def format_presets(presets: dict) -> str:
+    """
+    Serialize presets in the layout of ``topoptcomec/presets.json``.
+
+    Objects are indented by two spaces and lists of plain values stay on one
+    line, so saving or deleting a preset only adds or removes its own lines
+    instead of reflowing the whole file.
+
+    Parameters
+    ----------
+    presets : dict
+        Presets to serialize.
+
+    Returns
+    -------
+    str
+        The JSON text, ending with a newline.
+    """
+    return _format_json(presets, 0) + "\n"
+
+
+def _format_json(value: object, level: int) -> str:
+    """Format one JSON value at nesting ``level`` (see :func:`format_presets`)."""
+    pad = "  " * level
+    inner = "  " * (level + 1)
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        items = [
+            f"{inner}{json.dumps(key)}: {_format_json(item, level + 1)}"
+            for key, item in value.items()
+        ]
+        return "{\n" + ",\n".join(items) + "\n" + pad + "}"
+    if isinstance(value, (list, tuple)) and any(
+        isinstance(item, (dict, list, tuple)) for item in value
+    ):
+        items = [inner + _format_json(item, level + 1) for item in value]
+        return "[\n" + ",\n".join(items) + "\n" + pad + "]"
+    return json.dumps(value)
