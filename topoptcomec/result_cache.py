@@ -49,8 +49,25 @@ def params_hash(params: dict) -> str:
     payload = {
         k: v for k, v in normalized_params(params).items() if k not in _VOLATILE_KEYS
     }
-    encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    encoded = json.dumps(
+        _canonical_numbers(payload), sort_keys=True, default=str
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _canonical_numbers(value):
+    """Write integral floats as ints, so ``1`` and ``1.0`` hash the same.
+
+    Presets may store ``"E": [1]`` while the GUI spin boxes return ``1.0``:
+    the values compare equal but would serialize differently.
+    """
+    if isinstance(value, dict):
+        return {k: _canonical_numbers(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_numbers(v) for v in value]
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
 
 
 def cache_path(base_dir: str | Path, preset_name: str) -> Path:
