@@ -142,7 +142,7 @@ class MainWindow(QMainWindow, PlottingMixin, ParameterManagerMixin):
 
         self._load_presets()
 
-        default_preset_name: str = "ForceInverter_2Sup_2D"
+        default_preset_name: str = "ForceInverter_2D"
         if default_preset_name in self.presets:
             self.preset.presets_combo.setCurrentText(default_preset_name)
             self._on_preset_selected()  # This applies the preset and replots

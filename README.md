@@ -35,7 +35,7 @@ uv run topoptcomec
 ```
 #### CLI:
 ```bash
-uv run topoptcomec -p ForceInverter_2Sup_2D --preview
+uv run topoptcomec -p ForceInverter_2D --preview
 ```
 #### Faster solver (optional, x86-64 only):
 ```bash

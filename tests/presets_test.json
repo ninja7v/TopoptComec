@@ -1,5 +1,5 @@
 {
-    "ForceInverter_2Sup_2D": {
+    "ForceInverter_2D": {
         "Dimensions": {
             "nelxyz": [12, 8, 0],
             "volfrac": 0.3

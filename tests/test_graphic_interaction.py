@@ -48,7 +48,7 @@ def _make_window_no_result(qt_app) -> MainWindow:
 def test_actor_per_element_map_populated(qt_app):
     """Each active force/support produces its own actor entry in the map."""
     window = _make_window(qt_app)
-    # The default preset (ForceInverter_2Sup_2D) has 1 input + 1 output force
+    # The default preset (ForceInverter_2D) has 1 input + 1 output force
     # and 2 supports, all active.
     pf = window.last_params["Forces"]
     n_active_in = sum(1 for d in pf["fidir"] if d != "-")
@@ -476,7 +476,7 @@ def test_param_change_no_match_shows_uniform_material(qt_app):
 
     # Load the npz to know what the cached density looks like.
     cache_file = os.path.join(
-        "results", "ForceInverter_2Sup_2D", "ForceInverter_2Sup_2D_density_field.npz"
+        "results", "ForceInverter_2D", "ForceInverter_2D_density_field.npz"
     )
     if os.path.exists(cache_file):
         npz_xphys = np.load(cache_file)["xPhys"]
@@ -509,7 +509,7 @@ def test_param_change_matching_preset_loads_npz(qt_app):
         presets = json.load(f)
 
     # Use a preset that has a cached npz result.
-    preset_name = "ForceInverter_2Sup_2D"
+    preset_name = "ForceInverter_2D"
     cache_file = os.path.join(
         "results", preset_name, f"{preset_name}_density_field.npz"
     )
@@ -555,7 +555,7 @@ def test_param_change_while_preset_selected_keeps_npz(qt_app):
     with open("topoptcomec/presets.json") as f:
         presets = json.load(f)
 
-    preset_name = "ForceInverter_2Sup_2D"
+    preset_name = "ForceInverter_2D"
     cache_file = os.path.join(
         "results", preset_name, f"{preset_name}_density_field.npz"
     )
@@ -620,8 +620,8 @@ def test_no_duplicate_signal_connections(qt_app):
         presets = json.load(f)
 
     # Apply the same preset twice to trigger _connect_*_signals twice.
-    window._apply_parameters(presets["ForceInverter_2Sup_2D"])
-    window._apply_parameters(presets["ForceInverter_2Sup_2D"])
+    window._apply_parameters(presets["ForceInverter_2D"])
+    window._apply_parameters(presets["ForceInverter_2D"])
 
     # Count receivers: the fix spinbox should have exactly one connection
     # to on_parameter_changed (not one per _apply_parameters call).
@@ -692,7 +692,7 @@ def test_preset_npz_displayed_after_param_change(qt_app):
     with open("topoptcomec/presets.json") as f:
         presets = json.load(f)
 
-    preset_name = "ForceInverter_2Sup_2D"
+    preset_name = "ForceInverter_2D"
     cache_file = os.path.join(
         "results", preset_name, f"{preset_name}_density_field.npz"
     )

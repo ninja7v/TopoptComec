@@ -675,7 +675,7 @@ def test_preset_switch_reinitializes_the_density_field(qt_app, tmp_path, monkeyp
     )
     window = MainWindow()
     combo = window.preset.presets_combo
-    start = combo.findText("ForceInverter_2Sup_2D")
+    start = combo.findText("ForceInverter_2D")
     target = combo.findText("Gripper_2D")
     if start == -1 or target == -1:
         window.close()
