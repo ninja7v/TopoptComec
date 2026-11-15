@@ -315,6 +315,10 @@ class ParameterManagerMixin:
         if sender is self.materials_widget.mat_init_type:
             return True
 
+        # Adding or removing a material changes the number of density layers.
+        if sender is self.materials_widget:
+            return True
+
         # percent changes proportions only in multi-material mode.
         if len(self.materials_widget.inputs) > 1:
             for mw in self.materials_widget.inputs:

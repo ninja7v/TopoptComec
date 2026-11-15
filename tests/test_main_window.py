@@ -988,3 +988,54 @@ def test_headless_window_skips_interactive_tools(qt_app):
         window._update_camera(is_3d, dims)
 
     window.close()
+
+
+def test_removing_a_material_reinitializes_the_density_field(
+    qt_app, tmp_path, monkeypatch
+):
+    """Deleting a material must drop the multi-material preview field.
+
+    Regression: after editing a percentage (which rebuilds a 2-material
+    preview), removing material 2 kept the (2, nel) field and the replot
+    indexed a color input that no longer existed.
+    """
+    from topoptcomec import result_cache
+
+    monkeypatch.setattr(
+        result_cache,
+        "cache_path",
+        lambda base_dir, name: tmp_path / name / f"{name}_density_field.npz",
+    )
+    window = MainWindow()
+    combo = window.preset.presets_combo
+    index = next(
+        (
+            i
+            for i in range(combo.count())
+            if len(
+                window.presets.get(combo.itemText(i), {})
+                .get("Materials", {})
+                .get("E", [])
+            )
+            == 2
+            and window.presets[combo.itemText(i)]["Dimensions"]["nelxyz"][2] == 0
+        ),
+        -1,
+    )
+    if index == -1:
+        window.close()
+        pytest.skip("No 2D multi-material preset available")
+    combo.setCurrentIndex(index)
+    combo.activated.emit(index)
+
+    materials = window.materials_widget
+    percent = materials.inputs[1]["percent"]
+    percent.setValue(percent.value() + 5)
+    assert window.xPhys is not None and window.xPhys.ndim == 2
+
+    materials.remove_material(1)
+
+    assert len(materials.inputs) == 1
+    assert window.xPhys is not None and window.xPhys.ndim == 1
+    window.replot()  # must not index the removed material's color
+    window.close()
