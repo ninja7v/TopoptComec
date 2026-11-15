@@ -1,23 +1,23 @@
 {
   "ForceInverter_2Sup_2D": {
     "Dimensions": {
-      "nelxyz": [90, 60, 0],
+      "nelxyz": [150, 100, 0],
       "volfrac": 0.3
     },
     "Forces": {
-      "fix": [45],
+      "fix": [75],
       "fiy": [0],
       "fiz": [0],
       "fidir": ["Y:\u2191"],
       "finorm": [0.01],
-      "fox": [45],
-      "foy": [60],
+      "fox": [75],
+      "foy": [100],
       "foz": [0],
       "fodir": ["Y:\u2193"],
       "fonorm": [0.01]
     },
     "Supports": {
-      "sx": [0, 90],
+      "sx": [0, 150],
       "sy": [0, 0],
       "sz": [0, 0],
       "sdim": ["XYZ", "XYZ"],
@@ -28,50 +28,52 @@
       "E": [1.0, 0.8],
       "nu": [0.4, 0.2],
       "color": ["#000000", "#ff0000"],
-      "percent": [90, 10]
+      "percent": [95, 5]
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 30,
-      "solver": "Auto"
+      "n_it": 35,
+      "solver": "Auto",
+      "analysis": "Nonlinear",
+      "load_factor": 15.0
     },
     "Displacement": {
-      "disp_factor": 6.0,
-      "disp_iterations": 5
+      "disp_factor": 17.0,
+      "disp_iterations": 6
     }
   },
   "Gripper_2D": {
     "Dimensions": {
-      "nelxyz": [100, 60, 0],
+      "nelxyz": [200, 120, 0],
       "volfrac": 0.3
     },
     "Regions": {
-      "rx": [90],
-      "ry": [30],
+      "rx": [180],
+      "ry": [60],
       "rz": [0],
-      "rradius": [10],
+      "rradius": [20],
       "rshape": ["\u25a1"],
       "rstate": ["Void"]
     },
     "Forces": {
       "fix": [0],
-      "fiy": [30],
+      "fiy": [60],
       "fiz": [0],
       "fidir": ["X:\u2192"],
       "finorm": [0.01],
-      "fox": [100, 100],
-      "foy": [40, 20],
+      "fox": [200, 200],
+      "foy": [80, 40],
       "foz": [0, 0],
       "fodir": ["Y:\u2193", "Y:\u2191"],
       "fonorm": [0.01, 0.01]
     },
     "Supports": {
       "sx": [0, 0],
-      "sy": [0, 60],
+      "sy": [0, 120],
       "sz": [0, 0],
       "sdim": ["XYZ", "XYZ"],
       "sr": [0, 0]
@@ -85,38 +87,38 @@
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 30,
+      "n_it": 45,
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 12.0,
+      "disp_factor": 22.0,
       "disp_iterations": 5
     }
   },
   "KeyboardKey_3D": {
     "Dimensions": {
-      "nelxyz": [18, 18, 10],
+      "nelxyz": [26, 26, 14],
       "volfrac": 0.15
     },
     "Forces": {
-      "fix": [9],
-      "fiy": [9],
+      "fix": [13],
+      "fiy": [13],
       "fiz": [0],
       "fidir": ["Z:<"],
       "finorm": [0.01],
-      "fox": [9],
-      "foy": [9],
-      "foz": [10],
+      "fox": [13],
+      "foy": [13],
+      "foz": [14],
       "fodir": ["Z:>"],
       "fonorm": [0.01]
     },
     "Supports": {
-      "sx": [0, 0, 18, 18],
-      "sy": [0, 18, 0, 18],
+      "sx": [0, 0, 26, 26],
+      "sy": [0, 26, 0, 26],
       "sz": [0, 0, 0, 0],
       "sdim": ["XYZ", "XYZ", "XYZ", "XYZ"],
       "sr": [1, 1, 1, 1]
@@ -130,76 +132,31 @@
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 1.5,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 30,
+      "n_it": 50,
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 2.0,
+      "disp_factor": 4,
       "disp_iterations": 1
-    }
-  },
-  "ForceInverter_1Sup_2D": {
-    "Dimensions": {
-      "nelxyz": [80, 80, 0],
-      "volfrac": 0.2
-    },
-    "Forces": {
-      "fix": [40],
-      "fiy": [0],
-      "fiz": [0],
-      "fidir": ["Y:\u2191"],
-      "finorm": [0.01],
-      "fox": [40],
-      "foy": [60],
-      "foz": [0],
-      "fodir": ["Y:\u2193"],
-      "fonorm": [0.01]
-    },
-    "Supports": {
-      "sx": [40],
-      "sy": [30],
-      "sz": [0],
-      "sdim": ["Y"],
-      "sr": [0]
-    },
-    "Materials": {
-      "init_type": 0,
-      "E": [0.1],
-      "nu": [0.25],
-      "color": ["#000000"],
-      "percent": [100]
-    },
-    "Optimizer": {
-      "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
-      "penal": 3.0,
-      "eta": 0.3,
-      "max_change": 0.05,
-      "n_it": 35,
-      "solver": "Auto"
-    },
-    "Displacement": {
-      "disp_factor": 10.0,
-      "disp_iterations": 6
     }
   },
   "Butterfly_2D": {
     "Dimensions": {
-      "nelxyz": [90, 70, 0],
+      "nelxyz": [180, 130, 0],
       "volfrac": 0.35
     },
     "Forces": {
-      "fix": [60, 30],
-      "fiy": [0, 0],
+      "fix": [120, 60],
+      "fiy": [5, 5],
       "fiz": [0, 0],
       "fidir": ["X:\u2190", "X:\u2192"],
       "finorm": [0.01, 0.01],
-      "fox": [30, 60],
-      "foy": [60, 60],
+      "fox": [60, 120],
+      "foy": [120, 120],
       "foz": [0, 0],
       "fodir": ["X:\u2190", "X:\u2192"],
       "fonorm": [0.01, 0.01]
@@ -213,84 +170,86 @@
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 30,
-      "solver": "Auto"
+      "n_it": 45,
+      "solver": "Auto",
+      "analysis": "Nonlinear",
+      "load_factor": 15.0
     },
     "Displacement": {
-      "disp_factor": 4.5,
+      "disp_factor": 10.0,
       "disp_iterations": 5
     }
   },
   "Bird_2D": {
     "Dimensions": {
-      "nelxyz": [300, 60, 0],
+      "nelxyz": [400, 80, 0],
       "volfrac": 0.3
     },
     "Forces": {
-      "fix": [300, 0],
-      "fiy": [10, 10],
+      "fix": [400, 0],
+      "fiy": [13, 13],
       "fiz": [0, 0],
       "fidir": ["Y:\u2193", "Y:\u2193"],
       "finorm": [0.01, 0.01],
-      "fox": [150],
-      "foy": [60],
+      "fox": [200],
+      "foy": [80],
       "foz": [0],
       "fodir": ["Y:\u2191"],
       "fonorm": [0.01]
     },
     "Supports": {
-      "sx": [160, 140],
-      "sy": [40, 40],
+      "sx": [213, 187],
+      "sy": [53, 53],
       "sz": [0, 0],
       "sdim": ["Y", "Y"],
       "sr": [0, 0]
     },
     "Materials": {
       "init_type": 0,
-      "E": [1],
+      "E": [1.0],
       "nu": [0.3],
       "color": ["#00aaff"],
       "percent": [100]
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 30,
+      "n_it": 45,
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 12.0,
-      "disp_iterations": 6
+      "disp_factor": 15.0,
+      "disp_iterations": 5
     }
   },
   "Bridge_2D": {
     "Dimensions": {
-      "nelxyz": [120, 30, 0],
+      "nelxyz": [240, 60, 0],
       "volfrac": 0.3
     },
     "Forces": {
-      "fix": [20, 40, 60, 80, 100],
+      "fix": [40, 80, 120, 160, 200],
       "fiy": [0, 0, 0, 0, 0],
       "fiz": [0, 0, 0, 0, 0],
       "fidir": ["Y:\u2193", "Y:\u2193", "Y:\u2193", "Y:\u2193", "Y:\u2193"],
       "finorm": [0.01, 0.01, 0.01, 0.01, 0.01]
     },
     "Supports": {
-      "sx": [0, 120],
+      "sx": [0, 240],
       "sy": [0, 0],
       "sz": [0, 0],
       "sdim": ["XYZ", "XYZ"],
       "sr": [0, 0]
     },
     "Materials": {
-      "E": [1.0],
+      "E": [5.0],
       "nu": [0.25],
       "init_type": 0,
       "color": ["#000000"],
@@ -298,79 +257,79 @@
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.6,
       "max_change": 0.05,
-      "n_it": 20,
+      "n_it": 60,
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 8.0,
-      "disp_iterations": 8
+      "disp_factor": 20.0,
+      "disp_iterations": 1
     }
   },
   "Shelf_2D": {
     "Dimensions": {
-      "nelxyz": [120, 30, 0],
+      "nelxyz": [240, 60, 0],
       "volfrac": 0.3
     },
     "Forces": {
-      "fix": [120],
-      "fiy": [30],
+      "fix": [240],
+      "fiy": [60],
       "fiz": [0],
       "fidir": ["Y:\u2193"],
       "finorm": [0.01]
     },
     "Supports": {
       "sx": [0, 0],
-      "sy": [0, 30],
+      "sy": [0, 60],
       "sz": [0, 0],
       "sdim": ["XYZ", "XYZ"],
       "sr": [0, 0]
     },
     "Materials": {
       "init_type": 0,
-      "E": [1.0],
+      "E": [5.0],
       "nu": [0.25],
       "color": ["#000000"],
       "percent": [100]
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 40,
+      "n_it": 80,
       "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 7.0,
+      "disp_factor": 14.0,
       "disp_iterations": 6
     }
   },
   "BeeSting_3D": {
     "Dimensions": {
-      "nelxyz": [18, 18, 20],
+      "nelxyz": [22, 22, 24],
       "volfrac": 0.05
     },
     "Forces": {
-      "fix": [0, 18, 9, 9],
-      "fiy": [9, 9, 0, 18],
-      "fiz": [10, 10, 10, 10],
+      "fix": [0, 22, 11, 11],
+      "fiy": [11, 11, 0, 22],
+      "fiz": [12, 12, 12, 12],
       "fidir": ["X:\u2192", "X:\u2190", "Y:\u2191", "Y:\u2193"],
       "finorm": [0.01, 0.01, 0.01, 0.01],
-      "fox": [9],
-      "foy": [9],
+      "fox": [11],
+      "foy": [11],
       "foz": [0],
       "fodir": ["Z:>"],
       "fonorm": [0.01]
     },
     "Supports": {
-      "sx": [0, 0, 18, 18],
-      "sy": [0, 18, 0, 18],
-      "sz": [20, 20, 20, 20],
+      "sx": [0, 0, 22, 22],
+      "sy": [0, 22, 0, 22],
+      "sz": [24, 24, 24, 24],
       "sdim": ["XYZ", "XYZ", "XYZ", "XYZ"],
       "sr": [1, 1, 1, 1]
     },
@@ -383,33 +342,31 @@
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 1.5,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 30,
-      "solver": "Auto",
-      "save_frames": false
+      "n_it": 50,
+      "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 3.0,
-      "disp_iterations": 1,
-      "save_frames": false
+      "disp_factor": 3.7,
+      "disp_iterations": 1
     }
   },
   "Snake_2D": {
     "Dimensions": {
-      "nelxyz": [120, 35, 0],
+      "nelxyz": [240, 70, 0],
       "volfrac": 0.1
     },
     "Forces": {
-      "fix": [0, 0, 20, 20, 40, 40, 60, 60, 80, 80, 100, 100],
-      "fiy": [15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15],
+      "fix": [0, 0, 40, 40, 80, 80, 120, 120, 160, 160, 200, 200],
+      "fiy": [30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
       "fiz": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       "fidir": ["X:\u2192", "Y:\u2191", "X:\u2192", "Y:\u2193", "X:\u2192", "Y:\u2191", "X:\u2192", "Y:\u2193", "X:\u2192", "Y:\u2191", "X:\u2192", "Y:\u2193"],
       "finorm": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
-      "fox": [10, 30, 50, 70, 90, 110],
-      "foy": [20, 10, 20, 10, 20, 15],
+      "fox": [20, 60, 100, 140, 180, 220],
+      "foy": [40, 20, 40, 20, 40, 30],
       "foz": [0, 0, 0, 0, 0, 0],
       "fodir": ["X:\u2192", "X:\u2192", "X:\u2192", "X:\u2192", "X:\u2192", "X:\u2192"],
       "fonorm": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
@@ -423,18 +380,411 @@
     },
     "Optimizer": {
       "filter_type": "Sensitivity",
-      "filter_radius_min": 1.3,
+      "filter_radius_min": 2.0,
       "penal": 3.0,
       "eta": 0.3,
       "max_change": 0.05,
-      "n_it": 50,
-      "solver": "Auto",
-      "save_frames": false
+      "n_it": 100,
+      "solver": "Auto"
     },
     "Displacement": {
-      "disp_factor": 5.0,
-      "disp_iterations": 5,
-      "save_frames": false
+      "disp_factor": 10.0,
+      "disp_iterations": 5
+    }
+  },
+  "Accordion_2D": {
+    "Dimensions": {
+      "nelxyz": [300, 90, 0],
+      "volfrac": 0.3
+    },
+    "Forces": {
+      "fix": [300],
+      "fiy": [45],
+      "fiz": [0],
+      "fidir": ["X:\u2192"],
+      "finorm": [0.01],
+      "fox": [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275],
+      "foy": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90],
+      "foz": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "fodir": ["Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193", "Y:\u2191", "Y:\u2193"],
+      "fonorm": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+    },
+    "Supports": {
+      "sx": [0],
+      "sy": [45],
+      "sz": [0],
+      "sdim": ["XYZ"],
+      "sr": [0]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [1.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 40,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 30.0,
+      "disp_iterations": 1
+    }
+  },
+  "BicycleFrame_2D": {
+    "Dimensions": {
+      "nelxyz": [270, 120, 0],
+      "volfrac": 0.2
+    },
+    "Forces": {
+      "fix": [105, 130],
+      "fiy": [105, 10],
+      "fiz": [0, 0],
+      "fidir": ["Y:\u2193", "Y:\u2193"],
+      "finorm": [0.01, 0.01]
+    },
+    "Supports": {
+      "sx": [10, 260],
+      "sy": [40, 110],
+      "sz": [0, 0],
+      "sdim": ["XYZ", "Y"],
+      "sr": [0, 0]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [10.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 40,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 50.0,
+      "disp_iterations": 1
+    }
+  },
+  "BoltCutter_2D": {
+    "Dimensions": {
+      "nelxyz": [260, 100, 0],
+      "volfrac": 0.3
+    },
+    "Regions": {
+      "rx": [8],
+      "ry": [50],
+      "rz": [0],
+      "rradius": [8],
+      "rshape": ["\u25a1"],
+      "rstate": ["Void"]
+    },
+    "Forces": {
+      "fix": [260, 260],
+      "fiy": [5, 95],
+      "fiz": [0, 0],
+      "fidir": ["Y:\u2193", "Y:\u2191"],
+      "finorm": [0.01, 0.01],
+      "fox": [0, 0],
+      "foy": [42, 58],
+      "foz": [0, 0],
+      "fodir": ["Y:\u2193", "Y:\u2191"],
+      "fonorm": [0.3, 0.3]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [1.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 45,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 20.0,
+      "disp_iterations": 5
+    }
+  },
+  "Bow_2D": {
+    "Dimensions": {
+      "nelxyz": [120, 220, 0],
+      "volfrac": 0.2
+    },
+    "Forces": {
+      "fix": [0],
+      "fiy": [110],
+      "fiz": [0],
+      "fidir": ["X:\u2190"],
+      "finorm": [0.01],
+      "fox": [110, 110],
+      "foy": [0, 220],
+      "foz": [0, 0],
+      "fodir": ["Y:\u2193", "Y:\u2191"],
+      "fonorm": [0.01, 0.01]
+    },
+    "Supports": {
+      "sx": [120],
+      "sy": [110],
+      "sz": [0],
+      "sdim": ["XYZ"],
+      "sr": [3]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [1.0, 0.5],
+      "nu": [0.3, 0.4],
+      "color": ["#8b4513", "#e0c060"],
+      "percent": [80, 20]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 80,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 13.0,
+      "disp_iterations": 5
+    }
+  },
+  "Bridge_3D": {
+    "Dimensions": {
+      "nelxyz": [36, 14, 14],
+      "volfrac": 0.12
+    },
+    "Forces": {
+      "fix": [0, 6, 12, 18, 24, 30, 36],
+      "fiy": [7, 7, 7, 7, 7, 7, 7],
+      "fiz": [0, 0, 0, 0, 0, 0, 0],
+      "fidir": ["Z:>", "Z:>", "Z:>", "Z:>", "Z:>", "Z:>", "Z:>"],
+      "finorm": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+    },
+    "Supports": {
+      "sx": [0, 0, 36, 36],
+      "sy": [0, 14, 0, 14],
+      "sz": [0, 0, 0, 0],
+      "sdim": ["XYZ", "XYZ", "XYZ", "XYZ"],
+      "sr": [1, 1, 1, 1]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [10.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 1.5,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 35,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 50.0,
+      "disp_iterations": 1
+    }
+  },
+  "Jellyfish_2D": {
+    "Dimensions": {
+      "nelxyz": [180, 120, 0],
+      "volfrac": 0.10
+    },
+    "Forces": {
+      "fix": [90],
+      "fiy": [120],
+      "fiz": [0],
+      "fidir": ["Y:\u2193"],
+      "finorm": [0.01],
+      "fox": [10, 170],
+      "foy": [0, 0],
+      "foz": [0, 0],
+      "fodir": ["X:\u2192", "X:\u2190"],
+      "fonorm": [0.01, 0.01]
+    },
+    "Supports": {
+      "sx": [90],
+      "sy": [45],
+      "sz": [0],
+      "sdim": ["Y"],
+      "sr": [0]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [1.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 35,
+      "solver": "Auto",
+      "analysis": "Nonlinear",
+      "load_factor": 10.0
+    },
+    "Displacement": {
+      "disp_factor": 7.0,
+      "disp_iterations": 3
+    }
+  },
+  "Flatball_3D": {
+    "Dimensions": {
+      "nelxyz": [22, 22, 18],
+      "volfrac": 0.12
+    },
+    "Forces": {
+      "fix": [0, 22],
+      "fiy": [11, 11],
+      "fiz": [9, 9],
+      "fidir": ["X:\u2190", "X:\u2192"],
+      "finorm": [0.01, 0.01],
+      "fox": [11, 11],
+      "foy": [0, 22],
+      "foz": [9, 9],
+      "fodir": ["Y:\u2193", "Y:\u2191"],
+      "fonorm": [0.01, 0.01]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [1.0],
+      "nu": [0.3],
+      "color": ["#ff0000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 1.5,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 35,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 7.0,
+      "disp_iterations": 1
+    }
+  },
+  "RhombusAmplifier_2D": {
+    "Dimensions": {
+      "nelxyz": [200, 200, 0],
+      "volfrac": 0.25
+    },
+    "Regions": {
+      "rx": [100],
+      "ry": [100],
+      "rz": [0],
+      "rradius": [80],
+      "rshape": ["\u25a1"],
+      "rstate": ["Void"]
+    },
+    "Forces": {
+      "fix": [20, 180],
+      "fiy": [100, 100],
+      "fiz": [0, 0],
+      "fidir": ["X:\u2190", "X:\u2192"],
+      "finorm": [0.1, 0.1],
+      "fox": [100, 100],
+      "foy": [0, 200],
+      "foz": [0, 0],
+      "fodir": ["Y:\u2193", "Y:\u2191"],
+      "fonorm": [0.01, 0.01]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [10.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 45,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 6.0,
+      "disp_iterations": 6
+    }
+  },
+  "Wheel_2D": {
+    "Dimensions": {
+      "nelxyz": [160, 160, 0],
+      "volfrac": 0.25
+    },
+    "Regions": {
+      "rx": [80],
+      "ry": [80],
+      "rz": [0],
+      "rradius": [15],
+      "rshape": ["\u25ef"],
+      "rstate": ["Material 1"]
+    },
+    "Forces": {
+      "fix": [80, 160, 80, 0, 24, 24, 136, 136, 136, 136, 24, 24],
+      "fiy": [0, 80, 160, 80, 24, 24, 24, 24, 136, 136, 136, 136],
+      "fiz": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "fidir": ["Y:\u2191", "X:\u2190", "Y:\u2193", "X:\u2192", "X:\u2192", "Y:\u2191", "X:\u2190", "Y:\u2191", "X:\u2190", "Y:\u2193", "X:\u2192", "Y:\u2193"],
+      "finorm": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01]
+    },
+    "Supports": {
+      "sx": [80],
+      "sy": [80],
+      "sz": [0],
+      "sdim": ["XYZ"],
+      "sr": [1]
+    },
+    "Materials": {
+      "init_type": 0,
+      "E": [10.0],
+      "nu": [0.3],
+      "color": ["#000000"],
+      "percent": [100]
+    },
+    "Optimizer": {
+      "filter_type": "Sensitivity",
+      "filter_radius_min": 2.0,
+      "penal": 3.0,
+      "eta": 0.3,
+      "max_change": 0.05,
+      "n_it": 45,
+      "solver": "Auto"
+    },
+    "Displacement": {
+      "disp_factor": 40.0,
+      "disp_iterations": 1
     }
   }
 }
