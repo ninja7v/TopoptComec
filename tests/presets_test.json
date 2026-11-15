@@ -1,7 +1,7 @@
 {
     "ForceInverter_2Sup_2D": {
         "Dimensions": {
-            "nelxyz": [15, 10, 0],
+            "nelxyz": [12, 8, 0],
             "volfrac": 0.3
         },
         "Regions": {
@@ -14,19 +14,19 @@
         },
         "Supports": {
             "sdim": ["XYZ", "XYZ"],
-            "sx": [0, 15],
+            "sx": [0, 12],
             "sy": [0, 0],
             "sz": [0, 0],
             "sr": [1, 1]
         },
         "Forces": {
-            "fix": [8, 0],
+            "fix": [6, 0],
             "fiy": [0, 0],
             "fiz": [0, 0],
             "fidir": ["Y:\u2191", "-"],
             "finorm": [0.01, 0],
-            "fox": [8, 0],
-            "foy": [10, 0],
+            "fox": [6, 0],
+            "foy": [8, 0],
             "foz": [0, 0],
             "fodir": ["Y:\u2193", "-"],
             "fonorm": [0.01, 0.0]
@@ -54,32 +54,32 @@
     },
     "Gripper_2D": {
         "Dimensions": {
-            "nelxyz": [25, 15, 0],
+            "nelxyz": [16, 10, 0],
             "volfrac": 0.3
         },
         "Regions": {
             "rshape": ["□"],
             "rstate": ["Void"],
-            "rradius": [2],
-            "rx": [23],
-            "ry": [8],
+            "rradius": [1],
+            "rx": [15],
+            "ry": [5],
             "rz": [0]
         },
         "Supports": {
             "sdim": ["XYZ", "XYZ"],
             "sx": [0, 0],
-            "sy": [0, 15],
+            "sy": [0, 10],
             "sz": [0, 0],
             "sr": [0, 0]
         },
         "Forces": {
             "fix": [0],
-            "fiy": [8],
+            "fiy": [5],
             "fiz": [0],
             "fidir": ["X:\u2192"],
             "finorm": [0.01],
-            "fox": [25, 25],
-            "foy": [10, 5],
+            "fox": [16, 16],
+            "foy": [7, 3],
             "foz": [0, 0],
             "fodir": ["Y:\u2193", "Y:\u2191"],
             "fonorm": [0.01, 0.01]
@@ -97,8 +97,10 @@
             "penal": 3.0,
             "eta": 0.3,
             "max_change": 0.05,
-            "n_it": 2,
-            "solver": "Direct"
+            "n_it": 3,
+            "solver": "Direct",
+            "analysis": "Nonlinear",
+            "load_factor": 2.0
         },
         "Displacement": {
             "disp_factor": 1.0,
@@ -107,7 +109,7 @@
     },
     "ForceInverter_3D": {
         "Dimensions": {
-            "nelxyz": [10, 10, 8],
+            "nelxyz": [6, 6, 4],
             "volfrac": 0.15
         },
         "Regions": {
@@ -120,20 +122,20 @@
         },
         "Supports": {
             "sdim": ["XYZ", "XYZ", "XYZ", "XYZ"],
-            "sx": [0, 0, 10, 10],
-            "sy": [0, 10, 0, 10],
+            "sx": [0, 0, 6, 6],
+            "sy": [0, 6, 0, 6],
             "sz": [0, 0, 0, 0],
             "sr": [0, 0, 0, 0]
         },
         "Forces": {
-            "fix": [5],
-            "fiy": [5],
+            "fix": [3],
+            "fiy": [3],
             "fiz": [0],
             "fidir": ["Z:<"],
             "finorm": [0.01],
-            "fox": [5],
-            "foy": [5],
-            "foz": [8],
+            "fox": [3],
+            "foy": [3],
+            "foz": [4],
             "fodir": ["Z:>"],
             "fonorm": [0.01]
         },
@@ -160,24 +162,24 @@
     },
     "ForceInverter_1Sup_2D": {
         "Dimensions": {
-            "nelxyz": [20, 20, 0],
+            "nelxyz": [12, 12, 0],
             "volfrac": 0.2
         },
         "Supports": {
             "sdim": ["Y"],
-            "sx": [10],
-            "sy": [8],
+            "sx": [6],
+            "sy": [5],
             "sz": [0],
             "sr": [0]
         },
         "Forces": {
-            "fix": [10],
-            "fiy": [3],
+            "fix": [6],
+            "fiy": [2],
             "fiz": [0],
             "fidir": ["Y:\u2191"],
             "finorm": [0.01],
-            "fox": [10],
-            "foy": [15],
+            "fox": [6],
+            "foy": [9],
             "foz": [0],
             "fodir": ["Y:\u2193"],
             "fonorm": [0.0]
@@ -205,17 +207,17 @@
     },
     "Butterfly_2D": {
         "Dimensions": {
-            "nelxyz": [15, 12, 0],
+            "nelxyz": [10, 8, 0],
             "volfrac": 0.35
         },
         "Forces": {
-            "fix": [10, 5],
+            "fix": [7, 3],
             "fiy": [0, 0],
             "fiz": [0, 0],
             "fidir": ["X:\u2190", "X:\u2192"],
             "finorm": [0.01, 0.01],
-            "fox": [5, 10],
-            "foy": [10, 10],
+            "fox": [3, 7],
+            "foy": [7, 7],
             "foz": [0, 0],
             "fodir": ["X:\u2190", "X:\u2192"],
             "fonorm": [0.01, 0.01]
@@ -243,18 +245,18 @@
     },
     "Bridge_2D": {
         "Dimensions": {
-            "nelxyz": [30, 8, 0],
+            "nelxyz": [16, 6, 0],
             "volfrac": 0.3
         },
         "Supports": {
             "sdim": ["XYZ", "XYZ"],
-            "sx": [0, 30],
+            "sx": [0, 16],
             "sy": [0, 0],
             "sz": [0, 0],
             "sr": [0, 0]
         },
         "Forces": {
-            "fix": [20, 10],
+            "fix": [11, 5],
             "fiy": [0, 0],
             "fiz": [0, 0],
             "fidir": ["Y:\u2193", "Y:\u2193"],
@@ -288,18 +290,18 @@
     },
     "Bridge_2D_Multi-material": {
         "Dimensions": {
-            "nelxyz": [10, 5, 0],
+            "nelxyz": [8, 4, 0],
             "volfrac": 0.5
         },
         "Supports": {
             "sdim": ["XYZ", "XYZ"],
-            "sx": [0, 10],
+            "sx": [0, 8],
             "sy": [0, 0],
             "sz": [0, 0],
             "sr": [0, 0]
         },
         "Forces": {
-            "fix": [5, 0],
+            "fix": [4, 0],
             "fiy": [0, 0],
             "fiz": [0, 0],
             "fidir": ["Y:\u2193", "-"],
@@ -332,19 +334,19 @@
     },
     "Shelf_2D": {
         "Dimensions": {
-            "nelxyz": [30, 8, 0],
+            "nelxyz": [16, 6, 0],
             "volfrac": 0.3
         },
         "Supports": {
             "sdim": ["XYZ", "XYZ"],
             "sx": [0, 0],
-            "sy": [0, 8],
+            "sy": [0, 6],
             "sz": [0, 0],
             "sr": [0, 0]
         },
         "Forces": {
-            "fix": [30],
-            "fiy": [8],
+            "fix": [16],
+            "fiy": [6],
             "fiz": [0],
             "fidir": ["Y:\u2193"],
             "finorm": [0.01]

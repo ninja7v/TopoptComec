@@ -164,7 +164,7 @@ def test_run_cli_optimization_empty_structure(tmp_path):
     with (
         patch(
             "topoptcomec.cli.cli.optimizers.optimize",
-            return_value=(np.zeros(150), np.zeros(300)),
+            return_value=(np.zeros(96), np.zeros(234)),
         ),
         patch("topoptcomec.cli.cli.exporters") as mock_exporters,
         patch.object(sys, "argv", _argv(presets_file, out_dir, "-f", "png")),
@@ -235,7 +235,7 @@ def test_run_cli_multiple_presets(tmp_path):
         patch("topoptcomec.cli.cli.exporters") as mock_exporters,
         patch(
             "topoptcomec.cli.cli.optimizers.optimize",
-            return_value=(np.ones(150) * 0.3, np.zeros(300)),
+            return_value=(np.ones(96) * 0.3, np.zeros(234)),
         ),
     ):
         mock_exporters.save_as_png.return_value = (True, None)
@@ -292,7 +292,7 @@ def test_run_cli_saving_cache(tmp_path):
     with (
         patch(
             "topoptcomec.cli.cli.optimizers.optimize",
-            return_value=(np.ones(150) * 0.3, np.zeros(300)),
+            return_value=(np.ones(96) * 0.3, np.zeros(234)),
         ),
         patch.object(sys, "argv", _argv(presets_file, out_dir, "-f", "png")),
     ):
@@ -326,7 +326,7 @@ def test_run_cli_displacement_flag(tmp_path):
         patch("topoptcomec.core.displacements.run_iterative_displacement") as mock_disp,
         patch.object(sys, "argv", _argv(presets_file, out_dir, "-f", "png", "-d")),
     ):
-        mock_disp.return_value = [np.zeros(150)]
+        mock_disp.return_value = [np.zeros(96)]
         run_cli()
     mock_disp.assert_called_once()
 
@@ -341,8 +341,8 @@ def test_run_cli_restart_from(tmp_path):
     restart = tmp_path / "restart.npz"
     result_cache.save_density_cache(
         restart,
-        np.full(150, 0.3),
-        np.zeros(2 * 16 * 11),
+        np.full(96, 0.3),
+        np.zeros(2 * 13 * 9),
         preset,
         preset["Dimensions"]["nelxyz"],
         converged=True,
@@ -351,7 +351,7 @@ def test_run_cli_restart_from(tmp_path):
     with (
         patch(
             "topoptcomec.cli.cli.optimizers.optimize",
-            return_value=(np.full(150, 0.3), np.zeros(352)),
+            return_value=(np.full(96, 0.3), np.zeros(234)),
         ) as mock_optimize,
         patch.object(
             sys,

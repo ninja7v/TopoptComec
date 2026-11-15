@@ -685,14 +685,14 @@ def test_preset_switch_reinitializes_the_density_field(qt_app, tmp_path, monkeyp
     combo.setCurrentIndex(start)
     combo.activated.emit(start)
     assert window.u is None
-    assert window.xPhys.shape[-1] == 90 * 60
+    assert window.xPhys.shape[-1] == 150 * 100
 
     # Switch to a preset with another grid: must not keep the stale field.
     combo.setCurrentIndex(target)
     combo.activated.emit(target)
 
     nelx, nely, nelz = window.last_params["Dimensions"]["nelxyz"]
-    assert [nelx, nely, nelz] == [100, 60, 0]
+    assert [nelx, nely, nelz] == [200, 120, 0]
     assert window.xPhys is not None
     assert window.xPhys.shape[-1] == nelx * nely * (nelz if nelz > 0 else 1)
 
@@ -754,6 +754,11 @@ def test_analysis_and_load_factor_round_trip(qt_app):
     """The non-linear analysis settings must survive gather -> apply -> gather,
     and a linear run must not carry a load factor."""
     window = MainWindow()
+    # The default preset is non-linear: start from its linear counterpart.
+    params = window._gather_parameters()
+    params["Optimizer"].pop("analysis", None)
+    params["Optimizer"].pop("load_factor", None)
+    window._apply_parameters(params)
     params = window._gather_parameters()
     assert params["Optimizer"]["analysis"] == "Linear"
     assert "load_factor" not in params["Optimizer"]
