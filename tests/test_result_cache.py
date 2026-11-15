@@ -99,3 +99,11 @@ def test_params_hash_tracks_optimization_changes():
     changed = _preset()
     changed["Forces"]["finorm"] = [0.2]
     assert result_cache.params_hash(changed) != result_cache.params_hash(preset)
+
+
+def test_params_hash_ignores_int_float_spelling():
+    """A preset storing ``E: [1]`` matches the GUI, whose spin boxes return 1.0."""
+    as_float = _preset()
+    as_int = _preset()
+    as_int["Materials"]["E"] = [1]
+    assert result_cache.params_hash(as_int) == result_cache.params_hash(as_float)
