@@ -43,7 +43,7 @@ FIXTURE_PRESETS = Path(__file__).parent / "presets_test.json"
 def _tiny_preset(n_it: int = 4) -> dict:
     """A small preset that optimizes in well under a second."""
     presets = json.loads(FIXTURE_PRESETS.read_text(encoding="utf-8"))
-    preset = json.loads(json.dumps(presets["ForceInverter_2Sup_2D"]))
+    preset = json.loads(json.dumps(presets["ForceInverter_2D"]))
     preset["Optimizer"]["n_it"] = n_it
     return preset
 
@@ -520,7 +520,7 @@ def test_run_cli_end_to_end(tmp_path, capsys):
     presets_path = Path(__file__).parent / "presets_test.json"
     with open(presets_path, "r", encoding="utf-8") as f:
         presets = json.load(f)
-    small = {"Tiny": presets["ForceInverter_2Sup_2D"]}
+    small = {"Tiny": presets["ForceInverter_2D"]}
     preset_file = tmp_path / "presets.json"
     preset_file.write_text(json.dumps(small))
     out_dir = tmp_path / "out"
@@ -562,7 +562,7 @@ def test_run_cli_cache_invalidated_on_param_change(tmp_path, capsys):
     presets_path = Path(__file__).parent / "presets_test.json"
     with open(presets_path, "r", encoding="utf-8") as f:
         presets = json.load(f)
-    preset = json.loads(json.dumps(presets["ForceInverter_2Sup_2D"]))
+    preset = json.loads(json.dumps(presets["ForceInverter_2D"]))
     preset_file = tmp_path / "presets.json"
     preset_file.write_text(json.dumps({"Tiny": preset}))
     out_dir = tmp_path / "out"

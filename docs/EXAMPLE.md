@@ -20,25 +20,25 @@ If you change parameters after a run, create the result again.
 Run one preset:
 
 ```bash
-topoptcomec -p ForceInverter_2Sup_2D
+topoptcomec -p ForceInverter_2D
 ```
 
 Export only PNG:
 
 ```bash
-topoptcomec -p ForceInverter_2Sup_2D -f png
+topoptcomec -p ForceInverter_2D -f png
 ```
 
 Threshold before export:
 
 ```bash
-topoptcomec -p ForceInverter_2Sup_2D -f png -t
+topoptcomec -p ForceInverter_2D -f png -t
 ```
 
 Run several presets in parallel:
 
 ```bash
-topoptcomec -p ForceInverter_2Sup_2D,Gripper_2D -f png
+topoptcomec -p ForceInverter_2D,Gripper_2D -f png
 ```
 
 Use a custom presets file and output directory:
