@@ -251,7 +251,11 @@ class PlottingMixin:
         if is_3d:
             fiz_active: np.ndarray = np.array(pf["fiz"])[active_iforces_indices]
             foz_active: np.ndarray = np.array(pf["foz"])[active_oforces_indices]
-            sz_active: np.ndarray = np.array(ps["sz"])[active_supports_indices]
+            sz_active: np.ndarray = (
+                np.array(ps["sz"])[active_supports_indices]
+                if ps is not None
+                else np.array([])
+            )
         all_z: np.ndarray = (
             np.concatenate([fiz_active, foz_active, sz_active])
             if is_3d
