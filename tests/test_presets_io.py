@@ -7,6 +7,7 @@ import json
 import pytest
 
 from topoptcomec.presets_io import (
+    format_presets,
     load_preset_layers,
     load_presets,
     packaged_presets_path,
@@ -154,3 +155,34 @@ def test_preset_structure_rejects_malformed_values():
 
     assert validate_preset_structure(None) is not None
     assert validate_preset_structure({}) is not None
+
+
+def test_presets_are_written_in_the_layout_of_the_builtin_file():
+    """Two-space objects and one-line lists, as in topoptcomec/presets.json."""
+    presets = {"Mine": {"Dimensions": {"nelxyz": [10, 5, 0], "volfrac": 0.3}}}
+    assert format_presets(presets) == (
+        "{\n"
+        '  "Mine": {\n'
+        '    "Dimensions": {\n'
+        '      "nelxyz": [10, 5, 0],\n'
+        '      "volfrac": 0.3\n'
+        "    }\n"
+        "  }\n"
+        "}\n"
+    )
+
+
+def test_saving_a_preset_only_adds_its_own_lines(workdir):
+    """Adding a preset leaves the lines of the other presets untouched."""
+    layers = load_preset_layers()
+    presets = dict(layers.merged)
+    presets["Mine"] = {"Dimensions": {"nelxyz": [10, 5, 0], "volfrac": 0.3}}
+    path = save_user_presets(presets, layers.builtin)
+    before = path.read_text(encoding="utf-8").splitlines()
+
+    presets["Other"] = {"Dimensions": {"nelxyz": [8, 4, 0], "volfrac": 0.2}}
+    save_user_presets(presets, layers.builtin)
+    after = path.read_text(encoding="utf-8").splitlines()
+
+    assert after[: len(before) - 2] == before[:-2]  # all but the closing lines
+    assert '      "nelxyz": [8, 4, 0],' in after
