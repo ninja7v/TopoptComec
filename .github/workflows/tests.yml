@@ -1,8 +1,23 @@
 name: CI
 
+# What runs is decided per pull request by .github/scripts/select_tests.py
+# from the files the PR changes (see the rules at the top of that script):
+# documentation-only PRs run nothing, code changes run the test files that
+# import the changed modules, and anything else (dependencies, CI, test
+# fixtures, unknown files) runs the full suite. Scheduled and manual runs
+# always run the full suite.
+#
+# Make "CI result" the required status check: it always reports, and fails
+# when any job failed or was cancelled (skipped jobs count as passed).
+
 on:
   pull_request:
     branches: [main]
+  schedule:
+    # Full run twice a month (1st and 15th): dependencies are unpinned (>=),
+    # so upstream releases can break the project without any change on our
+    # side.
+    - cron: "0 5 1,15 * *"
   workflow_dispatch:
 
 concurrency:
@@ -13,8 +28,40 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      lint: ${{ steps.select.outputs.lint }}
+      full: ${{ steps.select.outputs.full }}
+      tests: ${{ steps.select.outputs.tests }}
+      py315_tests: ${{ steps.select.outputs.py315_tests }}
+      platforms: ${{ steps.select.outputs.platforms }}
+      platform_tests: ${{ steps.select.outputs.platform_tests }}
+      cli_smoke: ${{ steps.select.outputs.cli_smoke }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The PR merge commit and its first parent (the base branch tip).
+          fetch-depth: 2
+
+      - name: Select checks and tests
+        id: select
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only --no-renames HEAD^1 HEAD \
+              | python3 .github/scripts/select_tests.py >> "$GITHUB_OUTPUT"
+          else
+            python3 .github/scripts/select_tests.py --all >> "$GITHUB_OUTPUT"
+          fi
+
   quality:
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.lint == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -40,11 +87,18 @@ jobs:
 
   platforms:
     runs-on: ${{ matrix.os }}
-    needs: quality
+    needs: [changes, quality]
+    if: needs.changes.outputs.platforms == 'true'
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYVISTA_OFF_SCREEN: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +112,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
 
       - name: Install Python dependencies
         run: |
@@ -66,23 +124,20 @@ jobs:
           pip install -e .
           pip install pytest
 
-      - name: Run core and exporter tests
+      - name: Run platform-sensitive tests
+        if: needs.changes.outputs.platform_tests != ''
         env:
-          QT_QPA_PLATFORM: offscreen
-          PYVISTA_OFF_SCREEN: "true"
-        run: |
-          pytest -W error -q tests/test_numerics.py tests/test_fem.py tests/test_optimizers.py tests/test_nonlinear.py tests/test_exporters.py tests/test_parameter_validation.py
+          TESTS: ${{ needs.changes.outputs.platform_tests }}
+        run: pytest -W error -q $TESTS
 
       - name: CLI smoke test
-        env:
-          QT_QPA_PLATFORM: offscreen
-          PYVISTA_OFF_SCREEN: "true"
-        run: |
-          topoptcomec -p Bridge_2D -f png -o results
+        if: needs.changes.outputs.cli_smoke == 'true'
+        run: topoptcomec -p Bridge_2D -f png -o results
 
   tests:
     runs-on: ubuntu-latest
-    needs: quality
+    needs: [changes, quality]
+    if: needs.changes.outputs.tests != ''
     strategy:
       fail-fast: false
       matrix:
@@ -92,6 +147,8 @@ jobs:
           - python-version: "3.15"
             experimental: true
     continue-on-error: ${{ matrix.experimental || false }}
+    env:
+      FULL: ${{ needs.changes.outputs.full }}
 
     steps:
       - uses: actions/checkout@v4
@@ -101,6 +158,10 @@ jobs:
         with:
           python-version: "${{ matrix.python-version }}"
           allow-prereleases: ${{ matrix.experimental || false }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
 
       - name: Install system dependencies
         run: |
@@ -124,23 +185,41 @@ jobs:
           pip install --no-deps -e .
           pip install pytest pytest-cov
 
+      # The coverage threshold applies to full runs only: a partial run
+      # leaves the unselected code uncovered by design.
       - name: Run tests
         if: ${{ !matrix.experimental }}
+        env:
+          TESTS: ${{ needs.changes.outputs.tests }}
         run: |
-          pytest -W error --cov=topoptcomec --cov-report=term-missing --cov-fail-under=80
+          if [ "$FULL" = true ]; then
+            pytest -W error --cov=topoptcomec --cov-report=term-missing --cov-fail-under=80
+          else
+            pytest -W error $TESTS
+          fi
 
-      - name: Run core tests (3.15; VTK has no cp315 wheel yet)
-        if: ${{ matrix.experimental }}
+      - name: Run tests without VTK (3.15; VTK has no cp315 wheel yet)
+        if: ${{ matrix.experimental && needs.changes.outputs.py315_tests != '' }}
+        env:
+          TESTS: ${{ needs.changes.outputs.py315_tests }}
         run: |
-          pytest -W error --cov=topoptcomec.core --cov-report=term-missing --cov-fail-under=80 \
-            tests/test_numerics.py \
-            tests/test_fem.py \
-            tests/test_optimizers.py \
-            tests/test_nonlinear.py \
-            tests/test_analyzers.py \
-            tests/test_initializers.py \
-            tests/test_displacements.py \
-            tests/test_workers.py \
-            tests/test_widgets.py \
-            tests/test_main.py \
-            --deselect tests/test_initializers.py::test_from_current_result_disabling_and_scaling
+          if [ "$FULL" = true ]; then
+            pytest -W error --cov=topoptcomec.core --cov-report=term-missing --cov-fail-under=80 $TESTS
+          else
+            pytest -W error $TESTS
+          fi
+
+  ci-result:
+    name: CI result
+    runs-on: ubuntu-latest
+    needs: [changes, quality, platforms, tests]
+    if: always()
+
+    steps:
+      - name: Check job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "Job results: $RESULTS"
+          test "$FAILED" = false

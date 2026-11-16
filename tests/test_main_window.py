@@ -1039,3 +1039,71 @@ def test_removing_a_material_reinitializes_the_density_field(
     assert window.xPhys is not None and window.xPhys.ndim == 1
     window.replot()  # must not index the removed material's color
     window.close()
+
+
+def test_from_current_result_disabling_and_scaling(qt_app):
+    """Test the disabling of 'From current result' and scaling behavior."""
+    window = MainWindow()
+
+    # 1. When last_successful_xPhys is None, option should be disabled
+    window.last_successful_xPhys = None
+    window.update_mat_init_type_state()
+    assert window.last_successful_xPhys is None
+    combo = window.materials_widget.mat_init_type
+    assert not combo.model().item(3).isEnabled()
+
+    # 2. Set last_successful_xPhys, option should be enabled
+    params = window._gather_parameters()
+    nx, ny, nz = params["Dimensions"]["nelxyz"]
+    nel = nx * ny * (nz if nz > 0 else 1)
+    dummy_x = np.ones(nel) * 0.5
+    window.last_successful_xPhys = dummy_x
+    window.update_mat_init_type_state()
+    assert combo.model().item(3).isEnabled()
+
+    # 3. Change dimensions while "From current result" is selected (index 3)
+    combo.setCurrentIndex(3)
+    # Change nx to 30
+    window.dim_widget.nx.setValue(30)
+    qt_app.processEvents()
+    # The last_successful_xPhys should be scaled to size 30 * ny
+    expected_size = 30 * ny * (nz if nz > 0 else 1)
+    assert window.last_successful_xPhys.size == expected_size
+
+    # 4. Change initialization option to "From current result" when size mismatches
+    # First change dimensions to 10x10 while option is NOT "From current result" (index 0)
+    combo.setCurrentIndex(0)
+    window.dim_widget.nx.setValue(10)
+    window.dim_widget.ny.setValue(10)
+    qt_app.processEvents()
+    # At this point, last_successful_xPhys size is still expected_size since option was index 0
+    assert window.last_successful_xPhys.size == expected_size
+
+    # Now change option to "From current result" (index 3)
+    combo.setCurrentIndex(3)
+    qt_app.processEvents()
+    # It must have been scaled to the new dimensions 10x10 = 100
+    assert window.last_successful_xPhys.size == 100
+
+    # 5. Test starting a new optimization leaves last_successful_xPhys intact
+    with patch("topoptcomec.gui.main_window.OptimizerWorker") as mock_worker:
+        window._run_optimization()
+        # last_successful_xPhys should not be reset to None
+        assert window.last_successful_xPhys is not None
+        assert combo.model().item(3).isEnabled()
+
+        # Verify the worker was initialized with correct params
+        called_args = mock_worker.call_args[0]
+        worker_params = called_args[0]
+        assert worker_params["Materials"]["init_type"] == 3
+        assert worker_params["current_xPhys"] is not None
+
+    # 6. Test reset when changing preset
+    window.last_successful_xPhys = dummy_x
+    window.update_mat_init_type_state()
+    assert combo.model().item(3).isEnabled()
+    # Trigger preset change
+    window._on_preset_selected()
+    assert window.last_successful_xPhys is None
+    assert not combo.model().item(3).isEnabled()
+    window.close()
